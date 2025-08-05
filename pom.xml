@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.1</version>
+        <version>3.5.4</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
 
@@ -55,9 +55,9 @@
         <spring-boot.version>3.4.1</spring-boot.version>
         <spring-cloud.version>2024.0.0</spring-cloud.version>
         <spring-security-aouth2-autoconfigure.version>3.3.2</spring-security-aouth2-autoconfigure.version>
-        <spring-cloud-dependencies.version>4.2.0</spring-cloud-dependencies.version>
-        <spring-bootstrap.version>4.1.4</spring-bootstrap.version>
-        <mapstruct.version>1.5.5.Final</mapstruct.version>
+        <spring-cloud-dependencies.version>4.3.0</spring-cloud-dependencies.version>
+        <spring-bootstrap.version>4.3.0</spring-bootstrap.version>
+        <mapstruct.version>1.6.3</mapstruct.version>
         <jwt.version>0.12.3</jwt.version>
         <!--        Test Dependencies-->
         <!--        JUnit 5.x-->

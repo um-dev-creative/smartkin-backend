@@ -2,6 +2,7 @@ package com.umdevcreative.smartkin.client.backbone;
 
 import com.prx.commons.general.pojo.Role;
 import com.umdevcreative.smartkin.client.backbone.to.*;
+import com.umdevcreative.smartkin.interceptor.BackboneFeignConfigurer;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
