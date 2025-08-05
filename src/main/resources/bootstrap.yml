@@ -106,7 +106,7 @@ spring:
       token: ${VAULT_TOKEN}
       uri: ${VAULT_SERVER_URL}
       kv:
-        backend: UMDEV
+        backend: UMDC
         default-context: ${app.name}
       application-name: ${app.name}
     bootstrap:
@@ -133,7 +133,7 @@ spring:
     defer-datasource-initialization: true
 
 swagger:
-  base-package: 'com.umdevcreative.smartkin.api.v1.controller'
+  base-package: 'com.umdc.smartkin.api.v1.controller'
   api-info:
     title: ${app.name}
     version: ${app.version}

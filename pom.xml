@@ -46,7 +46,7 @@
         <maven.plugin.jxr.version>3.0.0</maven.plugin.jxr.version>
         <maven.surefire.version>3.5.2</maven.surefire.version>
         <!--        REPOSITORY-->
-        <repsy.account.user>${env.REPSY_ACCOUNT_USER}</repsy.account.user>
+        <repsy.account.userEntity>${env.REPSY_ACCOUNT_USER}</repsy.account.userEntity>
         <repsy.account.password>${env.REPSY_ACCOUNT_PASSWORD}</repsy.account.password>
         <!--        OPEN API -->
         <springdoc.version>2.6.0</springdoc.version>
@@ -493,7 +493,7 @@
         <repository>
             <id>PRX-Repsy</id>
             <name>My Private Maven Repository on Repsy</name>
-            <url>https://repo.repsy.io/mvn/${repsy.account.user}/${repsy.account.password}</url>
+            <url>https://repo.repsy.io/mvn/${repsy.account.userEntity}/${repsy.account.password}</url>
         </repository>
     </distributionManagement>
 
