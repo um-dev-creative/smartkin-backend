@@ -22,7 +22,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import static com.prx.security.constant.ConstantApp.SESSION_TOKEN_KEY;
 
 /**
- * Service class for handling JWT operations related to sessions.
+ * Implementation of the SessionJwtService interface providing JWT-related operations.
+ * This class is responsible for generating and validating session tokens
+ * and extracting information from JWT tokens.
  */
 @Service
 public class SessionJwtServiceImpl implements SessionJwtService {
@@ -42,11 +44,12 @@ public class SessionJwtServiceImpl implements SessionJwtService {
     }
 
     /**
-     * Generates a session token for the given username.
+     * Generates a session token for a user based on the given username and additional parameters.
+     * The generated token contains standard claims as well as any optional parameters provided.
      *
-     * @param username   the username
-     * @param parameters the parameters
-     * @return the generated session token
+     * @param username the username for which the session token is being generated
+     * @param parameters a map of optional parameters to include in the token claims; can be null or empty
+     * @return the generated session token as a string
      */
     public String generateSessionToken(String username, Map<String, String> parameters) {
         Map<String, Object> claims = new ConcurrentHashMap<>();
@@ -63,10 +66,12 @@ public class SessionJwtServiceImpl implements SessionJwtService {
     }
 
     /**
-     * Retrieves the claims from the given token.
+     * Extracts and returns the claims contained within the provided JWT token.
+     * Verifies the token using the configured secret key and parses the claims from it.
      *
-     * @param token the JWT token
-     * @return the claims contained in the token
+     * @param token the JWT token from which claims are to be extracted
+     * @return the claims contained within the token
+     * @throws CertificateSecurityException if there is an error during token verification or parsing
      */
     @Override
     public Claims getTokenClaims(String token) throws CertificateSecurityException {
@@ -80,19 +85,20 @@ public class SessionJwtServiceImpl implements SessionJwtService {
     }
 
     /**
-     * Retrieves the username from the given token.
+     * Extracts the username (subject) from the given JWT token.
      *
-     * @param token the JWT token
-     * @return the username contained in the token
+     * @param token the JWT token from which the username is to be extracted
+     * @return the username extracted from the token
      */
     public String getUsernameFromToken(String token) {
         return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload().getSubject();
     }
 
     /**
-     * Generates a SecretKey from the JWT configuration properties.
+     * Generates a secret key used for signing and verifying JWT tokens
+     * by decoding the secret string from the configuration properties.
      *
-     * @return the generated SecretKey
+     * @return the generated secret key
      */
     private SecretKey generateKey() {
         byte[] keyBytes = Decoders.BASE64.decode(jwtConfigProperties.getSecret());
