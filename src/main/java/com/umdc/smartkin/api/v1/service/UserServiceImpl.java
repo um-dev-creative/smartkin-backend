@@ -326,7 +326,7 @@ public class UserServiceImpl implements UserService {
         String fullname = userCreateRequest.firstname().concat(" ").concat(userCreateRequest.lastname());
         return new EmailMessageTO(verificationCodeTemplateId,
                 userCreateResponse.id(),
-                "support@latinhub.info",
+                supportEmail,
                 List.of(new Recipient(
                         fullname,
                         userCreateResponse.email(),
