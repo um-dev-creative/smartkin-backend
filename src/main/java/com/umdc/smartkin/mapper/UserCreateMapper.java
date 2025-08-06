@@ -48,7 +48,7 @@ public interface UserCreateMapper {
         person.setFirstName(userCreateRequest.firstname());
         person.setLastName(userCreateRequest.lastname());
         person.setBirthdate(userCreateRequest.dateOfBirth());
-        person.setGender("N");
+        person.setGender(DEFAULT_GENDER);
         person.setMiddleName("");
 
         if(!userCreateRequest.phoneNumber().isBlank()) {
