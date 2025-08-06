@@ -36,6 +36,10 @@ public class TopicEntity {
     @Column(name = "age_range_max")
     private Integer ageRangeMax;
 
+    public TopicEntity() {
+        // Default constructor
+    }
+
     public UUID getId() {
         return id;
     }

@@ -34,6 +34,10 @@ public class ChildRewardEntity {
     @Column(name = "redeemed_at", nullable = false)
     private Instant redeemedAt;
 
+    public ChildRewardEntity() {
+        // Default constructor
+    }
+
     public UUID getId() {
         return id;
     }

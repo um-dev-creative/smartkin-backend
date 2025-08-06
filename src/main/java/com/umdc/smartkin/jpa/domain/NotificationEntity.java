@@ -45,6 +45,10 @@ public class NotificationEntity {
     @Column(name = "is_read", nullable = false)
     private Boolean isRead = false;
 
+    public NotificationEntity() {
+        // Default constructor
+    }
+
     public UUID getId() {
         return id;
     }

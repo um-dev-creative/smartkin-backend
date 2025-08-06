@@ -50,6 +50,10 @@ public class AchievementEntity {
     @Column(name = "requirements", nullable = false, length = Integer.MAX_VALUE)
     private String requirements;
 
+    public AchievementEntity() {
+        // Default constructor
+    }
+
     public UUID getId() {
         return id;
     }
@@ -98,10 +102,4 @@ public class AchievementEntity {
         this.requirements = requirements;
     }
 
-/*
- TODO [Reverse Engineering] create field to map the 'difficulty' column
- Available actions: Define target Java type | Uncomment as is | Remove column mapping
-    @Column(name = "difficulty", columnDefinition = "achievement_difficulty not null")
-    private Object difficulty;
-*/
 }

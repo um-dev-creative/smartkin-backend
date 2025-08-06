@@ -70,6 +70,10 @@ public class ActivityEntity {
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = false;
 
+    public ActivityEntity() {
+        // Default constructor
+    }
+
     public UUID getId() {
         return id;
     }
@@ -150,10 +154,4 @@ public class ActivityEntity {
         this.isActive = isActive;
     }
 
-/*
- TODO [Reverse Engineering] create field to map the 'difficulty_level' column
- Available actions: Define target Java type | Uncomment as is | Remove column mapping
-    @Column(name = "difficulty_level", columnDefinition = "difficulty_level not null")
-    private Object difficultyLevel;
-*/
 }

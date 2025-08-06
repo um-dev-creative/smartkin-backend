@@ -21,6 +21,10 @@ public class UserEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
+    public UserEntity() {
+        // Default constructor
+    }
+
     public UUID getId() {
         return id;
     }

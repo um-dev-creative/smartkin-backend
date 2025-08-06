@@ -54,6 +54,10 @@ public class ActivityProgressEntity {
     @Column(name = "parent_feedback", length = Integer.MAX_VALUE)
     private String parentFeedback;
 
+    public ActivityProgressEntity() {
+        // Default constructor
+    }
+
     public UUID getId() {
         return id;
     }

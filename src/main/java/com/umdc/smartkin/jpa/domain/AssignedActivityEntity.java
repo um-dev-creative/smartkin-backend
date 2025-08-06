@@ -54,6 +54,10 @@ public class AssignedActivityEntity {
     @Column(name = "due_date")
     private Instant dueDate;
 
+    public AssignedActivityEntity() {
+        // Default constructor
+    }
+
     public UUID getId() {
         return id;
     }
@@ -102,11 +106,4 @@ public class AssignedActivityEntity {
         this.dueDate = dueDate;
     }
 
-/*
- TODO [Reverse Engineering] create field to map the 'status' column
- Available actions: Define target Java type | Uncomment as is | Remove column mapping
-    @ColumnDefault("'assigned'")
-    @Column(name = "status", columnDefinition = "activity_status not null")
-    private Object status;
-*/
 }

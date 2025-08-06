@@ -40,6 +40,10 @@ public class RewardEntity {
     @Column(name = "is_digital", nullable = false)
     private Boolean isDigital = false;
 
+    public RewardEntity() {
+        // Default constructor
+    }
+
     public UUID getId() {
         return id;
     }

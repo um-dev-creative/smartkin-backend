@@ -4,11 +4,11 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 
-@EnableFeignClients(basePackages = "com.umdevcreative.smartkin.client")
+@EnableFeignClients(basePackages = "com.umdc.smartkin.client")
 @SpringBootApplication(
         scanBasePackages = {
                 "com.prx.commons.services",
-                "com.umdevcreative.smartkin",
+                "com.umdc.smartkin",
                 "com.prx.security"
         }
 )

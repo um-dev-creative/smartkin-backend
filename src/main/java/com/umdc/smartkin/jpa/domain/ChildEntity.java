@@ -50,6 +50,10 @@ public class ChildEntity {
     @Column(name = "total_points", nullable = false)
     private Integer totalPoints;
 
+    public ChildEntity() {
+        // Default constructor
+    }
+
     public UUID getId() {
         return id;
     }
