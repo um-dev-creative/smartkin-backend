@@ -54,7 +54,7 @@ public interface UserCreateMapper {
         if(!userCreateRequest.phoneNumber().isBlank()) {
             var contact  = new Contact();
             var contactType = new ContactType();
-            contactType.setId(UUID.fromString("61ed9501-bee2-4391-8376-91307ae02a48"));
+            contactType.setId(PHONE_CONTACT_TYPE_ID);
             contact.setContent(userCreateRequest.phoneNumber());
             contact.setActive(true);
             contact.setContactType(contactType);
