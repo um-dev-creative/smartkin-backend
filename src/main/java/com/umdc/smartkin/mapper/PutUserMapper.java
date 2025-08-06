@@ -35,7 +35,7 @@ public interface PutUserMapper {
         return List.of(new BackboneUserUpdateRequest.Contact(
                 request.phoneId(),
                 request.phoneNumber(),
-                new BackboneUserUpdateRequest.ContactType(UUID.fromString("61ed9501-bee2-4391-8376-91307ae02a48")),
+                new BackboneUserUpdateRequest.ContactType(UUID.fromString(CONTACT_TYPE_PHONE_UUID)),
                 true
         ));
     }
