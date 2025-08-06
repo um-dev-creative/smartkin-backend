@@ -52,7 +52,7 @@ spring:
   ssl:
     bundle:
       jks:
-        directory-security:
+        smartkin-security:
           keystore:
             location: classpath:${SSL_KEYSTORE_LOCATION}
             password: ${SSL_KEYSTORE_PASSWORD}

@@ -8,7 +8,7 @@ package com.umdc.smartkin.constant;
  * This class cannot be instantiated.
  */
 public final class SmartKinAppConstants {
-    public static final String ENTITY_PACKAGE = "com.umdc.smartkin.jpa.entity";
+    public static final String ENTITY_PACKAGE = "com.umdc.smartkin.jpa.domain";
     public static final String REPOSITORY_PACKAGE = "com.umdc.smartkin.jpa.repository";
     public static final String MESSAGE_ERROR_HEADER = "message-error";
     public static final String MESSAGE_HEADER = "message";

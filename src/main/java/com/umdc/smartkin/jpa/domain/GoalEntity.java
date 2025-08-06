@@ -65,6 +65,10 @@ public class GoalEntity {
     @JoinColumn(name = "reward_id")
     private RewardEntity reward;
 
+    public GoalEntity() {
+        // Default constructor
+    }
+
     public UUID getId() {
         return id;
     }

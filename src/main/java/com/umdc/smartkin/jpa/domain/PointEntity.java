@@ -12,7 +12,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "points", schema = "smartkin")
-public class Point {
+public class PointEntity {
     @Id
     @ColumnDefault("smartkin.uuid_generate_v4()")
     @Column(name = "point_id", nullable = false)
@@ -43,6 +43,10 @@ public class Point {
     private Instant transactionDate;
     @Column(name = "description", length = Integer.MAX_VALUE)
     private String description;
+
+    public PointEntity() {
+        // Default constructor
+    }
 
     public UUID getId() {
         return id;

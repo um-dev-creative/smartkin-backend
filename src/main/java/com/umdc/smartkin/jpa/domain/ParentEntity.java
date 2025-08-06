@@ -28,6 +28,10 @@ public class ParentEntity {
     @Column(name = "profile_picture")
     private String profilePicture;
 
+    public ParentEntity() {
+        // Default constructor
+    }
+
     public UUID getId() {
         return id;
     }

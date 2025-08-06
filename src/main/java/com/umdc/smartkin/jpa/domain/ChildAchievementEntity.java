@@ -45,6 +45,10 @@ public class ChildAchievementEntity {
     @Column(name = "earned_at", nullable = false)
     private Instant earnedAt;
 
+    public ChildAchievementEntity() {
+        // Default constructor
+    }
+
     public UUID getId() {
         return id;
     }
