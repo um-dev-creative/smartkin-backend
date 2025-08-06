@@ -31,7 +31,7 @@ public class KafkaProducerConfig {
         logger.info("Creating Producer Factory");
         Map<String, Object> configProps = new HashMap<>();
         configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                !Objects.isEmpty(bootstrapServerPort) ? bootstrapServers+":"+bootstrapServerPort : bootstrapServers);
+                !Objects.isEmpty(bootstrapServerPort) ? String.format("%s:%s", bootstrapServers, bootstrapServerPort) : bootstrapServers);
         configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         logger.info("Producer Factory created");
