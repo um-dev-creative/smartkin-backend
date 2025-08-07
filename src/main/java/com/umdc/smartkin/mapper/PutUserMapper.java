@@ -9,6 +9,8 @@ import org.mapstruct.Mapping;
 import java.util.List;
 import java.util.UUID;
 
+import static com.umdc.smartkin.constant.SmartKinAppConstants.PHONE_CONTACT_TYPE_ID;
+
 /**
  * Mapper interface for converting PatchUserRequest to BackboneUserUpdateRequest.
  */
@@ -35,7 +37,7 @@ public interface PutUserMapper {
         return List.of(new BackboneUserUpdateRequest.Contact(
                 request.phoneId(),
                 request.phoneNumber(),
-                new BackboneUserUpdateRequest.ContactType(UUID.fromString(CONTACT_TYPE_PHONE_UUID)),
+                new BackboneUserUpdateRequest.ContactType(PHONE_CONTACT_TYPE_ID),
                 true
         ));
     }

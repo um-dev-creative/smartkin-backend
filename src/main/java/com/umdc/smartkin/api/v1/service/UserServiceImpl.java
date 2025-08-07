@@ -38,6 +38,7 @@ public class UserServiceImpl implements UserService {
     private static final String ERROR_CREATING_USER = "Error creating user";
     private static final int MAX_ALIAS_LENGTH = 12;
     private static final int MAX_ALIAS_TRY = 5;
+    private static final String TO_SUPPORT_EMAIL = "support@latinhub.info";
 
     @Value("${prx.verification.code.template.id}")
     private UUID verificationCodeTemplateId;
@@ -326,7 +327,7 @@ public class UserServiceImpl implements UserService {
         String fullname = userCreateRequest.firstname().concat(" ").concat(userCreateRequest.lastname());
         return new EmailMessageTO(verificationCodeTemplateId,
                 userCreateResponse.id(),
-                supportEmail,
+                TO_SUPPORT_EMAIL,
                 List.of(new Recipient(
                         fullname,
                         userCreateResponse.email(),
