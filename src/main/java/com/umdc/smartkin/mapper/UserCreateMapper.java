@@ -12,6 +12,9 @@ import org.mapstruct.*;
 import java.util.List;
 import java.util.UUID;
 
+import static com.umdc.smartkin.constant.SmartKinAppConstants.DEFAULT_GENDER;
+import static com.umdc.smartkin.constant.SmartKinAppConstants.PHONE_CONTACT_TYPE_ID;
+
 @Mapper(
         // Specifies that the mapper should be a Spring bean.
         componentModel = MappingConstants.ComponentModel.SPRING,
