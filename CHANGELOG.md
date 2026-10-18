@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`haltOnFailure=false`) until the legacy packages have tests.
 
 ### Added
+- KF-1: domain event contract and publisher. `SmartKinEvent<T>` envelope, `EventType` (`ACTIVITY_ASSIGNED`, `QUIZ_COMPLETED`, `ACHIEVEMENT_EARNED`), payload records in
+  `com.umdc.smartkin.kafka.event.payload`, `KafkaTopicsProperties` (`prx.kafka.topics.*`, defaults `smartkin.<subject>.<verb>.v1`) and `SmartKinEventPublisher`
+  (JSON, keyed by the child id). Decision record `docs/decisions/D-4-domain-events-and-topics.md`; tests include a round trip through Kafka 4.0 in Testcontainers.
 - DB-4: `V2__restrict_direct_access.sql` enables Row Level Security on the 13 tables, revokes every privilege from `PUBLIC`, `anon`, `authenticated` and `service_role`, and creates the
   restricted application role `smartkin_app` (DML only, no DDL). Decision record `docs/decisions/D-3-database-access-only-through-the-backend.md`;
   `DirectAccessRestrictionContainerTest` proves the application role works, cannot change the schema, and that the API roles are locked out even after an accidental grant.
