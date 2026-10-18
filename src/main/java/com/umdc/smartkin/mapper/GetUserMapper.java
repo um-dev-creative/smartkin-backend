@@ -1,9 +1,9 @@
 package com.umdc.smartkin.mapper;
 
-import com.prx.commons.general.pojo.Application;
-import com.prx.commons.general.pojo.Contact;
-import com.prx.commons.general.pojo.Person;
-import com.prx.commons.general.pojo.Role;
+import com.umdc.commons.general.pojo.Application;
+import com.umdc.commons.general.pojo.Contact;
+import com.umdc.commons.general.pojo.Person;
+import com.umdc.commons.general.pojo.Role;
 import com.umdc.smartkin.api.v1.to.GetUserResponse;
 import com.umdc.smartkin.client.backbone.to.BackboneUserGetResponse;
 import org.mapstruct.*;

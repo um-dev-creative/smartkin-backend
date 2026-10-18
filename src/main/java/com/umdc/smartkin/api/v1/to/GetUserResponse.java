@@ -1,7 +1,7 @@
 package com.umdc.smartkin.api.v1.to;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.prx.commons.util.DateUtil;
+import com.umdc.commons.util.DateUtil;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;

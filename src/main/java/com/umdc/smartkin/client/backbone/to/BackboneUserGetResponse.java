@@ -1,10 +1,10 @@
 package com.umdc.smartkin.client.backbone.to;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.prx.commons.general.pojo.Application;
-import com.prx.commons.general.pojo.Person;
-import com.prx.commons.general.pojo.Role;
-import com.prx.commons.util.DateUtil;
+import com.umdc.commons.general.pojo.Application;
+import com.umdc.commons.general.pojo.Person;
+import com.umdc.commons.general.pojo.Role;
+import com.umdc.commons.util.DateUtil;
 import jakarta.validation.constraints.Email;
 
 import java.time.LocalDateTime;

@@ -1,9 +1,9 @@
 package com.umdc.smartkin.security;
 
-import com.prx.commons.constants.keys.AuthKey;
-import com.prx.security.exception.CertificateSecurityException;
-import com.prx.security.jwt.JwtConfigProperties;
-import com.prx.security.service.SessionJwtService;
+import com.umdc.commons.constants.keys.AuthKey;
+import com.umdc.security.exception.CertificateSecurityException;
+import com.umdc.security.jwt.JwtConfigProperties;
+import com.umdc.security.service.SessionJwtService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
@@ -19,7 +19,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static com.prx.security.constant.ConstantApp.SESSION_TOKEN_KEY;
+import static com.umdc.security.constant.ConstantApp.SESSION_TOKEN_KEY;
 
 /**
  * Implementation of the SessionJwtService interface providing JWT-related operations.

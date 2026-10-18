@@ -1,8 +1,8 @@
 package com.umdc.smartkin.interceptor;
 
-import com.prx.commons.general.pojo.UserSession;
-import com.prx.commons.general.to.TokenResponse;
-import com.prx.security.properties.ClientProperties;
+import com.umdc.commons.general.pojo.UserSession;
+import com.umdc.commons.general.to.TokenResponse;
+import com.umdc.security.properties.ClientProperties;
 import feign.RequestInterceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

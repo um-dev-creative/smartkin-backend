@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
-import static com.prx.security.constant.ConstantApp.SESSION_TOKEN_KEY;
+import static com.umdc.security.constant.ConstantApp.SESSION_TOKEN_KEY;
 
 /// User API interface for handling user-related operations.
 @Tag(name="user", description="The user API")
