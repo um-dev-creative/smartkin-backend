@@ -24,7 +24,8 @@ import java.util.UUID;
 @Table(name = "child_achievements", schema = "smartkin")
 public class ChildAchievementEntity {
     @Id
-    @ColumnDefault("smartkin.uuid_generate_v4()")
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @ColumnDefault("gen_random_uuid()")
     @Column(name = "child_achievement_id", nullable = false)
     private UUID id;
 

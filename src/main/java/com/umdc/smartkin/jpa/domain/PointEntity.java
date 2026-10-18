@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
@@ -14,7 +16,8 @@ import java.util.UUID;
 @Table(name = "points", schema = "smartkin")
 public class PointEntity {
     @Id
-    @ColumnDefault("smartkin.uuid_generate_v4()")
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @ColumnDefault("gen_random_uuid()")
     @Column(name = "point_id", nullable = false)
     private UUID id;
 
@@ -43,6 +46,12 @@ public class PointEntity {
     private Instant transactionDate;
     @Column(name = "description", length = Integer.MAX_VALUE)
     private String description;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "transaction_type", nullable = false)
+    private TransactionType transactionType;
 
     public PointEntity() {
         // Default constructor
@@ -104,10 +113,11 @@ public class PointEntity {
         this.description = description;
     }
 
-/*
- TODO [Reverse Engineering] create field to map the 'transaction_type' column
- Available actions: Define target Java type | Uncomment as is | Remove column mapping
-    @Column(name = "transaction_type", columnDefinition = "transaction_type not null")
-    private Object transactionType;
-*/
+    public TransactionType getTransactionType() {
+        return transactionType;
+    }
+
+    public void setTransactionType(TransactionType transactionType) {
+        this.transactionType = transactionType;
+    }
 }

@@ -130,7 +130,36 @@ spring:
       port: ${CNFS_PORT}
       # Enables sending of state for the Spring Cloud Config
       send-state: true
+  # Database (Supabase PostgreSQL). Host, credentials and port come from Vault or the environment, as ZEROBOUND_DB_* do in zerobound.
+  # SMARTKIN_DB_URI is the host only (the transaction pooler, e.g. aws-1-us-east-2.pooler.supabase.com); 6543 is the pooler in transaction mode,
+  # where server-side prepared statements are not allowed, hence prepareThreshold=0.
+  datasource:
+    url: jdbc:postgresql://${SMARTKIN_DB_URI}:${SMARTKIN_DB_PORT:6543}/${SMARTKIN_DB_NAME:umdevc}?prepareThreshold=0
+    username: ${SMARTKIN_DB_USERNAME}
+    password: ${SMARTKIN_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: SmartKinBackendHikariCP
+      maximum-pool-size: ${SMARTKIN_DB_POOL_SIZE:5}
+      minimum-idle: 1
+      connection-timeout: 30000
+      idle-timeout: 30000
+      max-lifetime: 1800000
+  # Flyway owns the schema. It runs on the direct connection (5432), not through the transaction pooler, because migrations need
+  # session-level locks. Production can set FLYWAY_ENABLED=false and apply migrations from the pipeline.
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+    url: jdbc:postgresql://${SMARTKIN_DB_URI}:${SMARTKIN_DB_DIRECT_PORT:5432}/${SMARTKIN_DB_NAME:umdevc}
+    user: ${SMARTKIN_DB_USERNAME}
+    password: ${SMARTKIN_DB_PASSWORD}
+    locations: classpath:db/migration
+    default-schema: ${SMARTKIN_DB_SCHEMA:smartkin}
+    schemas: ${SMARTKIN_DB_SCHEMA:smartkin}
+    create-schemas: true
+    validate-on-migrate: true
   jpa:
+    hibernate:
+      ddl-auto: none
     properties:
       hibernate:
         boot:

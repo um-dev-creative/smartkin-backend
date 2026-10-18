@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -12,7 +14,8 @@ import java.util.UUID;
 @Table(name = "notifications", schema = "smartkin")
 public class NotificationEntity {
     @Id
-    @ColumnDefault("smartkin.uuid_generate_v4()")
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @ColumnDefault("gen_random_uuid()")
     @Column(name = "notification_id", nullable = false)
     private UUID id;
 
@@ -44,6 +47,12 @@ public class NotificationEntity {
     @ColumnDefault("false")
     @Column(name = "is_read", nullable = false)
     private Boolean isRead = false;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "type", nullable = false)
+    private NotificationType type;
 
     public NotificationEntity() {
         // Default constructor
@@ -113,10 +122,11 @@ public class NotificationEntity {
         this.isRead = isRead;
     }
 
-/*
- TODO [Reverse Engineering] create field to map the 'type' column
- Available actions: Define target Java type | Uncomment as is | Remove column mapping
-    @Column(name = "type", columnDefinition = "notification_type not null")
-    private Object type;
-*/
+    public NotificationType getType() {
+        return type;
+    }
+
+    public void setType(NotificationType type) {
+        this.type = type;
+    }
 }

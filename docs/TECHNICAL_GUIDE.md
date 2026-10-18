@@ -28,9 +28,24 @@ from the local Maven cache.
 
 ## Database
 
-PostgreSQL on Supabase, schema `smartkin`, database `umdevc` (shared project with zerobound). User ids come from backbone and are stored as plain UUIDs;
-there is no `general` schema in SmartKin's model. Decision record: `docs/decisions/D-1-supabase-schema-and-user-reference.md`. Bootstrap script:
-`docs/db/smartkin_schema_bootstrap.sql` (empty schema only; tables arrive with Flyway in DB-3).
+PostgreSQL on Supabase, schema `smartkin`, database `umdevc` (shared project with zerobound). User ids come from backbone and are stored as plain UUIDs
+(decision D-1). The schema is created and evolved by Flyway (`src/main/resources/db/migration`, decision D-2); Hibernate uses `ddl-auto: none`, so every
+entity change needs a new `V<n>__*.sql`.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SMARTKIN_DB_URI` | none | Host only, e.g. `aws-1-us-east-2.pooler.supabase.com` |
+| `SMARTKIN_DB_PORT` | 6543 | Transaction pooler used by the application |
+| `SMARTKIN_DB_DIRECT_PORT` | 5432 | Connection used by Flyway (session locks) |
+| `SMARTKIN_DB_NAME` | `umdevc` | Database |
+| `SMARTKIN_DB_SCHEMA` | `smartkin` | Flyway schema and history table location |
+| `SMARTKIN_DB_USERNAME`, `SMARTKIN_DB_PASSWORD` | none | Credentials, from Vault |
+| `SMARTKIN_DB_POOL_SIZE` | 5 | Hikari maximum pool size |
+| `FLYWAY_ENABLED` | `true` | `false` in production when the pipeline applies migrations |
+
+Create the empty schema with `docs/db/smartkin_schema_bootstrap.sql` (or let Flyway do it through `create-schemas`). Use a dedicated database role for SmartKin.
+The config-server file `stage-folder-config/smartkin-backend-*.yml` still carries its own datasource block; the variables above take effect through `bootstrap.yml`,
+so remove or align that block when the environment is switched to Supabase.
 
 ## Continuous integration
 
@@ -57,10 +72,9 @@ as environment variables for the private Repsy repository. The workflow does not
 | `MappersTest` | MapStruct mappings and their default methods |
 | `FeignConfigurersTest` | Bearer token interceptors against a local HTTP server that plays the token endpoint |
 | `TransferObjectsTest`, `EmailMessageProducerServiceImplTest` | `toString` and the Jackson 3 contract, including the snake_case payload sent to mercury |
-| `JpaMappingContainerTest` | Hibernate against a PostgreSQL 17 Testcontainer: 13 entities and repository wiring |
+| `JpaMappingContainerTest` | Flyway baseline on a PostgreSQL 17 Testcontainer, CRUD round trips of the 13 entities, the 4 enums and the cascade |
 
-Docker must be running for `JpaMappingContainerTest`. The schema is not created in that test because its DDL does not exist in the
-repository yet; task DB-3 (Flyway baseline) will add it and extend the test to CRUD round trips.
+Docker must be running for `JpaMappingContainerTest`.
 Shared builders live in `src/test/java/com/umdc/smartkin/support/TestData.java`.
 
 ## Spring Boot 4 migration notes
@@ -81,5 +95,5 @@ Shared builders live in `src/test/java/com/umdc/smartkin/support/TestData.java`.
 - The service starts only with the full environment (Vault, Config Server, SSL bundle, OAuth clients); startup with a complete
   environment was not verified in this task.
 - The Docker image was not built in this task.
-- `Object`-typed columns (`status`, `type`, `transactionType` in the reward, goal, notification and point entities) map PostgreSQL enums; their
-  runtime behaviour is untested until the schema is available (DB-3).
+- The enum labels (D-2) and the baseline DDL are derived from the entities and need confirmation against any existing `smartkin` schema in `umdevc`.
+- Flyway and the Supabase connection were exercised only against a Testcontainers PostgreSQL, not against Supabase.

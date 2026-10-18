@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- DB-2: the datasource is configured in `bootstrap.yml` from `SMARTKIN_DB_URI`, `SMARTKIN_DB_PORT` (default 6543, transaction pooler), `SMARTKIN_DB_NAME` (default `umdevc`),
+  `SMARTKIN_DB_USERNAME` and `SMARTKIN_DB_PASSWORD` (Vault or environment), with `prepareThreshold=0` and a Hikari pool of `SMARTKIN_DB_POOL_SIZE` (default 5).
+- DB-3: Flyway manages the schema (`spring-boot-starter-flyway`, `flyway-database-postgresql`) on the direct connection (`SMARTKIN_DB_DIRECT_PORT`, default 5432) with
+  `FLYWAY_ENABLED` to switch it off; Hibernate no longer touches the schema (`ddl-auto: none`).
+- Entities with generated keys use `GenerationType.UUID`; the unmapped enum columns of `child_rewards`, `goals`, `notifications` and `points` are now mapped.
 - DB-1: SmartKin no longer maps backbone's `general.user`. `UserEntity` and `UserRepository` were removed; `ParentEntity` and `ChildEntity` use the
   backbone user id as their key and `NotificationEntity` stores `userId` as a plain column. The model now has 13 entities, all in the `smartkin` schema.
 - JV-6: the JaCoCo package-level check blocks the build again (`haltOnFailure` removed). Its exclusions are now real class patterns
@@ -32,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`haltOnFailure=false`) until the legacy packages have tests.
 
 ### Added
+- DB-3: `V1__baseline_smartkin_schema.sql` (13 tables, 4 enum types, indexes), the enums `RewardStatus`, `GoalStatus`, `NotificationType` and `TransactionType`, and
+  `docs/decisions/D-2-baseline-schema-and-enum-labels.md`.
+- `JpaMappingContainerTest` now applies the baseline to PostgreSQL 17 and round-trips every entity, the four enums and the database cascade (6 tests).
 - DB-1: `docs/decisions/D-1-supabase-schema-and-user-reference.md` (schema `smartkin` in the existing Supabase project, user ids without foreign keys) and
   `docs/db/smartkin_schema_bootstrap.sql`, which creates the empty schema in the `umdevc` database.
 - JV-2: GitHub Actions workflow `.github/workflows/ci.yml` (Temurin 25, `mvn -B verify`, Docker for Testcontainers, JaCoCo report as artifact)
