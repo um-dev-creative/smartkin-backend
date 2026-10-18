@@ -2,7 +2,6 @@ package com.umdc.smartkin.jpa;
 
 import com.umdc.smartkin.config.DataBaseConfig;
 import com.umdc.smartkin.jpa.repository.ChildRepository;
-import com.umdc.smartkin.jpa.repository.UserRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.metamodel.EntityType;
 import org.junit.jupiter.api.Test;
@@ -47,24 +46,21 @@ class JpaMappingContainerTest {
     @Autowired
     private EntityManager entityManager;
     @Autowired
-    private UserRepository userRepository;
-    @Autowired
     private ChildRepository childRepository;
 
     @Test
-    void registersTheFourteenEntitiesOfTheDomainModel() {
+    void registersTheThirteenEntitiesOfTheSmartkinSchema() {
         Set<String> names = entityManager.getMetamodel().getEntities().stream()
                 .map(EntityType::getName).collect(Collectors.toSet());
 
-        assertEquals(14, names.size());
+        assertEquals(13, names.size());
         assertEquals(Set.of("AchievementEntity", "ActivityEntity", "ActivityProgressEntity", "AssignedActivityEntity",
                 "ChildAchievementEntity", "ChildEntity", "ChildRewardEntity", "GoalEntity", "NotificationEntity",
-                "ParentEntity", "PointEntity", "RewardEntity", "TopicEntity", "UserEntity"), names);
+                "ParentEntity", "PointEntity", "RewardEntity", "TopicEntity"), names);
     }
 
     @Test
     void wiresTheRepositories() {
-        assertNotNull(userRepository);
         assertNotNull(childRepository);
     }
 }

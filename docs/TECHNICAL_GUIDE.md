@@ -26,6 +26,12 @@ mvn test -Dtest=Class#method # single test
 The private Repsy repository needs `REPSY_ACCOUNT_USER` and `REPSY_ACCOUNT_PASSWORD`; the `com.umdc` libraries can also come
 from the local Maven cache.
 
+## Database
+
+PostgreSQL on Supabase, schema `smartkin`, database `umdevc` (shared project with zerobound). User ids come from backbone and are stored as plain UUIDs;
+there is no `general` schema in SmartKin's model. Decision record: `docs/decisions/D-1-supabase-schema-and-user-reference.md`. Bootstrap script:
+`docs/db/smartkin_schema_bootstrap.sql` (empty schema only; tables arrive with Flyway in DB-3).
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs `mvn -B verify` on JDK 25 (Temurin) for pushes and pull requests to `main` and `development`, and uploads
@@ -51,7 +57,7 @@ as environment variables for the private Repsy repository. The workflow does not
 | `MappersTest` | MapStruct mappings and their default methods |
 | `FeignConfigurersTest` | Bearer token interceptors against a local HTTP server that plays the token endpoint |
 | `TransferObjectsTest`, `EmailMessageProducerServiceImplTest` | `toString` and the Jackson 3 contract, including the snake_case payload sent to mercury |
-| `JpaMappingContainerTest` | Hibernate against a PostgreSQL 17 Testcontainer: 14 entities and repository wiring |
+| `JpaMappingContainerTest` | Hibernate against a PostgreSQL 17 Testcontainer: 13 entities and repository wiring |
 
 Docker must be running for `JpaMappingContainerTest`. The schema is not created in that test because its DDL does not exist in the
 repository yet; task DB-3 (Flyway baseline) will add it and extend the test to CRUD round trips.

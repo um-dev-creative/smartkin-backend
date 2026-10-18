@@ -22,14 +22,10 @@ import java.util.UUID;
 @Entity
 @Table(name = "child", schema = "smartkin")
 public class ChildEntity {
+    /// Backbone user id of the child; identity lives in backbone, so there is no foreign key to its tables.
     @Id
     @Column(name = "child_id", nullable = false)
     private UUID id;
-
-    @MapsId
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "child_id", nullable = false)
-    private UserEntity userEntity;
 
     @NotNull
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -60,14 +56,6 @@ public class ChildEntity {
 
     public void setId(UUID id) {
         this.id = id;
-    }
-
-    public UserEntity getUser() {
-        return userEntity;
-    }
-
-    public void setUser(UserEntity userEntity) {
-        this.userEntity = userEntity;
     }
 
     public ParentEntity getParent() {
