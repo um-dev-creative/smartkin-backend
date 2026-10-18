@@ -1,9 +1,12 @@
 package com.umdc.smartkin.security;
 
+
 import com.umdc.commons.constants.keys.AuthKey;
 import com.umdc.security.exception.CertificateSecurityException;
 import com.umdc.security.jwt.JwtConfigProperties;
 import com.umdc.security.service.SessionJwtService;
+import com.umdc.smartkin.security.revocation.RevocationChecker;
+import com.umdc.smartkin.security.revocation.SessionValidationUnavailableException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
@@ -11,6 +14,7 @@ import io.jsonwebtoken.security.Keys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
@@ -31,15 +35,18 @@ public class SessionJwtServiceImpl implements SessionJwtService {
 
     private static final Logger logger = LoggerFactory.getLogger(SessionJwtServiceImpl.class);
     private final JwtConfigProperties jwtConfigProperties;
+    private final RevocationChecker revocationChecker;
     private final SecretKey key;
 
     /**
      * Constructor to initialize SessionJwtService with JwtConfigProperties.
      *
      * @param jwtConfigProperties the configuration properties for JWT
+     * @param revocationChecker   the check against backbone-rest's deny-list of revoked tokens
      */
-    public SessionJwtServiceImpl(JwtConfigProperties jwtConfigProperties) {
+    public SessionJwtServiceImpl(JwtConfigProperties jwtConfigProperties, RevocationChecker revocationChecker) {
         this.jwtConfigProperties = jwtConfigProperties;
+        this.revocationChecker = revocationChecker;
         this.key = generateKey();
     }
 
@@ -105,4 +112,24 @@ public class SessionJwtServiceImpl implements SessionJwtService {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
+
+    /**
+     * A token is valid when it is a non-expired session token that carries a {@code jti} backbone-rest has not revoked.
+     *
+     * @param token the session token
+     * @return {@code true} when the token is acceptable
+     * @throws SessionValidationUnavailableException when the revocation list cannot be consulted
+     */
+    @Override
+    public boolean isValid(String token) {
+        if (!SessionJwtService.super.isValid(token)) {
+            return false;
+        }
+        try {
+            String jti = getTokenClaims(token).getId();
+            return StringUtils.hasText(jti) && !revocationChecker.isRevoked(jti);
+        } catch (CertificateSecurityException e) {
+            return false;
+        }
+    }
 }
