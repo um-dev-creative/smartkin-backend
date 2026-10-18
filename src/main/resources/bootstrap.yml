@@ -18,6 +18,12 @@ prx:
       # Also the worst-case delay before a revocation takes effect
       cache-ttl: ${REVOCATION_CACHE_TTL:30s}
       command-timeout: ${REVOCATION_REDIS_TIMEOUT:2s}
+  cache:
+    lesson-catalog:
+      # redis[s]://[user:password@]host:port/db of the SmartKin cache. Empty = no cache: every catalog read goes to MongoDB
+      redis-url: ${CACHE_REDIS_URL:}
+      ttl: ${CACHE_LESSON_CATALOG_TTL:10m}
+      command-timeout: ${CACHE_REDIS_TIMEOUT:500ms}
   interaction-events:
     # How long raw interaction events are kept before MongoDB expires them (a TTL index on expiresAt)
     retention: ${SMARTKIN_INTERACTION_EVENTS_RETENTION:90d}
