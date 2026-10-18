@@ -26,6 +26,13 @@ mvn test -Dtest=Class#method # single test
 The private Repsy repository needs `REPSY_ACCOUNT_USER` and `REPSY_ACCOUNT_PASSWORD`; the `com.umdc` libraries can also come
 from the local Maven cache.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs `mvn -B verify` on JDK 25 (Temurin) for pushes and pull requests to `main` and `development`, and uploads
+`target/site/jacoco/` as the `backend-coverage` artifact. Optional repository secrets `REPSY_ACCOUNT_USER` and `REPSY_ACCOUNT_PASSWORD` are passed
+as environment variables for the private Repsy repository. The workflow does not build the Docker image because the certificates copied by the
+`Dockerfile` (`src/main/resources/*.crt`, `keystore.jks`) are not in the repository.
+
 ## Coverage policy
 
 - Every task must reach **85%** line and branch coverage on the classes and methods it adds or changes.

@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`haltOnFailure=false`) until the legacy packages have tests.
 
 ### Added
+- JV-2: GitHub Actions workflow `.github/workflows/ci.yml` (Temurin 25, `mvn -B verify`, Docker for Testcontainers, JaCoCo report as artifact)
+  on pushes and pull requests to `main` and `development`. The Docker base image tag `amazoncorretto:25.0.4-alpine3.24` was checked against the registry.
 - JV-6: test suite of 92 tests (JUnit 6, Mockito, MockMvc, Testcontainers): services, authentication, session JWT, controllers and API defaults,
   mappers, Feign interceptors against a local token endpoint, transfer objects and their Jackson 3 contract, and a PostgreSQL 17
   container test that boots the JPA model (14 entities). Line coverage on the gated code is above 99%.
