@@ -57,7 +57,8 @@ public class UserRegisterServiceImpl implements UserRegisterService {
             return mercuryClient.confirmCode(mercuryToken.token(),
                     confirmCodeMapper.toVerificationCodeRequest(confirmCodeRequest, applicationId));
         } catch (FeignException e) {
-            Optional<String> message = e.responseHeaders().get(MESSAGE_HEADER).stream().findFirst();
+            Optional<String> message = Optional.ofNullable(e.responseHeaders().get(MESSAGE_HEADER))
+                    .flatMap(values -> values.stream().findFirst());
             return ResponseEntity.status(e.status())
                     .header(MESSAGE_HEADER, message.orElse(""))
                     .build();

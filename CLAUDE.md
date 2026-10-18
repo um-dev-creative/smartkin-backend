@@ -9,11 +9,11 @@ SmartKin backend: a Spring Boot 4.1 / Java 25 REST API (Maven, package `com.umdc
 ## Commands
 
 - Build: `mvn clean package` (produces `target/smartkin-backend.jar`; `finalName` is fixed)
-- Run all tests + quality gates: `mvn test` (PMD `check`/`cpd-check` with `ruleset.xml` and the JaCoCo `check` are bound to the `test` phase and fail the build; JaCoCo minimum is 85% but the package-level check is report-only; verify the classes you touch in `target/site/jacoco/jacoco.xml`)
+- Run all tests + quality gates: `mvn test` (PMD `check`/`cpd-check` with `ruleset.xml` and the JaCoCo `check` are bound to the `test` phase and fail the build; JaCoCo minimum is 85% and the package-level check fails the build)
 - Single test: `mvn test -Dtest=ClassName#method`
 - Docker image is built from the pre-built jar in `target/` (`Dockerfile`, exposes 8166, imports several `.crt` files from `src/main/resources` into the JVM cacerts)
 
-Task rules: branch from `development`, 85% coverage on touched code, update `CHANGELOG.md`, `docs/USER_GUIDE.md` and `docs/TECHNICAL_GUIDE.md`. Sonar/PMD/JaCoCo exclusions are shared through the `sonar.exclusions` property in `pom.xml` (config, mapper, util, Application classes, etc. are excluded).
+Task rules: branch from `development`, 85% coverage on touched code, update `CHANGELOG.md`, `docs/USER_GUIDE.md` and `docs/TECHNICAL_GUIDE.md`. PMD uses the `sonar.exclusions` property in `pom.xml`; JaCoCo has its own class-pattern exclusions (config, entities, repositories, generated mapper implementations, Application). Integration tests need Docker (Testcontainers).
 
 ## Configuration
 

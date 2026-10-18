@@ -166,6 +166,26 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.restdocs</groupId>
             <artifactId>spring-restdocs-mockmvc</artifactId>
             <scope>test</scope>
@@ -223,6 +243,13 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.version}</version>
                 <configuration>
+                    <!-- bootstrap.yml is made of ${ENV} placeholders; slice tests need a valid profile and no Vault or Config Server. -->
+                    <environmentVariables>
+                        <SPRING_BOOT_PROFILE_ACTIVE>test</SPRING_BOOT_PROFILE_ACTIVE>
+                        <SPRING_CLOUD_BOOTSTRAP_ENABLED>false</SPRING_CLOUD_BOOTSTRAP_ENABLED>
+                        <SPRING_CLOUD_VAULT_ENABLED>false</SPRING_CLOUD_VAULT_ENABLED>
+                        <SPRING_CLOUD_CONFIG_ENABLED>false</SPRING_CLOUD_CONFIG_ENABLED>
+                    </environmentVariables>
                     <!-- jacoco:prepare-agent sets argLine; keep it and add Mockito's javaagent. -->
                     <argLine>${argLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
                 </configuration>
@@ -293,10 +320,6 @@
                         </goals>
                         <phase>test</phase>
                         <configuration>
-                            <!-- Legacy packages have no tests yet, so the package-level gate cannot block the build until
-                                 the coverage backfill lands; every task still has to reach 85% on the code it touches
-                                 (see docs/TECHNICAL_GUIDE.md). -->
-                            <haltOnFailure>false</haltOnFailure>
                             <rules>
                                 <rule>
                                     <element>PACKAGE</element>
@@ -319,8 +342,15 @@
                                     </limits>
                                 </rule>
                             </rules>
+                            <!-- Class patterns relative to target/classes. The Sonar list is not reused because it holds
+                                 source globs (XML files, whitespace) that JaCoCo cannot match. Entities and repositories are
+                                 mapping-only code checked by the Testcontainers test; MapStruct implementations are generated. -->
                             <excludes>
-                                <exclude>${sonar.exclusions}</exclude>
+                                <exclude>**/*Application.class</exclude>
+                                <exclude>**/config/**</exclude>
+                                <exclude>**/jpa/domain/**</exclude>
+                                <exclude>**/jpa/repository/**</exclude>
+                                <exclude>**/mapper/*Impl.class</exclude>
                             </excludes>
                         </configuration>
                     </execution>
