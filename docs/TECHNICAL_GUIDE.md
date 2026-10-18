@@ -41,6 +41,11 @@ from the local Maven cache.
   `spring-boot-configuration-processor` in `annotationProcessorPaths`.
 - Surefire passes JaCoCo's `${argLine}` plus the Mockito agent; ASM 9.10.1 is required to read Java 25 bytecode.
 
+## Feign client URLs
+
+`@FeignClient(url = "${prx.clients.backbone.url}")` and `${prx.clients.mercury.url}` are resolved from `bootstrap.yml`, where
+`BACKBONE_URL` and `MERCURY_URL` override the QA defaults. `FeignClientUrlConfigTest` checks the placeholders, the defaults and the override.
+
 ## Known gaps
 
 - The service starts only with the full environment (Vault, Config Server, SSL bundle, OAuth clients); startup with a complete

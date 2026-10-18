@@ -9,6 +9,12 @@ prx:
   jwt:
     secret: ${APP_TOKEN_SECRET}
     expirationMs: ${APP_TOKEN_EXPIRATION}
+  clients:
+    # Base URLs of the services reached through Feign; override per environment with BACKBONE_URL and MERCURY_URL
+    backbone:
+      url: ${BACKBONE_URL:https://prx-qa.backbone.tst/backbone}
+    mercury:
+      url: ${MERCURY_URL:https://prx-qa.backbone.tst/mercury}
   auth:
     clients:
       - id: backbone
