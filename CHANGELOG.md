@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`haltOnFailure=false`) until the legacy packages have tests.
 
 ### Added
+- MG-1: MongoDB support (`spring-boot-starter-data-mongodb`) and the collections `lessons`, `quiz_attempts` and `interaction_events`, modelled as records in
+  `com.umdc.smartkin.mongo.document` with Spring Data repositories. Connection through `SMARTKIN_MONGO_*` variables; UUIDs use the standard representation.
+- MG-2: indexes declared on the documents and created at startup (`auto-index-creation`): unique `slug` and `topicId+status` on lessons; unique
+  `childId+lessonId+attemptNumber`, `childId+completedAt` and `assignmentId` on quiz attempts; `childId+lessonId+occurredAt` and `attemptId` on events; and a TTL index on
+  `interaction_events.expiresAt`. `InteractionEventService` sets `expiresAt` from `prx.interaction-events.retention` (default 90 days).
+- Tests: `InteractionEventServiceTest` and `MongoCollectionsContainerTest` (MongoDB 7 in Testcontainers).
 - DB-3: `V1__baseline_smartkin_schema.sql` (13 tables, 4 enum types, indexes), the enums `RewardStatus`, `GoalStatus`, `NotificationType` and `TransactionType`, and
   `docs/decisions/D-2-baseline-schema-and-enum-labels.md`.
 - `JpaMappingContainerTest` now applies the baseline to PostgreSQL 17 and round-trips every entity, the four enums and the database cascade (6 tests).

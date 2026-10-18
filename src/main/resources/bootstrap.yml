@@ -9,6 +9,9 @@ prx:
   jwt:
     secret: ${APP_TOKEN_SECRET}
     expirationMs: ${APP_TOKEN_EXPIRATION}
+  interaction-events:
+    # How long raw interaction events are kept before MongoDB expires them (a TTL index on expiresAt)
+    retention: ${SMARTKIN_INTERACTION_EVENTS_RETENTION:90d}
   clients:
     # Base URLs of the services reached through Feign; override per environment with BACKBONE_URL and MERCURY_URL
     backbone:
@@ -157,6 +160,16 @@ spring:
     schemas: ${SMARTKIN_DB_SCHEMA:smartkin}
     create-schemas: true
     validate-on-migrate: true
+  # MongoDB: lesson scenes, quiz attempts and interaction events (documents the relational model should not carry).
+  # Credentials with special characters must be URL-encoded. Use SMARTKIN_MONGO_SCHEME=mongodb for a plain host:port server.
+  mongodb:
+    uri: ${SMARTKIN_MONGO_SCHEME:mongodb+srv}://${SMARTKIN_MONGO_USERNAME}:${SMARTKIN_MONGO_PASSWORD}@${SMARTKIN_MONGO_HOST}/${SMARTKIN_MONGO_DATABASE:smartkin}?retryWrites=true&w=majority
+    representation:
+      uuid: STANDARD
+  data:
+    mongodb:
+      # Creates the indexes declared on the documents at startup, including the TTL index of interaction_events
+      auto-index-creation: true
   jpa:
     hibernate:
       ddl-auto: none

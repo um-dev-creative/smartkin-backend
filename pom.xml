@@ -155,6 +155,10 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-mongodb</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-flyway</artifactId>
         </dependency>
         <dependency>
@@ -192,6 +196,16 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-mongodb-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-mongodb</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -359,6 +373,7 @@
                                 <exclude>**/config/**</exclude>
                                 <exclude>**/jpa/domain/**</exclude>
                                 <exclude>**/jpa/repository/**</exclude>
+                                <exclude>**/mongo/repository/**</exclude>
                                 <exclude>**/mapper/*Impl.class</exclude>
                             </excludes>
                         </configuration>
