@@ -1,0 +1,12 @@
+# Build-context allowlist for Dockerfile.native only (BuildKit uses `<Dockerfile name>.dockerignore` ahead of `.dockerignore`).
+# Everything is excluded, then only what the builder stage COPYs is let back in; without this the daemon receives target/, .git/,
+# .idea/, secrets/ ... for nothing, and any change in them would invalidate the (multi-minute) native-image layer.
+*
+
+!pom.xml
+!config/native.env
+!certs/smartkin
+!src/main
+
+# src/test stays out: the image build skips tests, so test sources are never compiled.
+**/.DS_Store

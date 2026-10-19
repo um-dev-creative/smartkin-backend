@@ -1,41 +1,53 @@
-FROM amazoncorretto:25.0.4-alpine3.24
+# syntax=docker/dockerfile:1
+
+# JVM (JIT) image of smartkin-backend. Build the jar first (`mvn -B clean package`), then:
+#
+#   docker build --secret id=prx_internal_ca,src=certs/smartkin/prx-internal-ca.crt -t lamata/smartkin-backend:0.0.1 .
+#
+# Two stages: the first splits the Spring Boot jar into layers (dependencies / loader / snapshots / application), so a code-only
+# change rebuilds one small layer instead of the whole 100+ MB jar; the second is the runtime image. The GraalVM image is in
+# Dockerfile.native and exposes the same port and health probe.
+
+ARG JAVA_IMAGE=amazoncorretto:25.0.4-alpine3.24
+
+FROM ${JAVA_IMAGE} AS layers
+WORKDIR /workspace
+COPY target/smartkin-backend.jar smartkin-backend.jar
+RUN java -Djarmode=tools -jar smartkin-backend.jar extract --layers --destination /workspace/extracted
+
+FROM ${JAVA_IMAGE}
 LABEL version="0.0.1"
 LABEL description="SmartKin Backend API"
-LABEL mantainer="Luis Mata luis.antonio.mata@gmail.com"
+LABEL maintainer="Luis Mata luis.antonio.mata@gmail.com"
 
-ARG RESOURCE_PATH=/src/main/resources/
-ARG TARGET_FILE=target/
-ARG KEYSTORE_FILE=keystore
-ARG BACKBONE_ALIAS=backbone
-ARG SRMN_CRT_FILE_NAME=srmn
-ARG JAR_FILE=smartkin-backend.jar
-ARG SRMN_CRT_ALIAS=servicemonitor
-ARG BACKBONE_FILE_NAME=backbone
-ARG AUTH_CRT_NAME=prx-qa.manager
-ARG APP_CRT_ALIAS=directory-rest.tst
-ARG CNFS_CRT_NAME=prx-qa.config-server
-ARG APP_CRT_FILE_NAME=directory-rest
 WORKDIR /usr/local/runme
-COPY ${TARGET_FILE}${JAR_FILE} ${JAR_FILE}
-COPY ${RESOURCE_PATH}${APP_CRT_FILE_NAME}.crt ${APP_CRT_FILE_NAME}.crt
-COPY ${RESOURCE_PATH}${AUTH_CRT_NAME}.crt ${AUTH_CRT_NAME}.crt
-COPY ${RESOURCE_PATH}${BACKBONE_FILE_NAME}.crt ${BACKBONE_FILE_NAME}.crt
-COPY ${RESOURCE_PATH}${SRMN_CRT_FILE_NAME}.crt ${SRMN_CRT_FILE_NAME}.crt
-COPY ${RESOURCE_PATH}${CNFS_CRT_NAME}.crt ${CNFS_CRT_NAME}.crt
-COPY ${RESOURCE_PATH}${KEYSTORE_FILE}.jks ${KEYSTORE_FILE}.jks
 
-RUN addgroup -S appmng && adduser -S jvapps -G appmng
-RUN chown -R jvapps:appmng .
-RUN chmod -R 740 .
+# The old image imported five .crt files that no longer exist in the repository (src/main/resources/*.crt, keystore.jks), so it
+# could not be built from a fresh checkout. The keystores of the TLS bundle now travel inside the jar (pom.xml, certs/smartkin),
+# and the internal CA, which is git-ignored too, comes in as an optional BuildKit secret instead of a COPY from a path that may be
+# missing. When given, it is added to the JVM trust store so outbound calls to the *.tst services (Vault, Config Server, backbone,
+# mercury) verify their certificates; without it those calls use the default trust store only.
+RUN --mount=type=secret,id=prx_internal_ca,target=/run/secrets/prx-internal-ca.crt,required=false \
+    if [ -f /run/secrets/prx-internal-ca.crt ]; then \
+      keytool -importcert -alias prx-internal-ca -cacerts -file /run/secrets/prx-internal-ca.crt -storepass changeit -noprompt; \
+    fi
 
-RUN keytool -import -alias ${APP_CRT_ALIAS} -cacerts -file ${APP_CRT_FILE_NAME}.crt -storepass changeit -noprompt && \
-    keytool -import -alias ${AUTH_CRT_NAME}.tst -cacerts -file ${AUTH_CRT_NAME}.crt -storepass changeit -noprompt && \
-    keytool -import -alias ${BACKBONE_ALIAS}.tst -cacerts -file ${BACKBONE_FILE_NAME}.crt -storepass changeit -noprompt && \
-    keytool -import -alias ${SRMN_CRT_FILE_NAME} -cacerts -file ${SRMN_CRT_FILE_NAME}.crt -storepass changeit -noprompt && \
-    keytool -import -alias ${CNFS_CRT_NAME} -cacerts -file ${CNFS_CRT_NAME}.crt -storepass changeit -noprompt && \
-    rm *.crt
+COPY --from=layers /workspace/extracted/dependencies/ ./
+COPY --from=layers /workspace/extracted/spring-boot-loader/ ./
+COPY --from=layers /workspace/extracted/snapshot-dependencies/ ./
+COPY --from=layers /workspace/extracted/application/ ./
+COPY docker-entrypoint.sh docker-entrypoint.sh
+
+RUN addgroup -S appmng && adduser -S jvapps -G appmng \
+    && chown -R jvapps:appmng . \
+    && chmod -R 740 . \
+    && chmod 750 docker-entrypoint.sh
 
 USER jvapps:appmng
 
 EXPOSE 8166
-CMD ["java", "-Dspring.application.name=smartkin-backend", "-Dspring.cloud.vault.enabled=${VAULT_ENABLED}", "-Dapi.info.version=1.0.0", "-jar", "smartkin-backend.jar"]
+# Liveness over the container's own loopback; the certificate is not verified because it only reaches this process.
+# /actuator/health/liveness does not depend on Postgres, MongoDB, Redis or Kafka, so a cloud outage does not restart the container.
+HEALTHCHECK --interval=15s --timeout=3s --start-period=90s --retries=5 \
+  CMD wget --no-check-certificate -qO- https://127.0.0.1:8166/actuator/health/liveness || exit 1
+CMD ["./docker-entrypoint.sh"]

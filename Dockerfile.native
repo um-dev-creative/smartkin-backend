@@ -1,0 +1,110 @@
+# syntax=docker/dockerfile:1
+
+# EXPERIMENTAL: this image builds, but the binary does not start yet (the application relies on the Spring Cloud bootstrap context,
+# which Spring AOT does not support; see docs/TECHNICAL_GUIDE.md, "Container images"). Deploy the JVM image from ./Dockerfile.
+#
+# GraalVM Native Image build of smartkin-backend. Two stages: compile the executable inside a Linux builder (native-image targets
+# the container's own architecture, whatever the host is), then copy only the binary into a small runtime image. It starts in well
+# under a second and uses a fraction of the JIT image's memory; the price is a 10-15 minute build that needs ~8 GB of RAM, so give
+# Docker at least 12 GB.
+#
+#   docker build \
+#     --secret id=maven_settings,src=$HOME/.m2/settings.xml \
+#     --secret id=prx_internal_ca,src=certs/smartkin/prx-internal-ca.crt \
+#     -f Dockerfile.native -t lamata/smartkin-backend:0.0.1-native .
+#
+# The builder is plain Debian, not ghcr.io/graalvm/native-image-community: that image is Oracle Linux 10, whose glibc needs
+# x86-64-v3 (AVX2/BMI2) and dies at start on hosts that do not offer it. Debian keeps the original x86-64 baseline (the same
+# lesson as mercury, backbone-rest and zerobound-rest).
+
+# Empty placeholder for the optional `umdc-local` build context (Repsy outage fallback, see the Maven step below).
+FROM scratch AS umdc-local
+
+FROM debian:12-slim AS builder
+ARG TARGETARCH
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates build-essential zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG GRAALVM_VERSION=25.0.2
+RUN set -eu; \
+    case "${TARGETARCH}" in \
+      amd64) GRAAL_ARCH=x64 ;; \
+      arm64) GRAAL_ARCH=aarch64 ;; \
+      *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-${GRAALVM_VERSION}/graalvm-community-jdk-${GRAALVM_VERSION}_linux-${GRAAL_ARCH}_bin.tar.gz" -o /tmp/graalvm.tar.gz \
+    && mkdir -p /opt/graalvm && tar xzf /tmp/graalvm.tar.gz -C /opt/graalvm --strip-components=1 && rm /tmp/graalvm.tar.gz
+ENV JAVA_HOME=/opt/graalvm
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+# archive.apache.org keeps every release; dlcdn only has the latest 3.9.x and 404s once it moves on
+ARG MAVEN_VERSION=3.9.14
+RUN curl -fsSL "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
+    | tar xz -C /opt && ln -s "/opt/apache-maven-${MAVEN_VERSION}/bin/mvn" /usr/local/bin/mvn
+
+# Only what the native build reads (see Dockerfile.native.dockerignore). certs/smartkin/ (git-ignored) supplies the keystores that
+# pom.xml's <resource> puts on the classpath, so NativeRuntimeHints' `*.jks` pattern has something to embed; it must exist on the
+# build host.
+COPY pom.xml ./
+COPY config/native.env ./config/native.env
+COPY certs/smartkin ./certs/smartkin
+COPY src/main ./src/main
+
+# Spring's AOT step refreshes the whole application context at build time, so every placeholder without a default must resolve:
+# config/native.env supplies harmless dummies. None of it reaches the image; at run time every value comes from Vault / the
+# container's environment.
+#
+# ~/.m2/settings.xml (credentials of the private Repsy repository, where com.umdc:commons, commons-services and security-oauth
+# live) is a BuildKit secret, never COPYed, so it never lands in a layer. The Maven repository is a cache mount, so a source change
+# does not download the dependency tree again. The com.umdc artifacts are purged from it first, because Maven never re-downloads a
+# release it already has and a re-published 0.0.x would otherwise keep compiling against the stale jar.
+#
+# Repsy outage: pass the host's own copies as a named build context and they are re-seeded after the purge:
+#   docker build --build-context umdc-local=$HOME/.m2/repository/com/umdc -f Dockerfile.native ...
+#
+# Quality gates are skipped on purpose (they change nothing in the binary; `mvn verify` in JVM mode is the correctness gate), and
+# native:compile is its own goal: the plugin only binds the AOT-generation goals to `package`.
+# NATIVE_QUICK_BUILD=true (-Ob) shortens the compile and slows peak throughput: for local smoke-test images only.
+ARG NATIVE_QUICK_BUILD=false
+RUN --mount=type=secret,id=maven_settings,target=/root/.m2/settings.xml,required=false \
+    --mount=type=cache,id=maven-repo,target=/root/.m2/repository,sharing=locked \
+    --mount=type=bind,from=umdc-local,target=/umdc-local \
+    sh -c 'rm -rf /root/.m2/repository/com/umdc; \
+    if [ -n "$(ls -A /umdc-local 2>/dev/null)" ]; then \
+      echo "Seeding com.umdc artifacts from the umdc-local build context (Repsy bypassed)"; \
+      mkdir -p /root/.m2/repository/com/umdc && cp -R /umdc-local/. /root/.m2/repository/com/umdc/ && \
+      find /root/.m2/repository/com/umdc -name _remote.repositories -delete && \
+      find /root/.m2/repository/com/umdc -name "*.lastUpdated" -delete; \
+    fi; \
+    set -a; . ./config/native.env; set +a; \
+    mvn -Pnative -B -Dmaven.test.skip=true -Dpmd.skip=true -Dcpd.skip=true -Djacoco.skip=true \
+        -DquickBuild="${NATIVE_QUICK_BUILD}" package native:compile'
+
+# The internal CA is git-ignored, so it is staged from an optional BuildKit secret instead of a COPY from a path that may be missing.
+RUN --mount=type=secret,id=prx_internal_ca,target=/run/secrets/prx-internal-ca.crt,required=false \
+    mkdir -p /staging-certs && \
+    if [ -f /run/secrets/prx-internal-ca.crt ]; then cp /run/secrets/prx-internal-ca.crt /staging-certs/prx-internal-ca.crt; fi
+
+FROM debian:12-slim
+LABEL version="0.0.1-native"
+LABEL description="SmartKin Backend API (GraalVM native image)"
+LABEL maintainer="Luis Mata luis.antonio.mata@gmail.com"
+# curl serves the health probe; zlib1g is the runtime library native-image links against.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates zlib1g \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system appmng && useradd --system --gid appmng --no-create-home jvapps
+WORKDIR /usr/local/runme
+COPY --from=builder /build/target/smartkin-backend /usr/local/runme/smartkin-backend
+COPY --from=builder /staging-certs/ /usr/local/runme/certs/smartkin/
+RUN chown -R jvapps:appmng . && chmod 750 smartkin-backend
+USER jvapps:appmng
+EXPOSE 8166
+# Liveness over the loopback; the certificate is not verified because it only reaches this process.
+HEALTHCHECK --interval=15s --timeout=3s --start-period=30s --retries=5 \
+  CMD curl -fsk https://127.0.0.1:8166/actuator/health/liveness || exit 1
+# No shell wrapper: the two static -D values the JIT entrypoint sets are native-image arguments, and everything else comes from the
+# container's environment.
+ENTRYPOINT ["/usr/local/runme/smartkin-backend", "-Dspring.application.name=smartkin-backend", "-Dapi.info.version=1.0.0"]

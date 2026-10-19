@@ -47,6 +47,16 @@ Authenticated calls carry the session token in the header defined by `SESSION_TO
 - Fix: confirming a verification code no longer fails with an internal error when mercury rejects it without a `message` header; the
   response keeps mercury's status and an empty `message` header.
 
+## Running in a container
+
+1. Put the TLS keystores in `certs/smartkin/` (`smartkin.jks`, `umdc-truststore.jks`; git-ignored) **before** `mvn clean package`: they are copied into the jar.
+2. Copy `secrets/local.env.example` to `secrets/local.env` and set `VAULT_TOKEN`. `config/local.env` already points at the QA Vault and Config Server; everything else (Supabase, Atlas, Redis, Kafka, the backbone and mercury clients) comes from Vault.
+3. Once per Docker host, create the shared network: `docker network create --driver bridge --subnet 172.22.0.0/16 --gateway 172.22.0.1 nginx_umdc-net`.
+4. `mvn -B clean package && docker compose build && docker compose up -d`. The service listens on HTTPS 8166, has the fixed IP `172.22.0.12`, and `docker compose ps` shows its health. Put `api.umdc-qa.tst/smartkin-backend/` in nginx in front of it.
+5. Native image: **experimental, do not deploy yet**. `Dockerfile.native` builds, but the binary does not start (see the technical guide). Use the JVM image from step 4.
+
+The container stops gracefully on `docker stop` (up to 30 s). A new Vault token or Config Server change needs a restart.
+
 ## Running locally
 
 1. Install JDK 25 and Maven 3.9.

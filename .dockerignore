@@ -1,0 +1,6 @@
+# Context of the JVM image (Dockerfile): only the built jar and the entrypoint are read. Dockerfile.native has its own allowlist
+# in Dockerfile.native.dockerignore.
+*
+
+!target/smartkin-backend.jar
+!docker-entrypoint.sh

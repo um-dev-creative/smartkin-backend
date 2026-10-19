@@ -1,0 +1,71 @@
+# docker-compose.yml - local and QA runs of smartkin-backend. For Kubernetes (cert-manager, Ingress...) use its own manifests.
+#
+# Config is split in two, by sensitivity (the scheme of mercury, backbone-rest and zerobound-rest):
+#   config/local.env   (versioned)  bootstrap identity: profile, label, how to reach Vault / the Config Server, TLS identity. No credentials.
+#   secrets/local.env  (git-ignored, copy secrets/local.env.example)  VAULT_TOKEN only.
+# Supabase (SMARTKIN_DB_*), MongoDB Atlas (SMARTKIN_MONGO_*), the Redis instances (REVOCATION_REDIS_URL, CACHE_REDIS_URL), Kafka, the
+# backbone / mercury clients and APP_TOKEN_SECRET come from Vault / the Config Server. Never put them in those files, not even
+# empty: an environment variable shadows the Vault value.
+#
+# The image this file runs is built beforehand:
+#   JVM (default)   mvn -B clean package && docker compose build
+#   GraalVM native  (experimental, the binary does not start yet) docker build -f Dockerfile.native -t lamata/smartkin-backend:0.0.1-native ...   (secrets and flags: see Dockerfile.native;
+#                   10-15 min, ~8 GB RAM) and then run it with SMARTKIN_TAG=0.0.1-native docker compose up -d
+# The internal CA of the *.tst services is an optional BuildKit secret of both Dockerfiles:
+#   docker build --secret id=prx_internal_ca,src=certs/smartkin/prx-internal-ca.crt -t lamata/smartkin-backend:0.0.1 .
+#
+#   docker compose up -d        (needs the external network nginx_umdc-net, created once per Docker host as the comment at the bottom says)
+services:
+  smartkin-backend:
+    build: .
+    container_name: smartkin-backend
+    image: lamata/smartkin-backend:${SMARTKIN_TAG:-0.0.1}
+    hostname: umdc-qa
+    domainname: smartkin.umdc-qa.tst                 # FQDN -> smartkin-backend.umdc-qa.tst
+    dns_search:
+      - tst
+    # A container does not read the host's /etc/hosts, so the *.umdc-qa.tst names (Vault, Config Server, backbone and mercury through
+    # nginx) do not resolve inside it, and Vault would then be skipped silently. UMDC_GATEWAY_IP (shell or .env) = the machine running
+    # nginx; the default host-gateway is the Docker host itself, which works when nginx publishes :443 there.
+    extra_hosts:
+      - "vault.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
+      - "config-server.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
+      - "api.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
+      - "monitor.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
+    env_file:
+      - config/local.env
+      - secrets/local.env
+    networks:
+      nginx_umdc-net:
+        ipv4_address: 172.22.0.12
+        aliases:
+          - smartkin-backend
+    # Published to the host, where nginx (the only public entry point) proxies api.umdc-qa.tst/smartkin-backend/ to it over HTTPS.
+    # Keep 8166 closed to everything but nginx with the host firewall.
+    ports:
+      - "8166:8166"
+    # `docker stop` sends SIGTERM to the JVM / native binary (PID 1); Spring needs a few seconds to stop the Kafka listeners and
+    # close the pools before the default 10 s would SIGKILL it.
+    stop_grace_period: 30s
+    restart: unless-stopped
+    # The image carries its own HEALTHCHECK (liveness over the loopback); declared here too so `docker compose ps` shows it even
+    # for an image built elsewhere. Liveness does not depend on Postgres, MongoDB, Redis or Kafka.
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1:8166/actuator/health/liveness >/dev/null 2>&1 || curl -fsk https://127.0.0.1:8166/actuator/health/liveness >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 90s
+    # Run with the same hardening the image allows: no new privileges, read-only root, tmpfs for what the JVM writes.
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+# Run ONCE on the Docker host, shared with mercury, backbone-rest and zerobound-rest:
+#   docker network create --driver bridge --subnet 172.22.0.0/16 --gateway 172.22.0.1 nginx_umdc-net
+networks:
+  nginx_umdc-net:
+    external: true
+    name: nginx_umdc-net

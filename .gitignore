@@ -32,3 +32,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Container build and run (same split as mercury, backbone-rest and zerobound-rest) ###
+# TLS material of the image: certs/smartkin/ holds smartkin.jks, umdc-truststore.jks and prx-internal-ca.crt. Never commit.
+certs/
+# Bootstrap secrets (VAULT_TOKEN): copy secrets/local.env.example. config/*.env carries no credentials and is versioned.
+secrets/*.env
+!config/*.env

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Container images aligned with mercury, backbone-rest and zerobound-rest. `Dockerfile` (JVM) is now two-stage with Spring Boot layers, a `docker-entrypoint.sh` (`exec java`, `-XX:+UseCompactObjectHeaders`, `MaxRAMPercentage=75`, `ExitOnOutOfMemoryError`, `JAVA_OPTS`), a non-root user and a `HEALTHCHECK` on `/actuator/health/liveness`; the internal CA is an optional BuildKit secret. `Dockerfile.native` (experimental: it builds but the binary does not start yet, see the technical guide) builds a GraalVM native image (Debian builder, Maven repository cache mount, `umdc-local` fallback for a Repsy outage, `NATIVE_QUICK_BUILD`) with its own `Dockerfile.native.dockerignore`, `config/native.env` and a `native` Maven profile; `NativeRuntimeHints` registers the reflection, resource and proxy hints the dependencies lack.
+- `docker-compose.yml`, `config/local.env` and `secrets/local.env.example`: the same two-file split (versioned bootstrap identity, git-ignored `VAULT_TOKEN`), `extra_hosts` for the `*.umdc-qa.tst` names, static IP `172.22.0.12` on `nginx_umdc-net`, port 8166, health check, 30 s stop grace period, `no-new-privileges`, read-only root with a `/tmp` tmpfs, and `SMARTKIN_TAG` to run the native image.
+- `management.endpoints`: only `health` is exposed, with the liveness/readiness probes; `HealthProbeSecurityConfig` opens `/actuator/health/**` without a token (the security library answered 401 to everything else).
+- `pom.xml` copies `certs/smartkin/` (git-ignored: `smartkin.jks`, `umdc-truststore.jks`) onto the classpath, like backbone-rest, so the keystores of the TLS bundle travel inside the jar.
+
+### Changed
+- The old `Dockerfile` imported five `.crt` files and a keystore from `src/main/resources` that are not in the repository, so it could not be built from a fresh checkout; those imports are gone.
+- `bootstrap.yml` now sets `umdc.security.keystore` / `truststore` (the RestTemplate of the security library, whose absence threw a `NullPointerException` at start) and `eureka.client.tls`, from the same `SSL_*` variables as the TLS bundle.
+
 ### Fixed
 - `bootstrap.yml` used the old `prx.*` property names for what the com.umdc libraries bind, so the application context could not start: `AuthProperties.getClients()` was null and `BackboneFeignConfigurer` threw a `NullPointerException`. The settings now live under the names the libraries read: `umdc.security.auth.clients`, `umdc.security.jwt`, `umdc.api.endpoint`, `umdc.backbone.base-url`, `umdc.management.clientRoles` and `umdc.logging.trace.enabled` (the JWT secret and expiration, the backbone and mercury clients and `AUTH_ROLE_ID` take the same environment variables as before). A test binds them from `bootstrap.yml`. Found while smoke-testing the container image (the JV-3 library move did not rename them and no test started the whole context).
 

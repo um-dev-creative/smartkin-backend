@@ -103,6 +103,18 @@ eureka:
       trust-store: classpath:${SSL_TRUSTSTORE_LOCATION}
       trust-store-password: ${SSL_TRUSTSTORE_PASSWORD}
       trust-store-type: ${SSL_TRUSTSTORE_TYPE}
+# Health probes for the container HEALTHCHECK and Kubernetes: /actuator/health/liveness only says the process is up and never
+# looks at Postgres, MongoDB, Redis or Kafka, so a cloud outage does not restart the container. Nothing else is exposed.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
 server:
   port: ${APP_PORT}
   ssl:

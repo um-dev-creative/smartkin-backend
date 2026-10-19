@@ -146,6 +146,29 @@ partition (ordering per child is preserved) for at most the sum of the delays, a
 
 Open points: events are not published by any service yet, so the consumers are exercised only by tests; emails for these events (which need the recipient's address from backbone) are not sent.
 
+## Container images
+
+Same scheme as mercury, backbone-rest and zerobound-rest; the choices that differ are explained here.
+
+| File | Purpose |
+| --- | --- |
+| `Dockerfile` | JVM image. Stage 1 extracts the Spring Boot jar into layers (`-Djarmode=tools extract --layers`); stage 2 is `amazoncorretto:25.0.4-alpine3.24` with the layers, `docker-entrypoint.sh`, user `jvapps`, `HEALTHCHECK` and port 8166. Needs `target/smartkin-backend.jar` (the build context allowlist is `.dockerignore`). |
+| `docker-entrypoint.sh` | `exec java` so the JVM is PID 1 and gets SIGTERM; `UseCompactObjectHeaders`, `MaxRAMPercentage=75`, `ExitOnOutOfMemoryError`, `-Dspring.cloud.vault.enabled=${VAULT_ENABLED}`, then `${JAVA_OPTS}` last so a deployment can override. |
+| `Dockerfile.native` | GraalVM Community 25 on Debian 12 (not the Oracle Linux image: its glibc needs x86-64-v3), Maven 3.9.14, native profile, runtime on `debian:12-slim` with `curl` for the probe. Secrets: `maven_settings` (Repsy credentials, optional) and `prx_internal_ca` (optional); build context `umdc-local` re-seeds the `com.umdc` artifacts when Repsy is down. |
+| `config/native.env` | Dummy values for every `${VAR}` without default, so Spring AOT can refresh the context. `SPRING_BOOT_PROFILE_ACTIVE` is empty on purpose (AOT bakes active profiles into the binary). Never a deployment config. |
+| `config/local.env`, `secrets/local.env` | Versioned bootstrap identity vs. git-ignored `VAULT_TOKEN`. Do not add Vault-provided variables here: an environment variable shadows Vault. |
+| `docker-compose.yml` | One service, IP `172.22.0.12` (9 = backbone, 10 = mercury, 11 = zerobound), `extra_hosts` for the `*.umdc-qa.tst` names, `read_only` + `tmpfs /tmp`, `no-new-privileges`, `stop_grace_period: 30s`. |
+
+**TLS material.** `certs/smartkin/` is git-ignored and is copied onto the classpath by `pom.xml`, because the TLS bundle and the security library read `classpath:` names. `umdc.security.keystore` and `truststore` take the same files and must have no `classpath:` prefix (the library loads them with `getResourceAsStream` and a missing file silently becomes an empty store: "trustAnchors parameter must be non-empty"). The truststore must hold a trusted certificate entry; a keystore with only a private key is not a truststore. In security-oauth 0.0.3 the keystore/truststore arguments are not swapped (mercury documents a swap in 0.0.1).
+
+**Health.** `management.endpoints.web.exposure.include: health` with probes enabled; the image and compose probe `/actuator/health/liveness`, which does not depend on Postgres, MongoDB, Redis or Kafka. The library's filter chain answers 401 to everything but Swagger, so `HealthProbeSecurityConfig` adds a first-order chain for `/actuator/health/**` only (`HealthProbeSecurityConfigTest`).
+
+**What was verified.** The JVM image was built and run with `config/native.env` plus overrides (profile empty, bootstrap on, Eureka off, Mongo index creation off, Kafka consumers off, no Hikari fail-fast): non-root `jvapps`, read-only root with `/tmp` tmpfs and `no-new-privileges`, health `healthy`, `/api/v1/**` and `/actuator/env` still 401, `docker stop` completes in well under a second with a graceful Tomcat shutdown. Against real Vault, Supabase, Atlas, Redis and Kafka it was **not** run.
+
+**Native image: builds, does not start yet.** `docker build -f Dockerfile.native` succeeds (Spring AOT and `native-image` pass; about 3.5 minutes with `NATIVE_QUICK_BUILD=true`, 596 MB image) but the binary stops at start with `no ServletWebServerFactory bean defined in the context`: the AOT-generated context is empty. Probable cause, not confirmed: the application relies on the legacy Spring Cloud bootstrap context (`bootstrap.yml`, `spring-cloud-starter-bootstrap`), which Spring AOT does not support; mercury, backbone-rest and zerobound-rest configure Vault and the Config Server through `spring.config.import` instead. Enabling the bootstrap context at build time (`SPRING_CLOUD_BOOTSTRAP_ENABLED=true` in `config/native.env`) did not change the result. Making the native image work means moving that configuration to `application.yml` + `spring.config.import`, a change of its own. Until then `Dockerfile.native` is experimental and the JVM image is the one to deploy.
+
+**Findings from the smoke test** (all fixed except the last): the `prx.*` library properties (see Library property names), the missing `umdc.security.keystore`/`truststore`, the base64 requirement of `APP_TOKEN_SECRET`, and the 401 on health. Not fixed: with `spring.data.mongodb.auto-index-creation: true` the application does not start if Atlas is unreachable (a 30 s server-selection timeout); and Eureka registration still fails with `No qualifying bean ... TransportClientFactories` when `eureka.client.enabled` is true (adding `eureka.client.tls` and `eureka-client-jersey3`/Jersey did not fix it), so the smoke test and AOT run with `EUREKA_CLIENT_ENABLED=false`. Check what the Config Server sets for Eureka in QA before deploying.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs `mvn -B verify` on JDK 25 (Temurin) for pushes and pull requests to `main` and `development`, and uploads
