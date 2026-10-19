@@ -17,6 +17,17 @@ umdc:
     jwt:
       secret: ${APP_TOKEN_SECRET}
       expirationMs: ${APP_TOKEN_EXPIRATION}
+    # Key and trust material of the RestTemplate the library builds for the resource server's JWK fetch (KeystoreUtil, security-oauth
+    # 0.0.3). Classpath-relative names, no `classpath:` prefix: the library loads them with ClassLoader.getResourceAsStream, which does
+    # not parse a scheme, and a missing file silently becomes an empty store. They are the same files as the TLS bundle below.
+    keystore:
+      location: ${SSL_KEYSTORE_LOCATION}
+      type: ${SSL_KEYSTORE_TYPE}
+      password: ${SSL_KEYSTORE_PASSWORD}
+    truststore:
+      location: ${SSL_TRUSTSTORE_LOCATION}
+      type: ${SSL_TRUSTSTORE_TYPE}
+      password: ${SSL_TRUSTSTORE_PASSWORD}
     auth:
       clients:
         - id: backbone
@@ -82,6 +93,16 @@ app:
   version: 0.0.1
 # Spring Boot specific configurations
 # Server specific configurations
+# TLS of the Eureka HTTP client. With it the client builds its RestTemplate transport (the TransportClientFactories bean Eureka
+# registration needs) and trusts the PRX internal CA through the same truststore as the TLS bundle, so calls to the *.tst Eureka
+# servers verify their certificates. Same block as backbone-rest and mercury.
+eureka:
+  client:
+    tls:
+      enabled: true
+      trust-store: classpath:${SSL_TRUSTSTORE_LOCATION}
+      trust-store-password: ${SSL_TRUSTSTORE_PASSWORD}
+      trust-store-type: ${SSL_TRUSTSTORE_TYPE}
 server:
   port: ${APP_PORT}
   ssl:
