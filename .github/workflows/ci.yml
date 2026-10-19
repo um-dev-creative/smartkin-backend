@@ -2,8 +2,8 @@ name: CI
 on:
   push:
     branches: [main, development]
+  # No branch filter: the `branches` list matches the PR's base, so stacked PRs (base = another feature branch) would never run CI.
   pull_request:
-    branches: [main, development]
 
 jobs:
   build-test:
