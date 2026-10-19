@@ -48,6 +48,16 @@ class RedisConnectorTest {
     }
 
     @Test
+    void opensANewConnectionWhenTheCurrentOneWasClosed() {
+        try (var connector = new RedisConnector(RedisTestSupport.url(redis), Duration.ofSeconds(2))) {
+            connector.commands().set("k3", "v3");
+            connector.commands().getStatefulConnection().close();
+
+            assertEquals("v3", connector.commands().get("k3"));
+        }
+    }
+
+    @Test
     void failsFastWhenTheServerIsDown() {
         try (var connector = new RedisConnector("redis://127.0.0.1:1", Duration.ofMillis(500))) {
             assertThrows(RedisException.class, connector::commands);
