@@ -24,6 +24,17 @@ prx:
       redis-url: ${CACHE_REDIS_URL:}
       ttl: ${CACHE_LESSON_CATALOG_TTL:10m}
       command-timeout: ${CACHE_REDIS_TIMEOUT:500ms}
+  kafka:
+    consumer:
+      # Set KAFKA_CONSUMER_ENABLED=false on a deployment that must not process events
+      enabled: ${KAFKA_CONSUMER_ENABLED:true}
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:smartkin-backend}
+      # Records that still fail after the retries go here, with the exception in the headers
+      error-topic: ${KAFKA_ERROR_TOPIC:smartkin.events.error.v1}
+      max-attempts: ${KAFKA_CONSUMER_MAX_ATTEMPTS:4}
+      initial-interval: ${KAFKA_CONSUMER_RETRY_INTERVAL:1s}
+      multiplier: ${KAFKA_CONSUMER_RETRY_MULTIPLIER:2.0}
+      max-interval: ${KAFKA_CONSUMER_RETRY_MAX_INTERVAL:30s}
   interaction-events:
     # How long raw interaction events are kept before MongoDB expires them (a TTL index on expiresAt)
     retention: ${SMARTKIN_INTERACTION_EVENTS_RETENTION:90d}

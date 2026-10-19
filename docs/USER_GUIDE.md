@@ -39,8 +39,11 @@ Authenticated calls carry the session token in the header defined by `SESSION_TO
   and run migrations with the schema owner via `SMARTKIN_FLYWAY_USERNAME` and `SMARTKIN_FLYWAY_PASSWORD`.
 - Events: SmartKin now defines the Kafka topics `smartkin.activity.assigned.v1`, `smartkin.quiz.completed.v1` and `smartkin.achievement.earned.v1` for other services to consume. Ask the platform team to create them
   before the first release that publishes to them; nothing publishes yet.
+- Events: SmartKin now also reads its three event topics. Passing a quiz and earning an achievement add points to the child, and new assignments and achievements appear in the child's
+  inbox. Records that cannot be processed are retried and then sent to the error topic `smartkin.events.error.v1`, which the platform team must create and monitor (see the technical guide).
+  Apply migration V3 (it runs at startup) before the first event arrives.
 - Delivery: every pull request now runs the build and tests on Java 25 in GitHub Actions.
-- Quality: the build now runs 92 automated tests and fails below 85% coverage. This has no effect on API consumers.
+- Quality: the build now runs 150 automated tests and fails below 85% coverage. This has no effect on API consumers.
 - Fix: confirming a verification code no longer fails with an internal error when mercury rejects it without a `message` header; the
   response keeps mercury's status and an empty `message` header.
 
