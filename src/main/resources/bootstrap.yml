@@ -1,14 +1,45 @@
 # This is the main configuration file for the application.
 # It uses the YAML format for easier readability and nested configuration.
 
+# Properties of the com.umdc libraries (security-oauth, commons-services). They moved from the old `prx.*` names when the libraries
+# moved from com.prx to com.umdc; with the old names nothing binds and the context fails at start (AuthProperties.getClients() is null).
+umdc:
+  api:
+    endpoint: /api/v1
+  backbone:
+    base-url: ${prx.clients.backbone.url}
+  management:
+    clientRoles: ${AUTH_ROLE_ID}
+  logging:
+    trace:
+      enabled: ${LOGGING_TRACE_ENABLED}
+  security:
+    jwt:
+      secret: ${APP_TOKEN_SECRET}
+      expirationMs: ${APP_TOKEN_EXPIRATION}
+    auth:
+      clients:
+        - id: backbone
+          authorization-grant-type: ${BACKBONE_GRANT_TYPE}
+          scope: ${BACKBONE_SCOPE}
+          client-secret: ${BACKBONE_CLIENT_SECRET}
+          client-id: ${BACKBONE_CLIENT_ID}
+          redirect-uri: ${AUTH_SERVER_URI}${AUTH_TOKEN_URI}
+          username: ${BACKBONE_USERNAME}
+          password: ${BACKBONE_PASSWORD}
+        - id: mercury
+          authorization-grant-type: ${MERCURY_GRANT_TYPE}
+          scope: ${MERCURY_SCOPE}
+          client-secret: ${MERCURY_CLIENT_SECRET}
+          client-id: ${MERCURY_CLIENT_ID}
+          redirect-uri: ${AUTH_SERVER_URI}${AUTH_TOKEN_URI}
+          username: ${MERCURY_USERNAME}
+          password: ${MERCURY_PASSWORD}
 # Application specific configurations
 prx:
   logging:
     trace:
       enabled: ${LOGGING_TRACE_ENABLED}
-  jwt:
-    secret: ${APP_TOKEN_SECRET}
-    expirationMs: ${APP_TOKEN_EXPIRATION}
   security:
     revocation:
       # false = local development only: revoked tokens stay valid until they expire
@@ -44,26 +75,7 @@ prx:
       url: ${BACKBONE_URL:https://prx-qa.backbone.tst/backbone}
     mercury:
       url: ${MERCURY_URL:https://prx-qa.backbone.tst/mercury}
-  auth:
-    clients:
-      - id: backbone
-        authorization-grant-type: ${BACKBONE_GRANT_TYPE}
-        scope: ${BACKBONE_SCOPE}
-        client-secret: ${BACKBONE_CLIENT_SECRET}
-        client-id: ${BACKBONE_CLIENT_ID}
-        redirect-uri: ${AUTH_SERVER_URI}${AUTH_TOKEN_URI}
-        username: ${BACKBONE_USERNAME}
-        password: ${BACKBONE_PASSWORD}
-      - id: mercury
-        authorization-grant-type: ${MERCURY_GRANT_TYPE}
-        scope: ${MERCURY_SCOPE}
-        client-secret: ${MERCURY_CLIENT_SECRET}
-        client-id: ${MERCURY_CLIENT_ID}
-        redirect-uri: ${AUTH_SERVER_URI}${AUTH_TOKEN_URI}
-        username: ${MERCURY_USERNAME}
-        password: ${MERCURY_PASSWORD}
 app:
-  clientRoles: ${AUTH_ROLE_ID}
   # The name of the application
   name: smartkin-backend
   # The version of the application

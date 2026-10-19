@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `bootstrap.yml` used the old `prx.*` property names for what the com.umdc libraries bind, so the application context could not start: `AuthProperties.getClients()` was null and `BackboneFeignConfigurer` threw a `NullPointerException`. The settings now live under the names the libraries read: `umdc.security.auth.clients`, `umdc.security.jwt`, `umdc.api.endpoint`, `umdc.backbone.base-url`, `umdc.management.clientRoles` and `umdc.logging.trace.enabled` (the JWT secret and expiration, the backbone and mercury clients and `AUTH_ROLE_ID` take the same environment variables as before). A test binds them from `bootstrap.yml`. Found while smoke-testing the container image (the JV-3 library move did not rename them and no test started the whole context).
+
 ### Added
 - KF-2: SmartKin consumes its own domain events (`SmartKinEventListener`, group `smartkin-backend`). `ACTIVITY_ASSIGNED` creates an inbox notification for the child;
   `QUIZ_COMPLETED` books the score as points when the quiz was passed; `ACHIEVEMENT_EARNED` books the achievement's points and notifies the child. Points also raise
