@@ -1,7 +1,7 @@
 package com.umdc.smartkin.api.v1.service;
 
-import com.prx.commons.constants.httpstatus.type.MessageType;
-import com.prx.commons.exception.StandardException;
+import com.umdc.commons.constants.httpstatus.type.MessageType;
+import com.umdc.commons.exception.StandardException;
 import com.umdc.smartkin.api.v1.to.GetUserResponse;
 import com.umdc.smartkin.api.v1.to.PutUserRequest;
 import com.umdc.smartkin.api.v1.to.UserCreateRequest;

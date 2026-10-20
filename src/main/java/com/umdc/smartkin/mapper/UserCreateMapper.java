@@ -1,8 +1,8 @@
 package com.umdc.smartkin.mapper;
 
-import com.prx.commons.general.pojo.Contact;
-import com.prx.commons.general.pojo.ContactType;
-import com.prx.commons.general.pojo.Person;
+import com.umdc.commons.general.pojo.Contact;
+import com.umdc.commons.general.pojo.ContactType;
+import com.umdc.commons.general.pojo.Person;
 import com.umdc.smartkin.api.v1.to.UserCreateRequest;
 import com.umdc.smartkin.api.v1.to.UserCreateResponse;
 import com.umdc.smartkin.client.backbone.to.BackboneUserCreateRequest;

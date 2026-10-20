@@ -2,7 +2,7 @@ package com.umdc.smartkin.kafka.to;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.prx.commons.util.DateUtil;
+import com.umdc.commons.util.DateUtil;
 
 import java.time.LocalDateTime;
 import java.util.List;

@@ -1,4 +1,4 @@
-FROM amazoncorretto:21-alpine3.22
+FROM amazoncorretto:25.0.4-alpine3.24
 LABEL version="0.0.1"
 LABEL description="SmartKin Backend API"
 LABEL mantainer="Luis Mata luis.antonio.mata@gmail.com"
@@ -28,11 +28,11 @@ RUN addgroup -S appmng && adduser -S jvapps -G appmng
 RUN chown -R jvapps:appmng .
 RUN chmod -R 740 .
 
-RUN keytool -import -alias ${APP_CRT_ALIAS} -keystore /usr/lib/jvm/default-jvm/jre/lib/security/cacerts -file ${APP_CRT_FILE_NAME}.crt -storepass changeit -noprompt && \
-    keytool -import -alias ${AUTH_CRT_NAME}.tst -keystore /usr/lib/jvm/default-jvm/jre/lib/security/cacerts -file ${AUTH_CRT_NAME}.crt -storepass changeit -noprompt && \
-    keytool -import -alias ${BACKBONE_ALIAS}.tst -keystore /usr/lib/jvm/default-jvm/jre/lib/security/cacerts -file ${BACKBONE_FILE_NAME}.crt -storepass changeit -noprompt && \
-    keytool -import -alias ${SRMN_CRT_FILE_NAME} -keystore /usr/lib/jvm/default-jvm/jre/lib/security/cacerts -file ${SRMN_CRT_FILE_NAME}.crt -storepass changeit -noprompt && \
-    keytool -import -alias ${CNFS_CRT_NAME} -keystore /usr/lib/jvm/default-jvm/jre/lib/security/cacerts -file ${CNFS_CRT_NAME}.crt -storepass changeit -noprompt && \
+RUN keytool -import -alias ${APP_CRT_ALIAS} -cacerts -file ${APP_CRT_FILE_NAME}.crt -storepass changeit -noprompt && \
+    keytool -import -alias ${AUTH_CRT_NAME}.tst -cacerts -file ${AUTH_CRT_NAME}.crt -storepass changeit -noprompt && \
+    keytool -import -alias ${BACKBONE_ALIAS}.tst -cacerts -file ${BACKBONE_FILE_NAME}.crt -storepass changeit -noprompt && \
+    keytool -import -alias ${SRMN_CRT_FILE_NAME} -cacerts -file ${SRMN_CRT_FILE_NAME}.crt -storepass changeit -noprompt && \
+    keytool -import -alias ${CNFS_CRT_NAME} -cacerts -file ${CNFS_CRT_NAME}.crt -storepass changeit -noprompt && \
     rm *.crt
 
 USER jvapps:appmng

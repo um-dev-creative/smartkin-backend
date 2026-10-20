@@ -7,9 +7,9 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 @EnableFeignClients(basePackages = "com.umdc.smartkin.client")
 @SpringBootApplication(
         scanBasePackages = {
-                "com.prx.commons.services",
+                "com.umdc.commons.services",
                 "com.umdc.smartkin",
-                "com.prx.security"
+                "com.umdc.security"
         }
 )
 public class SmartKinBackendApplication {

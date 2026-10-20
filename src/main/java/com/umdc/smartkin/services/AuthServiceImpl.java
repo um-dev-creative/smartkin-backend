@@ -1,9 +1,9 @@
 package com.umdc.smartkin.services;
 
-import com.prx.security.service.AuthService;
-import com.prx.security.service.SessionJwtService;
-import com.prx.security.to.AuthRequest;
-import com.prx.security.to.AuthResponse;
+import com.umdc.security.service.AuthService;
+import com.umdc.security.service.SessionJwtService;
+import com.umdc.security.to.AuthRequest;
+import com.umdc.security.to.AuthResponse;
 import com.umdc.smartkin.client.backbone.BackboneClient;
 import com.umdc.smartkin.client.mercury.MercuryClient;
 import feign.FeignException;

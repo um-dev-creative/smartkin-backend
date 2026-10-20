@@ -1,6 +1,6 @@
 package com.umdc.smartkin.client.mercury;
 
-import com.prx.security.to.AuthRequest;
+import com.umdc.security.to.AuthRequest;
 import com.umdc.smartkin.client.backbone.to.PrxTokenString;
 import com.umdc.smartkin.client.mercury.to.VerificationCodeRequest;
 import com.umdc.smartkin.interceptor.MercuryFeignConfigurer;
@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.UUID;
 
-import static com.prx.security.constant.ConstantApp.SESSION_TOKEN_KEY;
+import static com.umdc.security.constant.ConstantApp.SESSION_TOKEN_KEY;
 
 /// Feign client for the Mercury service. This client is used to interact with the Mercury service.
 @FeignClient(name = "mercuryClient", url = "https://prx-qa.backbone.tst/mercury", configuration = {MercuryFeignConfigurer.class})

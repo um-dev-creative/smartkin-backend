@@ -1,6 +1,6 @@
 package com.umdc.smartkin.mapper;
 
-import com.prx.commons.services.config.mapper.MapperAppConfig;
+import com.umdc.commons.services.config.mapper.MapperAppConfig;
 import com.umdc.smartkin.api.v1.to.PutUserRequest;
 import com.umdc.smartkin.client.backbone.to.BackboneUserUpdateRequest;
 import org.mapstruct.Mapper;

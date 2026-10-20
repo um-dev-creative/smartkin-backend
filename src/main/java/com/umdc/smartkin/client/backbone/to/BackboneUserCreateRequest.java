@@ -1,6 +1,6 @@
 package com.umdc.smartkin.client.backbone.to;
 
-import com.prx.commons.general.pojo.Person;
+import com.umdc.commons.general.pojo.Person;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

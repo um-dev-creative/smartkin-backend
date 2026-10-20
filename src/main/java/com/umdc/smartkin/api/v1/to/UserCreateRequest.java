@@ -2,7 +2,7 @@ package com.umdc.smartkin.api.v1.to;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.prx.commons.util.DateUtil;
+import com.umdc.commons.util.DateUtil;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;

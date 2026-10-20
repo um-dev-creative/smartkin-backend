@@ -1,9 +1,9 @@
 package com.umdc.smartkin.kafka.producer;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.prx.commons.constants.httpstatus.type.MessageType;
-import com.prx.commons.exception.StandardException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
+import com.umdc.commons.constants.httpstatus.type.MessageType;
+import com.umdc.commons.exception.StandardException;
 import com.umdc.smartkin.kafka.to.EmailMessageTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +44,7 @@ public class EmailMessageProducerServiceImpl implements EmailMessageProducerServ
                     logger.error("Error sending message: {} due to: {}", message, ex.getMessage(), ex);
                 }
             });
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new StandardException("Error serializing EmailMessageTO: " + e.getMessage(), MessageType.DEFAULT_MESSAGE, e);
         }
     }

@@ -1,6 +1,6 @@
 package com.umdc.smartkin.interceptor;
 
-import com.prx.security.properties.AuthProperties;
+import com.umdc.security.properties.AuthProperties;
 import feign.RequestInterceptor;
 import org.springframework.context.annotation.Bean;
 

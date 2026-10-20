@@ -1,6 +1,6 @@
 package com.umdc.smartkin.client.backbone;
 
-import com.prx.commons.general.pojo.Role;
+import com.umdc.commons.general.pojo.Role;
 import com.umdc.smartkin.client.backbone.to.*;
 import com.umdc.smartkin.interceptor.BackboneFeignConfigurer;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
-import static com.prx.security.constant.ConstantApp.SESSION_TOKEN_KEY;
+import static com.umdc.security.constant.ConstantApp.SESSION_TOKEN_KEY;
 
 @FeignClient(name = "backboneClient", url = "https://prx-qa.backbone.tst/backbone", configuration = BackboneFeignConfigurer.class)
 public interface BackboneClient {

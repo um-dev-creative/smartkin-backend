@@ -1,6 +1,6 @@
 package com.umdc.smartkin.api.v1.service;
 
-import com.prx.security.to.AuthRequest;
+import com.umdc.security.to.AuthRequest;
 import com.umdc.smartkin.api.v1.to.ConfirmCodeRequest;
 import com.umdc.smartkin.client.backbone.BackboneClient;
 import com.umdc.smartkin.client.mercury.MercuryClient;
