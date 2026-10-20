@@ -168,8 +168,9 @@ spring:
   flyway:
     enabled: ${FLYWAY_ENABLED:true}
     url: jdbc:postgresql://${SMARTKIN_DB_URI}:${SMARTKIN_DB_DIRECT_PORT:5432}/${SMARTKIN_DB_NAME:umdevc}
-    user: ${SMARTKIN_DB_USERNAME}
-    password: ${SMARTKIN_DB_PASSWORD}
+    # Migrations need the schema owner; the application itself should run as the restricted role smartkin_app (decision D-3)
+    user: ${SMARTKIN_FLYWAY_USERNAME:${SMARTKIN_DB_USERNAME}}
+    password: ${SMARTKIN_FLYWAY_PASSWORD:${SMARTKIN_DB_PASSWORD}}
     locations: classpath:db/migration
     default-schema: ${SMARTKIN_DB_SCHEMA:smartkin}
     schemas: ${SMARTKIN_DB_SCHEMA:smartkin}

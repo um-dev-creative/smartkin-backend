@@ -39,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`haltOnFailure=false`) until the legacy packages have tests.
 
 ### Added
+- DB-4: `V2__restrict_direct_access.sql` enables Row Level Security on the 13 tables, revokes every privilege from `PUBLIC`, `anon`, `authenticated` and `service_role`, and creates the
+  restricted application role `smartkin_app` (DML only, no DDL). Decision record `docs/decisions/D-3-database-access-only-through-the-backend.md`;
+  `DirectAccessRestrictionContainerTest` proves the application role works, cannot change the schema, and that the API roles are locked out even after an accidental grant.
+- `SMARTKIN_FLYWAY_USERNAME` and `SMARTKIN_FLYWAY_PASSWORD` let migrations run as the schema owner while the application uses `smartkin_app`.
 - RD-2 (backend): `LessonCatalogService.publishedLessons(topicId)` reads the published lessons of a topic through a Redis cache (`RedisLessonCatalogCache`, key
   `smartkin:catalog:topic:<id>`, TTL `CACHE_LESSON_CATALOG_TTL`, 10 minutes by default). The cache fails open and is off when `CACHE_REDIS_URL` is empty
   (`NoLessonCatalogCache`). `evict(topicId)` drops a topic's entry when its lessons change.

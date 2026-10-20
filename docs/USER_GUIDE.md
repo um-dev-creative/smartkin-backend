@@ -35,6 +35,8 @@ Authenticated calls carry the session token in the header defined by `SESSION_TO
 - Sessions: a token that backbone has revoked (for example after logout) is now rejected by SmartKin within about 30 seconds. Set `REVOCATION_REDIS_URL` to the Redis that
   backbone uses; the service will not start without it unless `REVOCATION_ENABLED=false`. If that Redis is down, authenticated calls answer **503** until it is back.
 - Cache: set `CACHE_REDIS_URL` to speed up the lesson catalog; leave it empty to read straight from MongoDB. A cache outage never breaks the catalog.
+- Database access: SmartKin's tables are closed to direct access (Row Level Security). Run the application with the `smartkin_app` database role (enable it with a password, see the technical guide)
+  and run migrations with the schema owner via `SMARTKIN_FLYWAY_USERNAME` and `SMARTKIN_FLYWAY_PASSWORD`.
 - Delivery: every pull request now runs the build and tests on Java 25 in GitHub Actions.
 - Quality: the build now runs 92 automated tests and fails below 85% coverage. This has no effect on API consumers.
 - Fix: confirming a verification code no longer fails with an internal error when mercury rejects it without a `message` header; the
