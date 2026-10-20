@@ -2,6 +2,8 @@ package com.umdc.smartkin.jpa.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
@@ -14,7 +16,8 @@ import java.util.UUID;
 @Table(name = "rewards", schema = "smartkin")
 public class RewardEntity {
     @Id
-    @ColumnDefault("smartkin.uuid_generate_v4()")
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @ColumnDefault("gen_random_uuid()")
     @Column(name = "reward_id", nullable = false)
     private UUID id;
 

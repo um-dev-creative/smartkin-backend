@@ -24,7 +24,8 @@ import java.util.UUID;
 @Table(name = "activity_progress", schema = "smartkin")
 public class ActivityProgressEntity {
     @Id
-    @ColumnDefault("smartkin.uuid_generate_v4()")
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @ColumnDefault("gen_random_uuid()")
     @Column(name = "progress_id", nullable = false)
     private UUID id;
 

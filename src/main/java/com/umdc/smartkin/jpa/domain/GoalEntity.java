@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
@@ -14,7 +16,8 @@ import java.util.UUID;
 @Table(name = "goals", schema = "smartkin")
 public class GoalEntity {
     @Id
-    @ColumnDefault("smartkin.uuid_generate_v4()")
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @ColumnDefault("gen_random_uuid()")
     @Column(name = "goal_id", nullable = false)
     private UUID id;
 
@@ -64,6 +67,13 @@ public class GoalEntity {
     @OnDelete(action = OnDeleteAction.SET_NULL)
     @JoinColumn(name = "reward_id")
     private RewardEntity reward;
+
+    @ColumnDefault("'ACTIVE'")
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "status", nullable = false)
+    private GoalStatus status;
 
     public GoalEntity() {
         // Default constructor
@@ -157,11 +167,11 @@ public class GoalEntity {
         this.reward = reward;
     }
 
-/*
- TODO [Reverse Engineering] create field to map the 'status' column
- Available actions: Define target Java type | Uncomment as is | Remove column mapping
-    @ColumnDefault("'active'")
-    @Column(name = "status", columnDefinition = "goal_status not null")
-    private Object status;
-*/
+    public GoalStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(GoalStatus status) {
+        this.status = status;
+    }
 }

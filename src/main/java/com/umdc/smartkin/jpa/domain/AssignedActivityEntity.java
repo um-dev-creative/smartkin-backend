@@ -24,7 +24,8 @@ import java.util.UUID;
 @Table(name = "assigned_activities", schema = "smartkin")
 public class AssignedActivityEntity {
     @Id
-    @ColumnDefault("smartkin.uuid_generate_v4()")
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @ColumnDefault("gen_random_uuid()")
     @Column(name = "assignment_id", nullable = false)
     private UUID id;
 

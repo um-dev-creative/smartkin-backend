@@ -27,8 +27,9 @@ Authenticated calls carry the session token in the header defined by `SESSION_TO
   (default `https://prx-qa.backbone.tst/backbone` and `https://prx-qa.backbone.tst/mercury`). Set them per environment, for example in the
   Config Server or Vault.
 
-- Data: SmartKin's data will live in the `smartkin` schema of the existing Supabase project. User accounts stay in backbone; this release does not change
-  the API.
+- Data: SmartKin now stores its data in the `smartkin` schema of the existing Supabase project, created by database migrations at startup. Configure the
+  connection with `SMARTKIN_DB_URI`, `SMARTKIN_DB_USERNAME` and `SMARTKIN_DB_PASSWORD` (see the technical guide for the other variables). User accounts stay in backbone;
+  the API does not change.
 - Delivery: every pull request now runs the build and tests on Java 25 in GitHub Actions.
 - Quality: the build now runs 92 automated tests and fails below 85% coverage. This has no effect on API consumers.
 - Fix: confirming a verification code no longer fails with an internal error when mercury rejects it without a `message` header; the

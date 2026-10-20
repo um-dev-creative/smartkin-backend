@@ -3,6 +3,8 @@ package com.umdc.smartkin.jpa.domain;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
@@ -13,7 +15,8 @@ import java.util.UUID;
 @Table(name = "child_rewards", schema = "smartkin")
 public class ChildRewardEntity {
     @Id
-    @ColumnDefault("smartkin.uuid_generate_v4()")
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @ColumnDefault("gen_random_uuid()")
     @Column(name = "child_reward_id", nullable = false)
     private UUID id;
 
@@ -33,6 +36,13 @@ public class ChildRewardEntity {
     @ColumnDefault("CURRENT_TIMESTAMP")
     @Column(name = "redeemed_at", nullable = false)
     private Instant redeemedAt;
+
+    @ColumnDefault("'PENDING'")
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "status", nullable = false)
+    private RewardStatus status;
 
     public ChildRewardEntity() {
         // Default constructor
@@ -70,11 +80,11 @@ public class ChildRewardEntity {
         this.redeemedAt = redeemedAt;
     }
 
-/*
- TODO [Reverse Engineering] create field to map the 'status' column
- Available actions: Define target Java type | Uncomment as is | Remove column mapping
-    @ColumnDefault("'pending'")
-    @Column(name = "status", columnDefinition = "reward_status not null")
-    private Object status;
-*/
+    public RewardStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(RewardStatus status) {
+        this.status = status;
+    }
 }
