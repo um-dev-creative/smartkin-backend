@@ -1,0 +1,30 @@
+name: CI
+on:
+  push:
+    branches: [main, development]
+  # No branch filter: the `branches` list matches the PR's base, so stacked PRs (base = another feature branch) would never run CI.
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # The com.umdc libraries come from the private Repsy repository.
+      REPSY_ACCOUNT_USER: ${{ secrets.REPSY_ACCOUNT_USER }}
+      REPSY_ACCOUNT_PASSWORD: ${{ secrets.REPSY_ACCOUNT_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+      - name: Build and test (Testcontainers uses the runner's Docker; PMD and JaCoCo fail the build below 85%)
+        run: mvn -B verify
+      - name: Keep the coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: target/site/jacoco/
