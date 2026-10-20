@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- JV-6: the JaCoCo package-level check blocks the build again (`haltOnFailure` removed). Its exclusions are now real class patterns
+  (application class, `config`, JPA entities and repositories, generated MapStruct implementations) instead of the Sonar glob list.
+- `UserRegisterServiceImpl.confirmCode` no longer throws a `NullPointerException` when mercury fails without a `message` header; it
+  relays the status with an empty message.
+- Surefire runs with `SPRING_BOOT_PROFILE_ACTIVE=test` and Vault, Config Server and bootstrap disabled, so slice tests can start.
 - JV-5: the backbone and mercury Feign base URLs come from `prx.clients.backbone.url` and `prx.clients.mercury.url`
   (environment variables `BACKBONE_URL` and `MERCURY_URL`) instead of being hard-coded; the defaults keep the previous QA URLs.
 - JV-1: platform upgraded from Java 21 / Spring Boot 3.5.4 to Java 25 / Spring Boot 4.1.1, with Spring Cloud 2025.1.3,
@@ -25,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`haltOnFailure=false`) until the legacy packages have tests.
 
 ### Added
+- JV-6: test suite of 92 tests (JUnit 6, Mockito, MockMvc, Testcontainers): services, authentication, session JWT, controllers and API defaults,
+  mappers, Feign interceptors against a local token endpoint, transfer objects and their Jackson 3 contract, and a PostgreSQL 17
+  container test that boots the JPA model (14 entities). Line coverage on the gated code is above 99%.
 - Unit tests for `EmailMessageProducerServiceImpl` (100% line and branch coverage).
 - `CHANGELOG.md`, `docs/USER_GUIDE.md` and `docs/TECHNICAL_GUIDE.md`.
 - `CLAUDE.md` with build commands and architecture notes.
