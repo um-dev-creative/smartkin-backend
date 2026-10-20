@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- JV-5: the backbone and mercury Feign base URLs come from `prx.clients.backbone.url` and `prx.clients.mercury.url`
+  (environment variables `BACKBONE_URL` and `MERCURY_URL`) instead of being hard-coded; the defaults keep the previous QA URLs.
 - JV-1: platform upgraded from Java 21 / Spring Boot 3.5.4 to Java 25 / Spring Boot 4.1.1, with Spring Cloud 2025.1.3,
   springdoc 3.1.0 and PostgreSQL JDBC 42.7.13, aligned with zerobound-rest, mercury and backbone-rest.
 - JV-3: shared libraries moved from `com.prx` (`prx-commons` 0.0.4, `commons-services` 0.0.1, `security-oauth` 0.0.1)

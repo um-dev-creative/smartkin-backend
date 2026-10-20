@@ -23,7 +23,9 @@ Authenticated calls carry the session token in the header defined by `SESSION_TO
 - The service now runs on **Java 25** and **Spring Boot 4.1.1**. Hosts and containers need a Java 25 runtime; the Docker image
   `amazoncorretto:25.0.4-alpine3.24` already includes it.
 - The API contract (paths, request and response bodies) did not change.
-- Configuration is unchanged: the same environment variables, Vault and Config Server values as before.
+- Configuration is unchanged, except for two optional variables: `BACKBONE_URL` and `MERCURY_URL` set the base URL of each service
+  (default `https://prx-qa.backbone.tst/backbone` and `https://prx-qa.backbone.tst/mercury`). Set them per environment, for example in the
+  Config Server or Vault.
 
 ## Running locally
 
