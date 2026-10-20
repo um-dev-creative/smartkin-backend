@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- DB-1: SmartKin no longer maps backbone's `general.user`. `UserEntity` and `UserRepository` were removed; `ParentEntity` and `ChildEntity` use the
+  backbone user id as their key and `NotificationEntity` stores `userId` as a plain column. The model now has 13 entities, all in the `smartkin` schema.
 - JV-6: the JaCoCo package-level check blocks the build again (`haltOnFailure` removed). Its exclusions are now real class patterns
   (application class, `config`, JPA entities and repositories, generated MapStruct implementations) instead of the Sonar glob list.
 - `UserRegisterServiceImpl.confirmCode` no longer throws a `NullPointerException` when mercury fails without a `message` header; it
@@ -30,11 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`haltOnFailure=false`) until the legacy packages have tests.
 
 ### Added
+- DB-1: `docs/decisions/D-1-supabase-schema-and-user-reference.md` (schema `smartkin` in the existing Supabase project, user ids without foreign keys) and
+  `docs/db/smartkin_schema_bootstrap.sql`, which creates the empty schema in the `umdevc` database.
 - JV-2: GitHub Actions workflow `.github/workflows/ci.yml` (Temurin 25, `mvn -B verify`, Docker for Testcontainers, JaCoCo report as artifact)
   on pushes and pull requests to `main` and `development`. The Docker base image tag `amazoncorretto:25.0.4-alpine3.24` was checked against the registry.
 - JV-6: test suite of 92 tests (JUnit 6, Mockito, MockMvc, Testcontainers): services, authentication, session JWT, controllers and API defaults,
   mappers, Feign interceptors against a local token endpoint, transfer objects and their Jackson 3 contract, and a PostgreSQL 17
-  container test that boots the JPA model (14 entities). Line coverage on the gated code is above 99%.
+  container test that boots the JPA model (13 entities). Line coverage on the gated code is above 99%.
 - Unit tests for `EmailMessageProducerServiceImpl` (100% line and branch coverage).
 - `CHANGELOG.md`, `docs/USER_GUIDE.md` and `docs/TECHNICAL_GUIDE.md`.
 - `CLAUDE.md` with build commands and architecture notes.

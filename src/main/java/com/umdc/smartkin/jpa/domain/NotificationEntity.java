@@ -16,10 +16,10 @@ public class NotificationEntity {
     @Column(name = "notification_id", nullable = false)
     private UUID id;
 
+    /// Backbone user id of the recipient; there is no foreign key to backbone's tables.
     @NotNull
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
-    private UserEntity userEntity;
+    @Column(name = "user_id", nullable = false)
+    private UUID userId;
 
     @Size(max = 255)
     @NotNull
@@ -57,12 +57,12 @@ public class NotificationEntity {
         this.id = id;
     }
 
-    public UserEntity getUser() {
-        return userEntity;
+    public UUID getUserId() {
+        return userId;
     }
 
-    public void setUser(UserEntity userEntity) {
-        this.userEntity = userEntity;
+    public void setUserId(UUID userId) {
+        this.userId = userId;
     }
 
     public String getTitle() {
