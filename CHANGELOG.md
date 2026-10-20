@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- RD-1: `SessionJwtServiceImpl.isValid` now also requires a `jti` that backbone-rest has not revoked. **Breaking for deployments:** the check is on by default and the service
+  refuses to start without `REVOCATION_REDIS_URL`; set `REVOCATION_ENABLED=false` for local development only.
 - DB-2: the datasource is configured in `bootstrap.yml` from `SMARTKIN_DB_URI`, `SMARTKIN_DB_PORT` (default 6543, transaction pooler), `SMARTKIN_DB_NAME` (default `umdevc`),
   `SMARTKIN_DB_USERNAME` and `SMARTKIN_DB_PASSWORD` (Vault or environment), with `prepareThreshold=0` and a Hikari pool of `SMARTKIN_DB_POOL_SIZE` (default 5).
 - DB-3: Flyway manages the schema (`spring-boot-starter-flyway`, `flyway-database-postgresql`) on the direct connection (`SMARTKIN_DB_DIRECT_PORT`, default 5432) with
@@ -37,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`haltOnFailure=false`) until the legacy packages have tests.
 
 ### Added
+- RD-1: token revocation check against backbone-rest's Redis deny-list (`jti:<value>` keys) with Lettuce: `RedisConnector` (lazy, self-healing connection),
+  `RedisRevocationChecker` (fail closed, answers cached for `REVOCATION_CACHE_TTL`, 30 s by default), `NoRevocationChecker` and a handler that answers 503
+  when the list cannot be consulted. Tests with a Redis 7 Testcontainer.
 - MG-1: MongoDB support (`spring-boot-starter-data-mongodb`) and the collections `lessons`, `quiz_attempts` and `interaction_events`, modelled as records in
   `com.umdc.smartkin.mongo.document` with Spring Data repositories. Connection through `SMARTKIN_MONGO_*` variables; UUIDs use the standard representation.
 - MG-2: indexes declared on the documents and created at startup (`auto-index-creation`): unique `slug` and `topicId+status` on lessons; unique

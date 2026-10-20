@@ -9,6 +9,15 @@ prx:
   jwt:
     secret: ${APP_TOKEN_SECRET}
     expirationMs: ${APP_TOKEN_EXPIRATION}
+  security:
+    revocation:
+      # false = local development only: revoked tokens stay valid until they expire
+      enabled: ${REVOCATION_ENABLED:true}
+      # redis[s]://[user:password@]host:port/db - the SAME Redis and db index backbone-rest writes its jti deny-list to
+      redis-url: ${REVOCATION_REDIS_URL:}
+      # Also the worst-case delay before a revocation takes effect
+      cache-ttl: ${REVOCATION_CACHE_TTL:30s}
+      command-timeout: ${REVOCATION_REDIS_TIMEOUT:2s}
   interaction-events:
     # How long raw interaction events are kept before MongoDB expires them (a TTL index on expiresAt)
     retention: ${SMARTKIN_INTERACTION_EVENTS_RETENTION:90d}
