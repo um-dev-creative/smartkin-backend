@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`haltOnFailure=false`) until the legacy packages have tests.
 
 ### Added
+- RD-2 (backend): `LessonCatalogService.publishedLessons(topicId)` reads the published lessons of a topic through a Redis cache (`RedisLessonCatalogCache`, key
+  `smartkin:catalog:topic:<id>`, TTL `CACHE_LESSON_CATALOG_TTL`, 10 minutes by default). The cache fails open and is off when `CACHE_REDIS_URL` is empty
+  (`NoLessonCatalogCache`). `evict(topicId)` drops a topic's entry when its lessons change.
 - RD-1: token revocation check against backbone-rest's Redis deny-list (`jti:<value>` keys) with Lettuce: `RedisConnector` (lazy, self-healing connection),
   `RedisRevocationChecker` (fail closed, answers cached for `REVOCATION_CACHE_TTL`, 30 s by default), `NoRevocationChecker` and a handler that answers 503
   when the list cannot be consulted. Tests with a Redis 7 Testcontainer.
