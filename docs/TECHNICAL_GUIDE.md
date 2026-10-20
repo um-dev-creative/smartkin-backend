@@ -123,6 +123,29 @@ Messages are JSON envelopes (`eventId`, `type`, `schemaVersion`, `occurredAt`, `
 by `eventId` and ignore unknown fields. `publish` returns a `CompletableFuture`, which completes exceptionally when Kafka rejects the record. Topics must be created by the platform team;
 the application does not create them. Producer settings come from `prx.bootstrap.server.url` and `prx.bootstrap.server.port` (`KafkaProducerConfig`).
 
+### Consuming events and failures (KF-2, KF-3)
+
+`SmartKinEventListener` has one `@KafkaListener` per topic (names from `prx.kafka.topics.*`, group `prx.kafka.consumer.group-id`) and hands the parsed event to
+`EventEffectsService`, one transaction per event:
+
+| Event | Effect |
+| --- | --- |
+| `ACTIVITY_ASSIGNED` | `ASSIGNMENT` notification for the child, related entity = assignment id |
+| `QUIZ_COMPLETED` | if `passed` and `score > 0`: `EARN` point row (source `QUIZ`, source id = attempt id, amount = score) and `child.total_points += score` |
+| `ACHIEVEMENT_EARNED` | if `pointsValue > 0`: `EARN` point row (source `ACHIEVEMENT`, source id = child achievement id); `ACHIEVEMENT` notification |
+
+The points rule (points = quiz score) is an assumption of this task; change it in `EventEffectsService.onQuizCompleted`. Each effect checks first whether it already exists
+(`PointRepository.existsBySourceType...`, `NotificationRepository.existsByUserId...`); the partial unique indexes of `V3` guarantee it if two consumers race. A child that is not
+registered in SmartKin makes the event fail (so it is retried and finally dead-lettered) instead of being dropped.
+
+Failures are handled by `KafkaConsumerConfig`'s `DefaultErrorHandler`: exponential back-off (`prx.kafka.consumer.max-attempts` total tries, `initial-interval`, `multiplier`, `max-interval`),
+then `DeadLetterPublishingRecoverer` publishes the original key and value to `prx.kafka.consumer.error-topic` (one topic for all events, partition chosen by Kafka) with the standard
+`kafka_dlt-*` headers (exception class, message, stack trace, original topic/partition/offset). `JacksonException` and `IllegalArgumentException` are not retried. Retries block the
+partition (ordering per child is preserved) for at most the sum of the delays, about 7s with the defaults. Nothing reads the error topic automatically: replay is manual
+(re-publish the value to the original topic once the cause is fixed; the idempotent effects make that safe).
+
+Open points: events are not published by any service yet, so the consumers are exercised only by tests; emails for these events (which need the recipient's address from backbone) are not sent.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs `mvn -B verify` on JDK 25 (Temurin) for pushes and pull requests to `main` and `development`, and uploads
@@ -176,5 +199,6 @@ Shared builders live in `src/test/java/com/umdc/smartkin/support/TestData.java`.
 - The service starts only with the full environment (Vault, Config Server, SSL bundle, OAuth clients); startup with a complete
   environment was not verified in this task.
 - The Docker image was not built in this task.
+- The error topic must exist before the first failure (the application does not create topics), and nothing alerts on it yet.
 - The enum labels (D-2) and the baseline DDL are derived from the entities and need confirmation against any existing `smartkin` schema in `umdevc`.
 - Flyway and the Supabase connection were exercised only against a Testcontainers PostgreSQL, not against Supabase.

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- KF-2: SmartKin consumes its own domain events (`SmartKinEventListener`, group `smartkin-backend`). `ACTIVITY_ASSIGNED` creates an inbox notification for the child;
+  `QUIZ_COMPLETED` books the score as points when the quiz was passed; `ACHIEVEMENT_EARNED` books the achievement's points and notifies the child. Points also raise
+  `child.total_points`. Effects are idempotent (existence checks plus the unique indexes of migration `V3__idempotent_event_effects.sql`).
+  Email requests to mercury keep going through `EmailMessageProducerService` to `prx.producer.mercury.topic`.
+- KF-3: consumer retries and error topic. A failing record is retried with exponential back-off (`KAFKA_CONSUMER_MAX_ATTEMPTS` 4 in total, 1s start, x2, 30s cap) and then
+  published to `smartkin.events.error.v1` (`KAFKA_ERROR_TOPIC`) with the exception in its headers. Malformed records (JSON or payload errors) skip the retries.
+  `KAFKA_CONSUMER_ENABLED=false` turns the listeners off.
+
 ### Changed
 - RD-1: `SessionJwtServiceImpl.isValid` now also requires a `jti` that backbone-rest has not revoked. **Breaking for deployments:** the check is on by default and the service
   refuses to start without `REVOCATION_REDIS_URL`; set `REVOCATION_ENABLED=false` for local development only.
