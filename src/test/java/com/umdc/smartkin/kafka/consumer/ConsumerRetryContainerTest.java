@@ -1,5 +1,6 @@
 package com.umdc.smartkin.kafka.consumer;
 
+import com.umdc.smartkin.achievement.AchievementTrigger;
 import com.umdc.smartkin.kafka.event.EventType;
 import com.umdc.smartkin.kafka.event.SmartKinEvent;
 import com.umdc.smartkin.kafka.event.payload.QuizCompletedPayload;
@@ -61,6 +62,11 @@ class ConsumerRetryContainerTest {
         @Bean
         EventEffectsService effects() {
             return effects;
+        }
+
+        @Bean
+        AchievementTrigger achievementTrigger() {
+            return mock(AchievementTrigger.class);
         }
 
         @Bean

@@ -1,5 +1,6 @@
 package com.umdc.smartkin.kafka.consumer;
 
+import com.umdc.smartkin.achievement.AchievementTrigger;
 import com.umdc.smartkin.kafka.event.EventType;
 import com.umdc.smartkin.kafka.event.SmartKinEvent;
 import com.umdc.smartkin.kafka.event.payload.AchievementEarnedPayload;
@@ -28,7 +29,8 @@ class SmartKinEventListenerTest {
 
     private final JsonMapper mapper = JsonMapper.builder().build();
     private final EventEffectsService effects = mock(EventEffectsService.class);
-    private final SmartKinEventListener listener = new SmartKinEventListener(mapper, effects);
+    private final AchievementTrigger achievements = mock(AchievementTrigger.class);
+    private final SmartKinEventListener listener = new SmartKinEventListener(mapper, effects, achievements);
     private final UUID child = UUID.randomUUID();
 
     @Test
@@ -49,6 +51,40 @@ class SmartKinEventListenerTest {
         listener.onQuizCompleted(mapper.writeValueAsString(event));
 
         verify(effects).onQuizCompleted(event);
+        verify(achievements).evaluateSafely(child);
+    }
+
+    @Test
+    void aFailedQuizDoesNotTriggerTheAchievementCheck() {
+        var payload = new QuizCompletedPayload(UUID.randomUUID(), child, UUID.randomUUID(), UUID.randomUUID(), 1, 3, 10, 30, false, NOW);
+        var event = SmartKinEvent.of(EventType.QUIZ_COMPLETED, child, payload, CLOCK);
+
+        listener.onQuizCompleted(mapper.writeValueAsString(event));
+
+        verify(effects).onQuizCompleted(event);
+        verifyNoInteractions(achievements);
+    }
+
+    @Test
+    void anAchievementEventChecksTheAchievementsAgainBecauseItsPointsMayCompleteAnotherRule() {
+        var payload = new AchievementEarnedPayload(UUID.randomUUID(), child, UUID.randomUUID(), "Explorer", 20, NOW);
+        var event = SmartKinEvent.of(EventType.ACHIEVEMENT_EARNED, child, payload, CLOCK);
+
+        listener.onAchievementEarned(mapper.writeValueAsString(event));
+
+        verify(effects).onAchievementEarned(event);
+        verify(achievements).evaluateSafely(child);
+    }
+
+    @Test
+    void whenTheEffectsFailTheAchievementsAreNotChecked() {
+        var payload = new QuizCompletedPayload(UUID.randomUUID(), child, UUID.randomUUID(), UUID.randomUUID(), 1, 7, 10, 70, true, NOW);
+        var event = SmartKinEvent.of(EventType.QUIZ_COMPLETED, child, payload, CLOCK);
+        org.mockito.Mockito.doThrow(new IllegalStateException("db down")).when(effects).onQuizCompleted(event);
+
+        assertThrows(IllegalStateException.class, () -> listener.onQuizCompleted(mapper.writeValueAsString(event)));
+
+        verifyNoInteractions(achievements);
     }
 
     @Test

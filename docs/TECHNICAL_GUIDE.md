@@ -473,6 +473,43 @@ flowchart LR
 
 Tests: `RewardsServiceImplTest` (every branch, sort order and paging), `RewardsControllerTest`, `RewardsMapperTest`, two repository cases in `JpaMappingContainerTest` (paging and ordering without mixing children, achievements with their achievement loaded) and one in `CrossFamilyAccessContainerTest`. `ControllerContractConformanceTest` also checks `RewardsController`.
 
+## Achievement rules (BE-11)
+
+An achievement is earned by a **rule** stored as JSON in `achievements.requirements`, for example `{"type":"QUIZZES_PASSED","threshold":3}`. `AchievementRule.parse` reads it; text that is not a valid rule (free text, unknown `type`, missing or non-positive `threshold`) is logged and that achievement is simply never awarded, without affecting the others.
+
+| `type` | What is counted | Source |
+| --- | --- | --- |
+| `QUIZZES_PASSED` | **distinct lessons** whose quiz the child passed (passing twice the same lesson counts once) | MongoDB `quiz_attempts` (`findByChildIdAndPassedTrue`) |
+| `ACTIVITIES_COMPLETED` | **distinct activities** with a completed assignment (`completion_time` set); repeating an activity does not count again, an open assignment does not count | `ActivityProgressRepository.countCompletedActivities` |
+| `POINTS_REACHED` | the child's balance | `child.total_points` |
+
+The rule is met when the count is `>= threshold`.
+
+**When it is evaluated.** `AchievementTrigger` starts an evaluation, and it never lets a failure reach the caller (the evaluation is idempotent and recounts from scratch, so the next trigger catches up):
+1. in `SmartKinEventListener`, after `QUIZ_COMPLETED` of a **passed** quiz and after `ACHIEVEMENT_EARNED`, once `EventEffectsService` has committed the points. Evaluating there, and not in the request, is what makes `POINTS_REACHED` see the points the quiz just earned, and the points of an achievement can complete another rule (a cascade that ends because each achievement is awarded once);
+2. in `ProgressServiceImpl`, after the commit of the report that first sets `completionTime` (a child who reports 100 by hand); passing a quiz completes the assignment too, but that case is covered by the first trigger.
+
+**Awarding.** `AchievementEvaluator.evaluate` runs in its **own transaction** (`REQUIRES_NEW`): it sees what the caller already committed and a failure cannot roll the caller back. For each achievement not yet earned whose rule is met it runs `ChildAchievementRepository.insertIfAbsent`, a native `insert ... on conflict do nothing`, and only when a row was inserted does it publish `ACHIEVEMENT_EARNED` (after the commit, `DomainEventDispatcher`). The unique index `uq_child_achievements_child_achievement` (migration V5) makes "once per child" true even if two evaluations race. The existing KF-2 consumer books `pointsValue` and notifies the child.
+
+**Migration V5** (`V5__achievement_rules.sql`) creates that unique index and seeds **three placeholder achievements** with fixed ids (`Primer quiz aprobado`: 1 quiz, 10 points; `Explorador`: 3 activities, 25 points; `Cien puntos`: 100 points, 20 points). They exist so the feature works out of the box; the product team should edit the text, points and thresholds, or add rows, with plain SQL. The migration fails only if `child_achievements` already holds the same child and achievement twice, which cannot happen because nothing wrote that table before this ticket.
+
+```mermaid
+flowchart TD
+    Q[QUIZ_COMPLETED passed] --> E[EventEffectsService books points]
+    E --> T[AchievementTrigger]
+    A[ACHIEVEMENT_EARNED] --> E2[EventEffectsService books points] --> T
+    P[Child reports 100] -->|after commit| T
+    T --> V[AchievementEvaluator, REQUIRES_NEW]
+    V --> R{rule met and not earned?}
+    R -- yes --> I[insert ... on conflict do nothing]
+    I -- 1 row --> K[ACHIEVEMENT_EARNED after commit]
+    K --> A
+    R -- no --> N[nothing]
+```
+
+Tests: `AchievementRuleTest`, `AchievementTriggerTest`, `AchievementRulesContainerTest` (real PostgreSQL, no test transaction because of `REQUIRES_NEW`: V5 seed, once-only award and event, points threshold, distinct activities and lessons, open assignments, invalid rules, unknown child, the unique index), plus the new cases in `SmartKinEventListenerTest`, `ProgressServiceImplTest` and `DomainEventDispatcherTest`.
+Known limits: a lost `ACHIEVEMENT_EARNED` (broker down, no outbox) leaves the achievement earned without its points and notification; the achievement itself is never lost.
+
 ## Spring Boot 4 migration notes
 
 - `@EntityScan` lives in `org.springframework.boot.persistence.autoconfigure`.

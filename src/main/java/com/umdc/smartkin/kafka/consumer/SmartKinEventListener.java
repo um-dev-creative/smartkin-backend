@@ -1,5 +1,6 @@
 package com.umdc.smartkin.kafka.consumer;
 
+import com.umdc.smartkin.achievement.AchievementTrigger;
 import com.umdc.smartkin.kafka.event.SmartKinEvent;
 import com.umdc.smartkin.kafka.event.payload.AchievementEarnedPayload;
 import com.umdc.smartkin.kafka.event.payload.ActivityAssignedPayload;
@@ -20,10 +21,12 @@ public class SmartKinEventListener {
 
     private final ObjectMapper mapper;
     private final EventEffectsService effects;
+    private final AchievementTrigger achievements;
 
-    public SmartKinEventListener(ObjectMapper mapper, EventEffectsService effects) {
+    public SmartKinEventListener(ObjectMapper mapper, EventEffectsService effects, AchievementTrigger achievements) {
         this.mapper = mapper;
         this.effects = effects;
+        this.achievements = achievements;
     }
 
     @KafkaListener(topics = "${prx.kafka.topics.activity-assigned:smartkin.activity.assigned.v1}")
@@ -33,12 +36,18 @@ public class SmartKinEventListener {
 
     @KafkaListener(topics = "${prx.kafka.topics.quiz-completed:smartkin.quiz.completed.v1}")
     public void onQuizCompleted(String json) {
-        effects.onQuizCompleted(parse(json, QuizCompletedPayload.class));
+        var event = parse(json, QuizCompletedPayload.class);
+        effects.onQuizCompleted(event);
+        if (event.payload().passed()) {
+            achievements.evaluateSafely(event.payload().childId());
+        }
     }
 
     @KafkaListener(topics = "${prx.kafka.topics.achievement-earned:smartkin.achievement.earned.v1}")
     public void onAchievementEarned(String json) {
-        effects.onAchievementEarned(parse(json, AchievementEarnedPayload.class));
+        var event = parse(json, AchievementEarnedPayload.class);
+        effects.onAchievementEarned(event);
+        achievements.evaluateSafely(event.payload().childId());
     }
 
     private <T> SmartKinEvent<T> parse(String json, Class<T> payloadType) {
