@@ -314,6 +314,36 @@ flowchart TD
 `ChildServiceImpl` and `ParentServiceImpl` now use the policy; their behavior and answers did not change (their tests pass unmodified apart from how the service is built).
 Tests: `AccessPolicyTest` covers every cell of the table, and `CrossFamilyAccessContainerTest` runs the real services over PostgreSQL with two families and a user without profile: a parent lists, reads and changes only their own children, another family's child is a 404 and is left untouched, a child sees only themselves and changes nobody, a user without profile reaches nothing, and a family's child cannot be linked by another parent.
 
+## Catalog API (BE-6)
+
+`CatalogApi`/`CatalogController` (base `/api/v1`) implement `listTopics`, `listTopicLessons`, `getLesson`, `listActivities` and `getActivity`. They are read-only and open to any authenticated user (the security library validates the token; no ownership applies to the catalog).
+`CatalogServiceImpl` reads topics and activities from PostgreSQL, the published lessons of a topic through the Redis-cached `LessonCatalogService` (so a cache outage still falls back to MongoDB), and one lesson in detail from MongoDB.
+
+| Operation | Path | Rule |
+| --- | --- | --- |
+| `listTopics` | `GET /topics` | All topics ordered by name |
+| `listTopicLessons` | `GET /topics/{topicId}/lessons` | Published lessons (`LessonSummary`); 404 when the topic does not exist |
+| `getLesson` | `GET /lessons/{lessonId}` | Only `PUBLISHED`; draft, archived and missing lessons are 404 |
+| `listActivities` | `GET /activities[?topicId=]` | Active activities ordered by title |
+| `getActivity` | `GET /activities/{activityId}` | Active only; inactive and missing are 404 |
+
+**What never leaves the server.** `CatalogMapper` converts `LessonDocument` to `LessonResponse` with its own option and question records: `correct` (options) and `feedback` (questions) do not exist in the response types, so they cannot be serialized by accident. `CatalogMapperTest` serializes a lesson to JSON and asserts neither word appears.
+
+**Migration V4** (`V4__activity_lesson_link.sql`) adds the nullable column `smartkin.activities.lesson_id` (uuid) and a partial index. Lessons live in MongoDB, so it is a plain id and not a foreign key. Existing activities keep working with a `null` lesson; the migration is additive and the `smartkin_app` role and RLS policies need no change. `ActivityEntity.lessonId` maps it and `Activity.lessonId` / `Assignment.lessonId` expose it (BE-7 assignments will read the lesson through it).
+
+```mermaid
+flowchart LR
+    C[Client] --> A[CatalogController]
+    A --> S[CatalogServiceImpl]
+    S -->|topics, activities| P[(PostgreSQL smartkin)]
+    S -->|published lessons per topic| R[(Redis cache)]
+    R -. miss or outage .-> M[(MongoDB lessons)]
+    S -->|lesson detail, PUBLISHED only| M
+    S --> X[CatalogMapper: no correct, no feedback]
+```
+
+Tests: `CatalogServiceImplTest`, `CatalogControllerTest`, `CatalogMapperTest`, and four cases in `JpaMappingContainerTest` (V4 column, lesson id round trip with old activities, active filtering, topic order, on a real PostgreSQL). `ControllerContractConformanceTest` now also checks `CatalogController` against the contract.
+
 ## Spring Boot 4 migration notes
 
 - `@EntityScan` lives in `org.springframework.boot.persistence.autoconfigure`.

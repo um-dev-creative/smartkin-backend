@@ -64,6 +64,20 @@ Privacy between families is enforced on every call: a parent only ever sees and 
 
 Errors return the HTTP status and the reason in the `message-error` header. Nothing existing changes. A user whose verification code is not completed gets 403 here.
 
+## Catalog (new)
+
+Any signed-in user can browse what a child can learn. All calls are `GET` and carry the session token.
+
+| Operation | Path | Notes |
+| --- | --- | --- |
+| Topics | `/api/v1/topics` | Ordered by name |
+| Lessons of a topic | `/api/v1/topics/{topicId}/lessons` | Published lessons only; 404 if the topic does not exist |
+| A lesson | `/api/v1/lessons/{lessonId}` | Scenes and quiz, ready to play. The quiz never says which option is correct (the server grades the answers); drafts and archived lessons answer 404 |
+| Activities | `/api/v1/activities` and `/api/v1/activities?topicId=...` | Active activities a parent can assign; each says which lesson it plays (`lessonId`, empty for older activities) |
+| An activity | `/api/v1/activities/{activityId}` | 404 when it does not exist or is inactive |
+
+**Operators:** this release adds database migration V4 (a nullable `lesson_id` column on `activities`). It runs at startup with the Flyway account (`SMARTKIN_FLYWAY_USERNAME`) and does not change or remove any data.
+
 ## API contract for the MVP
 
 The operations the MVP will offer are described in `docs/api/openapi-v1.yaml`: link a child to a parent, browse topics, lessons and activities, assign an activity, report progress, submit a quiz,

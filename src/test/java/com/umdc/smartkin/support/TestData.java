@@ -88,4 +88,22 @@ public final class TestData {
         var payload = "{\"uid\":\"" + uid + "\"}";
         return "header." + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8)) + ".signature";
     }
+
+    public static final UUID TOPIC_ID = UUID.fromString("99999999-9999-9999-9999-999999999999");
+    public static final UUID LESSON_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    public static final UUID ACTIVITY_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+
+    /// A lesson with one scene, one interaction and a quiz whose option 2 is the correct one and whose question has feedback.
+    public static com.umdc.smartkin.mongo.document.LessonDocument lesson(com.umdc.smartkin.mongo.document.LessonStatus status) {
+        var option1 = new com.umdc.smartkin.mongo.document.LessonDocument.Option("o1", "Share it with a stranger", false);
+        var option2 = new com.umdc.smartkin.mongo.document.LessonDocument.Option("o2", "Tell an adult", true);
+        var question = new com.umdc.smartkin.mongo.document.LessonDocument.Question("q1", "s1", "SINGLE_CHOICE", "What do you do?",
+                List.of(option1, option2), 10, "The right answer is to tell an adult");
+        var quiz = new com.umdc.smartkin.mongo.document.LessonDocument.Quiz(70, 3, List.of(question));
+        var interaction = new com.umdc.smartkin.mongo.document.LessonDocument.Interaction("i1", "TAP", "Tap the lock", Map.of("target", "lock"));
+        var scene = new com.umdc.smartkin.mongo.document.LessonDocument.Scene("s1", 1, "Passwords", "Keep it secret", 12000L,
+                List.of(interaction), Map.of("asset", "lock.json"));
+        return new com.umdc.smartkin.mongo.document.LessonDocument(LESSON_ID, "passwords", TOPIC_ID, "Passwords", "Learn to protect them", "en",
+                status, 2, List.of(scene), quiz, USER_ID, java.time.Instant.parse("2026-10-01T00:00:00Z"), java.time.Instant.parse("2026-10-02T00:00:00Z"));
+    }
 }

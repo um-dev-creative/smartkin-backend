@@ -36,6 +36,9 @@ public class ActivityEntity {
     @JoinColumn(name = "topic_id", nullable = false)
     private TopicEntity topic;
 
+    @Column(name = "lesson_id")
+    private UUID lessonId;
+
     @Size(max = 255)
     @NotNull
     @Column(name = "title", nullable = false)
@@ -89,6 +92,14 @@ public class ActivityEntity {
 
     public void setTopic(TopicEntity topic) {
         this.topic = topic;
+    }
+
+    public UUID getLessonId() {
+        return lessonId;
+    }
+
+    public void setLessonId(UUID lessonId) {
+        this.lessonId = lessonId;
     }
 
     public String getTitle() {

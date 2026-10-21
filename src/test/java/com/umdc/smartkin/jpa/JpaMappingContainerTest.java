@@ -311,4 +311,58 @@ class JpaMappingContainerTest {
         assertTrue(found.stream().map(ChildEntity::getId).toList().containsAll(java.util.List.of(first.getId(), second.getId())));
         assertTrue(children.findAllByParentId(UUID.randomUUID()).isEmpty());
     }
+
+    @Test
+    void v4AddsANullableLessonIdToActivities() {
+        var column = jdbc.queryForMap("""
+                select data_type, is_nullable from information_schema.columns
+                where table_schema = 'smartkin' and table_name = 'activities' and column_name = 'lesson_id'""");
+
+        assertEquals("uuid", column.get("data_type"));
+        assertEquals("YES", column.get("is_nullable"));
+    }
+
+    @Test
+    void anActivityKeepsItsLessonIdAndOldActivitiesStillWork() {
+        var withLesson = newActivity();
+        var lessonId = UUID.randomUUID();
+        withLesson.setLessonId(lessonId);
+        var withoutLesson = newActivity();
+        flushAndClear();
+
+        assertEquals(lessonId, activities.findById(withLesson.getId()).orElseThrow().getLessonId());
+        assertEquals(null, activities.findById(withoutLesson.getId()).orElseThrow().getLessonId());
+    }
+
+    @Test
+    void listsOnlyActiveActivitiesByTopic() {
+        var active = newActivity();
+        var inactive = newActivity();
+        inactive.setIsActive(false);
+        flushAndClear();
+
+        var ids = activities.findAllByIsActiveTrueOrderByTitle().stream().map(ActivityEntity::getId).toList();
+        var ofTopic = activities.findAllByTopicIdAndIsActiveTrueOrderByTitle(active.getTopic().getId());
+
+        assertTrue(ids.contains(active.getId()));
+        assertTrue(!ids.contains(inactive.getId()));
+        assertEquals(1, ofTopic.size());
+        assertTrue(activities.findByIdAndIsActiveTrue(active.getId()).isPresent());
+        assertTrue(activities.findByIdAndIsActiveTrue(inactive.getId()).isEmpty());
+    }
+
+    @Test
+    void listsTopicsByName() {
+        var zebra = new TopicEntity();
+        zebra.setName("zzz-last");
+        var alpha = new TopicEntity();
+        alpha.setName("aaa-first");
+        topics.save(zebra);
+        topics.save(alpha);
+        flushAndClear();
+
+        var names = topics.findAllByOrderByName().stream().map(TopicEntity::getName).toList();
+
+        assertTrue(names.indexOf("aaa-first") < names.indexOf("zzz-last"));
+    }
 }
