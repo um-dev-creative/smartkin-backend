@@ -1,12 +1,21 @@
 package com.umdc.smartkin.jpa;
 
+import com.umdc.smartkin.api.v1.service.AssignmentServiceImpl;
 import com.umdc.smartkin.api.v1.service.ChildServiceImpl;
 import com.umdc.smartkin.api.v1.service.ParentServiceImpl;
+import com.umdc.smartkin.api.v1.to.AssignmentRequest;
 import com.umdc.smartkin.api.v1.to.ChildRequest;
 import com.umdc.smartkin.api.v1.to.ChildUpdateRequest;
 import com.umdc.smartkin.api.v1.to.ParentProfileRequest;
 import com.umdc.smartkin.client.backbone.BackboneClient;
+import com.umdc.smartkin.config.ClockConfig;
 import com.umdc.smartkin.config.DataBaseConfig;
+import com.umdc.smartkin.jpa.domain.ActivityEntity;
+import com.umdc.smartkin.jpa.domain.TopicEntity;
+import com.umdc.smartkin.jpa.repository.ActivityRepository;
+import com.umdc.smartkin.jpa.repository.TopicRepository;
+import com.umdc.smartkin.kafka.event.SmartKinEventPublisher;
+import com.umdc.smartkin.mapper.AssignmentMapperImpl;
 import com.umdc.smartkin.jpa.domain.ChildEntity;
 import com.umdc.smartkin.jpa.domain.ParentEntity;
 import com.umdc.smartkin.jpa.repository.ChildRepository;
@@ -60,8 +69,8 @@ class CrossFamilyAccessContainerTest {
 
     @SpringBootConfiguration
     @EnableAutoConfiguration
-    @Import({DataBaseConfig.class, AccessPolicy.class, ChildServiceImpl.class, ParentServiceImpl.class,
-            ChildMapperImpl.class, ParentMapperImpl.class})
+    @Import({DataBaseConfig.class, ClockConfig.class, AccessPolicy.class, ChildServiceImpl.class, ParentServiceImpl.class,
+            AssignmentServiceImpl.class, ChildMapperImpl.class, ParentMapperImpl.class, AssignmentMapperImpl.class})
     static class AccessTestApplication {
     }
 
@@ -75,8 +84,16 @@ class CrossFamilyAccessContainerTest {
     private ChildRepository childRepository;
     @Autowired
     private EntityManager entityManager;
+    @Autowired
+    private AssignmentServiceImpl assignments;
+    @Autowired
+    private TopicRepository topicRepository;
+    @Autowired
+    private ActivityRepository activityRepository;
     @MockitoBean
     private BackboneClient backboneClient;
+    @MockitoBean
+    private SmartKinEventPublisher eventPublisher;
 
     private UUID parentA;
     private UUID parentB;
@@ -168,5 +185,63 @@ class CrossFamilyAccessContainerTest {
     void aChildCannotBecomeAParentAndAParentCannotBecomeAChild() {
         assertEquals(HttpStatus.FORBIDDEN, parents.putMe(tokenFor(childA1), new ParentProfileRequest(null, null, null)).getStatusCode());
         assertEquals(HttpStatus.CONFLICT, children.link(tokenFor(parentA), new ChildRequest(parentB, null, null)).getStatusCode());
+    }
+
+    private UUID newActivity() {
+        var topic = new TopicEntity();
+        topic.setName("Screen time " + UUID.randomUUID());
+        topicRepository.save(topic);
+        var activity = new ActivityEntity();
+        activity.setTopic(topic);
+        activity.setTitle("Passwords " + UUID.randomUUID());
+        activity.setDescription("d");
+        activity.setContent("{}");
+        activity.setDurationMinutes(10);
+        activity.setPointsReward(50);
+        activity.setCreatedAt(java.time.Instant.now());
+        activity.setUpdatedAt(java.time.Instant.now());
+        activity.setIsActive(true);
+        return activityRepository.save(activity).getId();
+    }
+
+    @Test
+    void aParentAssignsOnlyToTheirOwnChildren() {
+        var activity = newActivity();
+
+        var own = assignments.assign(tokenFor(parentA), new AssignmentRequest(childA1, activity, null));
+        var foreign = assignments.assign(tokenFor(parentA), new AssignmentRequest(childB1, activity, null));
+        var byChild = assignments.assign(tokenFor(childA2), new AssignmentRequest(childA2, activity, null));
+        var byStranger = assignments.assign(tokenFor(stranger), new AssignmentRequest(childA1, activity, null));
+        var again = assignments.assign(tokenFor(parentA), new AssignmentRequest(childA1, activity, null));
+
+        assertEquals(HttpStatus.CREATED, own.getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, foreign.getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, byChild.getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, byStranger.getStatusCode());
+        assertEquals(HttpStatus.CONFLICT, again.getStatusCode());
+    }
+
+    @Test
+    void everyoneSeesOnlyTheAssignmentsOfTheirOwnFamily() {
+        var activity = newActivity();
+        var ofA1 = assignments.assign(tokenFor(parentA), new AssignmentRequest(childA1, activity, null)).getBody().assignmentId();
+        var ofB1 = assignments.assign(tokenFor(parentB), new AssignmentRequest(childB1, activity, null)).getBody().assignmentId();
+        entityManager.flush();
+        entityManager.clear();
+
+        var listedA = assignments.list(tokenFor(parentA), null, 0, 20).getBody();
+        var listedB = assignments.list(tokenFor(parentB), null, 0, 20).getBody();
+        var listedChild = assignments.list(tokenFor(childA1), null, 0, 20).getBody();
+
+        assertEquals(List.of(ofA1), listedA.content().stream().map(a -> a.assignmentId()).toList());
+        assertEquals(List.of(ofB1), listedB.content().stream().map(a -> a.assignmentId()).toList());
+        assertEquals(List.of(ofA1), listedChild.content().stream().map(a -> a.assignmentId()).toList());
+        assertEquals(HttpStatus.NOT_FOUND, assignments.list(tokenFor(parentA), childB1, 0, 20).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, assignments.list(tokenFor(childA2), childA1, 0, 20).getStatusCode());
+        assertEquals(HttpStatus.OK, assignments.get(tokenFor(parentA), ofA1).getStatusCode());
+        assertEquals(HttpStatus.OK, assignments.get(tokenFor(childA1), ofA1).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, assignments.get(tokenFor(parentB), ofA1).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, assignments.get(tokenFor(childA2), ofA1).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, assignments.get(tokenFor(stranger), ofA1).getStatusCode());
     }
 }

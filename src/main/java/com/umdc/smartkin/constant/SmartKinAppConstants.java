@@ -24,6 +24,12 @@ public final class SmartKinAppConstants {
     public static final String TOPIC_NOT_FOUND_MESSAGE = "Topic not found.";
     public static final String LESSON_NOT_FOUND_MESSAGE = "Lesson not found.";
     public static final String ACTIVITY_NOT_FOUND_MESSAGE = "Activity not found.";
+    public static final String ASSIGNMENT_NOT_FOUND_MESSAGE = "Assignment not found.";
+    public static final String DUE_DATE_IN_PAST_MESSAGE = "The due date must be in the future.";
+    public static final String ASSIGNMENT_ALREADY_OPEN_MESSAGE = "The child already has this activity assigned and not completed.";
+    public static final String INVALID_PAGE_MESSAGE = "page must be 0 or more and size between 1 and 100.";
+    public static final int MAX_PAGE_SIZE = 100;
+    public static final String ACCESS_DENIED_MESSAGE = "You cannot access this resource.";
     public static final String CALLER_UNKNOWN_MESSAGE = "The session token does not identify a user.";
     public static final String NOT_A_PARENT_MESSAGE = "Only a parent can do this.";
     public static final String CHILD_CANNOT_BE_PARENT_MESSAGE = "A child cannot have a parent profile.";

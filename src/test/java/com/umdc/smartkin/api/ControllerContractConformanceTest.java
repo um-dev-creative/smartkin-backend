@@ -1,5 +1,6 @@
 package com.umdc.smartkin.api;
 
+import com.umdc.smartkin.api.v1.controller.AssignmentController;
 import com.umdc.smartkin.api.v1.controller.CatalogController;
 import com.umdc.smartkin.api.v1.controller.ChildController;
 import com.umdc.smartkin.api.v1.controller.ParentController;
@@ -26,7 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 class ControllerContractConformanceTest {
 
     private static final String BASE = "/api/v1";
-    private static final List<Class<?>> IMPLEMENTED = List.of(ParentController.class, ChildController.class, CatalogController.class);
+    private static final List<Class<?>> IMPLEMENTED = List.of(ParentController.class, ChildController.class, CatalogController.class,
+            AssignmentController.class);
 
     @SuppressWarnings("unchecked")
     private static Map<String, String> contractOperations() throws IOException {
@@ -75,7 +77,8 @@ class ControllerContractConformanceTest {
     void theImplementedControllersCoverTheirOperations() throws IOException {
         var contract = contractOperations();
         var expected = Arrays.asList("getMyParentProfile", "putMyParentProfile", "listMyChildren", "linkChild", "getChild", "updateChild",
-                "listTopics", "listTopicLessons", "getLesson", "listActivities", "getActivity");
+                "listTopics", "listTopicLessons", "getLesson", "listActivities", "getActivity",
+                "assignActivity", "listAssignments", "getAssignment");
         var implemented = new TreeMap<String, String>();
         IMPLEMENTED.forEach(controller -> implemented.putAll(implementedOperations(controller)));
 
