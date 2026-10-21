@@ -510,6 +510,36 @@ flowchart TD
 Tests: `AchievementRuleTest`, `AchievementTriggerTest`, `AchievementRulesContainerTest` (real PostgreSQL, no test transaction because of `REQUIRES_NEW`: V5 seed, once-only award and event, points threshold, distinct activities and lessons, open assignments, invalid rules, unknown child, the unique index), plus the new cases in `SmartKinEventListenerTest`, `ProgressServiceImplTest` and `DomainEventDispatcherTest`.
 Known limits: a lost `ACHIEVEMENT_EARNED` (broker down, no outbox) leaves the achievement earned without its points and notification; the achievement itself is never lost.
 
+## Notifications API (BE-12)
+
+`NotificationApi`/`NotificationController` (`/api/v1/notifications`) implement `listNotifications`, `getUnreadNotificationCount`, `markAllNotificationsRead` and `markNotificationRead`; `NotificationServiceImpl` holds the rules. The notifications themselves are **created by the KF-2 consumers** (new assignment, new achievement); these endpoints only read and mark them.
+
+| Operation | Path | Rule |
+| --- | --- | --- |
+| `listNotifications` | `GET /notifications?unread=&page=&size=` | The caller's inbox, newest first (`createdAt` desc), as a `PageResponse`; `unread=true` keeps only the unread ones. Page from 0, size 1 to 100, else 400. |
+| `getUnreadNotificationCount` | `GET /notifications/unread-count` | `{count}` of the caller's unread notifications (the header badge of the frontend). |
+| `markNotificationRead` | `POST /notifications/{id}/read` | 204. Idempotent: an already read notification keeps its first `readAt`. Someone else's or a missing notification is 404. |
+| `markAllNotificationsRead` | `POST /notifications/read-all` | 204. One `update` statement (`markAllRead`) that touches only the caller's unread notifications; it returns how many changed. |
+
+**Ownership.** The caller is the `uid` of the session token and it is the `user_id` of the notifications, so there is no role logic: every user, parent or child, has their own inbox and never reaches anyone else's. A token without `uid` is 403. Reading another user's notification id answers 404 (`findByIdAndUserId`), like a missing one.
+
+**Wire format.** `NotificationResponse` serializes the flag as `read` (the contract name) from the entity's `isRead`; `type` is one of `ASSIGNMENT`, `REMINDER`, `ACHIEVEMENT`, `REWARD`, `GOAL`, `SYSTEM`.
+
+```mermaid
+flowchart LR
+    E[ACTIVITY_ASSIGNED / ACHIEVEMENT_EARNED] --> K[KF-2 consumers]
+    K -->|insert, idempotent| DB[(notifications)]
+    DB --> L[GET /notifications]
+    DB --> C[GET /notifications/unread-count]
+    L --> U[user opens one]
+    U --> R[POST /notifications/id/read]
+    C --> A[POST /notifications/read-all]
+    R --> DB
+    A --> DB
+```
+
+Tests: `NotificationServiceImplTest` (every branch), `NotificationControllerTest` (routing of `/unread-count`, `/read-all` and `/{id}/read`), `NotificationMapperTest`, three repository cases in `JpaMappingContainerTest` (paging and the unread filter, ownership, `markAllRead`) and one in `CrossFamilyAccessContainerTest` (each user has their own inbox). `ControllerContractConformanceTest` also checks `NotificationController`; with this ticket **every operation of the contract is implemented and checked**.
+
 ## Spring Boot 4 migration notes
 
 - `@EntityScan` lives in `org.springframework.boot.persistence.autoconfigure`.
