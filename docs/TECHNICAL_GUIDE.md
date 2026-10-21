@@ -201,8 +201,47 @@ as environment variables for the private Repsy repository. The workflow does not
 | `SmartKinEventTest`, `SmartKinEventPublisherTest`, `KafkaEventsContainerTest` | Envelope and payload JSON, topic names and overrides, send/failed-send behaviour and a real round trip through Kafka 4.0 (the Testcontainers `KafkaContainer` does not start `apache/kafka:3.9.0`) |
 | `JpaMappingContainerTest` | Flyway baseline on a PostgreSQL 17 Testcontainer, CRUD round trips of the 13 entities, the 4 enums and the cascade |
 
+| `OpenApiContractTest` | `docs/api/openapi-v1.yaml` is well formed and keeps its invariants |
+
 Docker must be running for `JpaMappingContainerTest`.
 Shared builders live in `src/test/java/com/umdc/smartkin/support/TestData.java`.
+
+## MVP API contract (X-2)
+
+The API of the MVP slice is defined in `docs/api/openapi-v1.yaml` (OpenAPI 3.0.3, 25 operations) before it is implemented; the design choices are in `docs/decisions/D-6-mvp-api-contract.md`.
+Nothing in the running service changes with this ticket: the contract adds no controller, so the existing `/api/v1/users` and `/api/v1/user-register` behavior is untouched.
+
+| Tag | Operations | Implemented by |
+| --- | --- | --- |
+| parents, children | `GET/PUT /parents/me`, `GET/POST /children`, `GET/PUT /children/{childId}` | BE-4, BE-5 |
+| catalog | `GET /topics`, `/topics/{topicId}/lessons`, `/lessons/{lessonId}`, `/activities`, `/activities/{activityId}` | BE-6 |
+| assignments | `GET/POST /assignments`, `GET /assignments/{id}`, `GET/PUT .../progress`, `PUT .../feedback` | BE-7, BE-8 |
+| quiz | `GET/POST /assignments/{id}/quiz-attempts` | BE-9 |
+| rewards | `GET /children/{childId}/points`, `/children/{childId}/achievements` | BE-10, BE-11 |
+| notifications | `GET /notifications`, `/notifications/unread-count`, `POST .../read`, `/notifications/read-all` | BE-12 |
+
+Every operation needs the `session-token` header. Ownership comes from the token (a parent sees only their children, a child only themselves; 404 hides other families' ids). The quiz sent to clients never carries which option is correct.
+
+```mermaid
+sequenceDiagram
+    actor P as Parent
+    actor C as Child
+    participant API as smartkin-backend
+    participant K as Kafka
+    P->>API: POST /children (link child)
+    P->>API: POST /assignments (child, activity)
+    API->>K: ACTIVITY_ASSIGNED
+    K-->>API: consumer creates the inbox notification
+    C->>API: GET /notifications, GET /lessons/{id}
+    C->>API: PUT /assignments/{id}/progress
+    C->>API: POST /assignments/{id}/quiz-attempts
+    API->>K: QUIZ_COMPLETED
+    K-->>API: consumer books the points (idempotent)
+    P->>API: GET /assignments, GET /children/{id}/points
+```
+
+`OpenApiContractTest` checks that the file parses, every `$ref` resolves, operation ids are unique and each has a 2xx response, options carry no `correct` flag, the paged lists share `PageMeta` and the existing user endpoints are not redefined.
+The frontend generates its types from this file (X-3).
 
 ## Spring Boot 4 migration notes
 

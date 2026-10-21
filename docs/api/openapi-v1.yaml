@@ -1,0 +1,614 @@
+openapi: 3.0.3
+info:
+  title: SmartKin API
+  version: 1.0.0
+  description: |
+    MVP contract of smartkin-backend (X-2). It extends the existing `/api/v1/users` and `/api/v1/user-register` operations, which do not change,
+    with the resources of the vertical slice: a parent links a child, assigns an activity, the child completes the lesson quiz and earns points,
+    and the parent follows the progress.
+
+    Conventions
+    - Every operation below requires the session token in the `session-token` header (security scheme `sessionToken`).
+    - The caller's identity and role (parent or child) come from the token; a parent only reaches their own children, a child only themselves
+      (403 otherwise, 404 when the resource does not exist or is not visible to the caller).
+    - Identifiers are UUIDs. Instants are ISO-8601 UTC. Lists that can grow are paged with `page` (0-based) and `size` (default 20, max 100).
+    - Errors use `ErrorResponse`. The `message` response header keeps the value the existing endpoints already send.
+servers:
+  - url: /api/v1
+security:
+  - sessionToken: []
+tags:
+  - name: parents
+  - name: children
+  - name: catalog
+  - name: assignments
+  - name: quiz
+  - name: rewards
+  - name: notifications
+paths:
+  /parents/me:
+    get:
+      tags: [parents]
+      operationId: getMyParentProfile
+      summary: Profile of the authenticated parent
+      responses:
+        '200': {description: Profile, content: {application/json: {schema: {$ref: '#/components/schemas/ParentProfile'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      tags: [parents]
+      operationId: putMyParentProfile
+      summary: Create or update the profile of the authenticated parent
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ParentProfileRequest'}}}
+      responses:
+        '200': {description: Profile saved, content: {application/json: {schema: {$ref: '#/components/schemas/ParentProfile'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /children:
+    get:
+      tags: [children]
+      operationId: listMyChildren
+      summary: Children linked to the authenticated parent
+      responses:
+        '200': {description: Children, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Child'}}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [children]
+      operationId: linkChild
+      summary: Link an existing user as a child of the authenticated parent
+      description: The child's account is created first with `POST /users`; this call only creates the child profile that points at it.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChildRequest'}}}
+      responses:
+        '201': {description: Child linked, content: {application/json: {schema: {$ref: '#/components/schemas/Child'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /children/{childId}:
+    parameters:
+      - {$ref: '#/components/parameters/ChildId'}
+    get:
+      tags: [children]
+      operationId: getChild
+      summary: A child (the owner parent or the child themselves)
+      responses:
+        '200': {description: Child, content: {application/json: {schema: {$ref: '#/components/schemas/Child'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      tags: [children]
+      operationId: updateChild
+      summary: Update a child's grade level and avatar (owner parent only)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChildUpdateRequest'}}}
+      responses:
+        '200': {description: Child updated, content: {application/json: {schema: {$ref: '#/components/schemas/Child'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /children/{childId}/points:
+    parameters:
+      - {$ref: '#/components/parameters/ChildId'}
+    get:
+      tags: [rewards]
+      operationId: getChildPoints
+      summary: Point balance and transactions of a child
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200': {description: Points, content: {application/json: {schema: {$ref: '#/components/schemas/PointsSummary'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /children/{childId}/achievements:
+    parameters:
+      - {$ref: '#/components/parameters/ChildId'}
+    get:
+      tags: [rewards]
+      operationId: listChildAchievements
+      summary: Achievements a child has earned
+      responses:
+        '200': {description: Achievements, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ChildAchievement'}}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /topics:
+    get:
+      tags: [catalog]
+      operationId: listTopics
+      summary: Topics of the catalog
+      responses:
+        '200': {description: Topics, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Topic'}}}}}
+  /topics/{topicId}/lessons:
+    parameters:
+      - {name: topicId, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [catalog]
+      operationId: listTopicLessons
+      summary: Published lessons of a topic (served from the Redis-cached catalog)
+      responses:
+        '200': {description: Lessons, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/LessonSummary'}}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /lessons/{lessonId}:
+    parameters:
+      - {name: lessonId, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [catalog]
+      operationId: getLesson
+      summary: Lesson content for playback
+      description: The quiz options never include which one is correct; correctness is only known to the server when it grades an attempt.
+      responses:
+        '200': {description: Lesson, content: {application/json: {schema: {$ref: '#/components/schemas/Lesson'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /activities:
+    get:
+      tags: [catalog]
+      operationId: listActivities
+      summary: Active activities, optionally of one topic
+      parameters:
+        - {name: topicId, in: query, required: false, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Activities, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Activity'}}}}}
+  /activities/{activityId}:
+    parameters:
+      - {name: activityId, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [catalog]
+      operationId: getActivity
+      summary: An activity
+      responses:
+        '200': {description: Activity, content: {application/json: {schema: {$ref: '#/components/schemas/Activity'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /assignments:
+    get:
+      tags: [assignments]
+      operationId: listAssignments
+      summary: Assignments visible to the caller
+      description: A parent sees the assignments of their children (optionally one child); a child sees their own.
+      parameters:
+        - {name: childId, in: query, required: false, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200': {description: Assignments, content: {application/json: {schema: {$ref: '#/components/schemas/AssignmentPage'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [assignments]
+      operationId: assignActivity
+      summary: Assign an activity to a child (parent only)
+      description: Publishes the `ACTIVITY_ASSIGNED` event; the child's inbox notification is created by the event consumer.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AssignmentRequest'}}}
+      responses:
+        '201': {description: Assignment created, content: {application/json: {schema: {$ref: '#/components/schemas/Assignment'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /assignments/{assignmentId}:
+    parameters:
+      - {$ref: '#/components/parameters/AssignmentId'}
+    get:
+      tags: [assignments]
+      operationId: getAssignment
+      summary: An assignment with its progress
+      responses:
+        '200': {description: Assignment, content: {application/json: {schema: {$ref: '#/components/schemas/Assignment'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /assignments/{assignmentId}/progress:
+    parameters:
+      - {$ref: '#/components/parameters/AssignmentId'}
+    get:
+      tags: [assignments]
+      operationId: getProgress
+      summary: Progress of an assignment
+      responses:
+        '200': {description: Progress, content: {application/json: {schema: {$ref: '#/components/schemas/Progress'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      tags: [assignments]
+      operationId: updateProgress
+      summary: Report progress on an assignment (the assigned child only)
+      description: The first call sets `startTime`. The percentage cannot go down; 100 sets `completionTime`.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ProgressRequest'}}}
+      responses:
+        '200': {description: Progress saved, content: {application/json: {schema: {$ref: '#/components/schemas/Progress'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /assignments/{assignmentId}/feedback:
+    parameters:
+      - {$ref: '#/components/parameters/AssignmentId'}
+    put:
+      tags: [assignments]
+      operationId: putParentFeedback
+      summary: Leave feedback on an assignment (the assigning parent only)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/FeedbackRequest'}}}
+      responses:
+        '200': {description: Feedback saved, content: {application/json: {schema: {$ref: '#/components/schemas/Progress'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /assignments/{assignmentId}/quiz-attempts:
+    parameters:
+      - {$ref: '#/components/parameters/AssignmentId'}
+    get:
+      tags: [quiz]
+      operationId: listQuizAttempts
+      summary: Quiz attempts of an assignment
+      responses:
+        '200': {description: Attempts, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/QuizAttempt'}}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      tags: [quiz]
+      operationId: submitQuizAttempt
+      summary: Submit the answers of a quiz attempt (the assigned child only)
+      description: |
+        The server grades the answers against the lesson version, stores the attempt and publishes `QUIZ_COMPLETED`; points are booked by the
+        event consumer when the quiz is passed. Answers to unknown questions are rejected. 409 when `maxAttempts` is reached.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/QuizAttemptRequest'}}}
+      responses:
+        '201': {description: Attempt graded, content: {application/json: {schema: {$ref: '#/components/schemas/QuizAttempt'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /notifications:
+    get:
+      tags: [notifications]
+      operationId: listNotifications
+      summary: Inbox of the caller
+      parameters:
+        - {name: unread, in: query, required: false, schema: {type: boolean, default: false}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200': {description: Notifications, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationPage'}}}}
+  /notifications/unread-count:
+    get:
+      tags: [notifications]
+      operationId: getUnreadNotificationCount
+      summary: Number of unread notifications of the caller
+      responses:
+        '200': {description: Count, content: {application/json: {schema: {$ref: '#/components/schemas/UnreadCount'}}}}
+  /notifications/read-all:
+    post:
+      tags: [notifications]
+      operationId: markAllNotificationsRead
+      summary: Mark every notification of the caller as read
+      responses:
+        '204': {description: Done}
+  /notifications/{notificationId}/read:
+    post:
+      tags: [notifications]
+      operationId: markNotificationRead
+      summary: Mark one notification as read
+      parameters:
+        - {name: notificationId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '204': {description: Done}
+        '404': {$ref: '#/components/responses/NotFound'}
+components:
+  securitySchemes:
+    sessionToken:
+      type: apiKey
+      in: header
+      name: session-token
+  parameters:
+    ChildId: {name: childId, in: path, required: true, schema: {type: string, format: uuid}}
+    AssignmentId: {name: assignmentId, in: path, required: true, schema: {type: string, format: uuid}}
+    Page: {name: page, in: query, required: false, schema: {type: integer, minimum: 0, default: 0}}
+    Size: {name: size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+  responses:
+    BadRequest: {description: Invalid request, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+    Forbidden: {description: The caller may not do this, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+    NotFound: {description: Not found or not visible to the caller, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+    Conflict: {description: The request conflicts with the current state, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [status, message]
+      properties:
+        status: {type: integer}
+        message: {type: string}
+    ParentProfile:
+      type: object
+      required: [parentId]
+      properties:
+        parentId: {type: string, format: uuid}
+        phoneNumber: {type: string, maxLength: 20, nullable: true}
+        address: {type: string, nullable: true}
+        profilePicture: {type: string, nullable: true}
+    ParentProfileRequest:
+      type: object
+      properties:
+        phoneNumber: {type: string, maxLength: 20}
+        address: {type: string}
+        profilePicture: {type: string}
+    Child:
+      type: object
+      required: [childId, parentId, totalPoints]
+      properties:
+        childId: {type: string, format: uuid, description: The child's backbone user id}
+        parentId: {type: string, format: uuid}
+        gradeLevel: {type: string, maxLength: 50, nullable: true}
+        avatar: {type: string, nullable: true}
+        totalPoints: {type: integer, minimum: 0}
+    ChildRequest:
+      type: object
+      required: [childUserId]
+      properties:
+        childUserId: {type: string, format: uuid}
+        gradeLevel: {type: string, maxLength: 50}
+        avatar: {type: string}
+    ChildUpdateRequest:
+      type: object
+      properties:
+        gradeLevel: {type: string, maxLength: 50}
+        avatar: {type: string}
+    Topic:
+      type: object
+      required: [topicId, name]
+      properties:
+        topicId: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string, nullable: true}
+        icon: {type: string, nullable: true}
+        ageRangeMin: {type: integer, nullable: true}
+        ageRangeMax: {type: integer, nullable: true}
+    LessonSummary:
+      type: object
+      required: [id, slug, topicId, title, locale, version]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string}
+        topicId: {type: string, format: uuid}
+        title: {type: string}
+        description: {type: string, nullable: true}
+        locale: {type: string}
+        version: {type: integer}
+    Lesson:
+      allOf:
+        - $ref: '#/components/schemas/LessonSummary'
+        - type: object
+          required: [scenes]
+          properties:
+            scenes:
+              type: array
+              items: {$ref: '#/components/schemas/Scene'}
+            quiz: {$ref: '#/components/schemas/Quiz'}
+    Scene:
+      type: object
+      required: [id, order, title]
+      properties:
+        id: {type: string}
+        order: {type: integer}
+        title: {type: string}
+        narration: {type: string, nullable: true}
+        durationMs: {type: integer, format: int64}
+        interactions:
+          type: array
+          items: {$ref: '#/components/schemas/Interaction'}
+        definition: {type: object, additionalProperties: true}
+    Interaction:
+      type: object
+      required: [id, type]
+      properties:
+        id: {type: string}
+        type: {type: string}
+        prompt: {type: string, nullable: true}
+        config: {type: object, additionalProperties: true}
+    Quiz:
+      type: object
+      required: [passingPercentage, maxAttempts, questions]
+      properties:
+        passingPercentage: {type: integer, minimum: 0, maximum: 100}
+        maxAttempts: {type: integer, minimum: 1}
+        questions:
+          type: array
+          items: {$ref: '#/components/schemas/Question'}
+    Question:
+      type: object
+      required: [id, type, prompt, options, points]
+      properties:
+        id: {type: string}
+        sceneId: {type: string, nullable: true}
+        type: {type: string}
+        prompt: {type: string}
+        points: {type: integer, minimum: 0}
+        options:
+          type: array
+          items: {$ref: '#/components/schemas/Option'}
+    Option:
+      type: object
+      required: [id, text]
+      description: Deliberately has no `correct` flag.
+      properties:
+        id: {type: string}
+        text: {type: string}
+    Activity:
+      type: object
+      required: [activityId, topicId, title, durationMinutes, pointsReward]
+      properties:
+        activityId: {type: string, format: uuid}
+        topicId: {type: string, format: uuid}
+        lessonId: {type: string, format: uuid, nullable: true, description: Lesson (MongoDB) the activity plays and grades}
+        title: {type: string}
+        description: {type: string}
+        durationMinutes: {type: integer}
+        pointsReward: {type: integer}
+    AssignmentRequest:
+      type: object
+      required: [childId, activityId]
+      properties:
+        childId: {type: string, format: uuid}
+        activityId: {type: string, format: uuid}
+        dueDate: {type: string, format: date-time, nullable: true}
+    Assignment:
+      type: object
+      required: [assignmentId, childId, activityId, assignedBy, assignedAt]
+      properties:
+        assignmentId: {type: string, format: uuid}
+        childId: {type: string, format: uuid}
+        activityId: {type: string, format: uuid}
+        activityTitle: {type: string}
+        lessonId: {type: string, format: uuid, nullable: true}
+        assignedBy: {type: string, format: uuid}
+        assignedAt: {type: string, format: date-time}
+        dueDate: {type: string, format: date-time, nullable: true}
+        progress: {$ref: '#/components/schemas/Progress'}
+    AssignmentPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [content]
+          properties:
+            content:
+              type: array
+              items: {$ref: '#/components/schemas/Assignment'}
+    Progress:
+      type: object
+      required: [assignmentId, completionPercentage]
+      properties:
+        assignmentId: {type: string, format: uuid}
+        completionPercentage: {type: integer, minimum: 0, maximum: 100}
+        startTime: {type: string, format: date-time, nullable: true}
+        lastAccessed: {type: string, format: date-time, nullable: true}
+        completionTime: {type: string, format: date-time, nullable: true}
+        score: {type: integer, nullable: true}
+        parentFeedback: {type: string, nullable: true}
+    ProgressRequest:
+      type: object
+      required: [completionPercentage]
+      properties:
+        completionPercentage: {type: integer, minimum: 0, maximum: 100}
+    FeedbackRequest:
+      type: object
+      required: [parentFeedback]
+      properties:
+        parentFeedback: {type: string, minLength: 1}
+    QuizAttemptRequest:
+      type: object
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          items:
+            type: object
+            required: [questionId, selectedOptionIds]
+            properties:
+              questionId: {type: string}
+              selectedOptionIds:
+                type: array
+                items: {type: string}
+    QuizAttempt:
+      type: object
+      required: [attemptId, assignmentId, lessonId, attemptNumber, score, maxScore, percentage, passed, completedAt]
+      properties:
+        attemptId: {type: string, format: uuid}
+        assignmentId: {type: string, format: uuid}
+        lessonId: {type: string, format: uuid}
+        lessonVersion: {type: integer}
+        attemptNumber: {type: integer, minimum: 1}
+        score: {type: integer}
+        maxScore: {type: integer}
+        percentage: {type: integer, minimum: 0, maximum: 100}
+        passed: {type: boolean}
+        completedAt: {type: string, format: date-time}
+        answers:
+          type: array
+          items:
+            type: object
+            required: [questionId, correct, pointsAwarded]
+            properties:
+              questionId: {type: string}
+              selectedOptionIds:
+                type: array
+                items: {type: string}
+              correct: {type: boolean}
+              pointsAwarded: {type: integer}
+              feedback: {type: string, nullable: true}
+    PointsSummary:
+      type: object
+      required: [childId, totalPoints, transactions]
+      properties:
+        childId: {type: string, format: uuid}
+        totalPoints: {type: integer, minimum: 0}
+        transactions:
+          allOf:
+            - $ref: '#/components/schemas/PageMeta'
+            - type: object
+              required: [content]
+              properties:
+                content:
+                  type: array
+                  items: {$ref: '#/components/schemas/PointTransaction'}
+    PointTransaction:
+      type: object
+      required: [pointId, amount, transactionType, sourceType, sourceId, transactionDate]
+      properties:
+        pointId: {type: string, format: uuid}
+        amount: {type: integer}
+        transactionType: {type: string, enum: [EARN, SPEND]}
+        sourceType: {type: string}
+        sourceId: {type: string, format: uuid}
+        description: {type: string, nullable: true}
+        transactionDate: {type: string, format: date-time}
+    ChildAchievement:
+      type: object
+      required: [childAchievementId, achievementId, name, pointsValue, earnedAt]
+      properties:
+        childAchievementId: {type: string, format: uuid}
+        achievementId: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: string}
+        icon: {type: string, nullable: true}
+        pointsValue: {type: integer}
+        earnedAt: {type: string, format: date-time}
+    Notification:
+      type: object
+      required: [notificationId, type, title, message, createdAt, read]
+      properties:
+        notificationId: {type: string, format: uuid}
+        type: {type: string, enum: [ASSIGNMENT, REMINDER, ACHIEVEMENT, REWARD, GOAL, SYSTEM]}
+        title: {type: string}
+        message: {type: string}
+        relatedEntityId: {type: string, format: uuid, nullable: true}
+        createdAt: {type: string, format: date-time}
+        read: {type: boolean}
+        readAt: {type: string, format: date-time, nullable: true}
+    NotificationPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [content]
+          properties:
+            content:
+              type: array
+              items: {$ref: '#/components/schemas/Notification'}
+    UnreadCount:
+      type: object
+      required: [count]
+      properties:
+        count: {type: integer, minimum: 0}
+    PageMeta:
+      type: object
+      required: [page, size, totalElements, totalPages]
+      properties:
+        page: {type: integer}
+        size: {type: integer}
+        totalElements: {type: integer, format: int64}
+        totalPages: {type: integer}
