@@ -9,7 +9,7 @@ Este análisis se hizo leyendo el código, el historial de git, los CHANGELOG y 
 
 ## 0. Estado de ejecución
 
-Actualizado: 2026-10-21.
+Actualizado: 2026-10-21 (Épica 1 completa; siguiente: BE-4).
 
 | Ticket | Estado | Nota |
 |---|---|---|
@@ -20,6 +20,8 @@ Actualizado: 2026-10-21.
 | BE-2 | Bloqueado: requiere QA | Necesita Vault, Config Server y Supabase reales. |
 | BE-3 | Bloqueado: requiere QA | Crear topics de Kafka y fijar la contraseña de `smartkin_app` en el entorno real. |
 | X-1 | Bloqueado | Depende de BE-2. |
+| X-2 | Hecho | Rama `sak-21-mvp-openapi-contract`: `docs/api/openapi-v1.yaml` (25 operaciones), decisión D-6 y `OpenApiContractTest`. 200 pruebas en verde. |
+| X-3 | Hecho | Frontend, rama `sak-22-api-types`: `pnpm gen:api` / `pnpm check:api` y tipos en `src/app/shared/api`. |
 
 ---
 
