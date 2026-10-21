@@ -5,6 +5,7 @@ import com.umdc.smartkin.jpa.domain.ParentEntity;
 import com.umdc.smartkin.jpa.repository.ChildRepository;
 import com.umdc.smartkin.jpa.repository.ParentRepository;
 import com.umdc.smartkin.mapper.ParentMapperImpl;
+import com.umdc.smartkin.security.access.AccessPolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,7 +40,7 @@ class ParentServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new ParentServiceImpl(parentRepository, childRepository, new ParentMapperImpl());
+        service = new ParentServiceImpl(parentRepository, new AccessPolicy(parentRepository, childRepository), new ParentMapperImpl());
     }
 
     private static ParentEntity parent() {

@@ -10,6 +10,8 @@ import com.umdc.smartkin.jpa.domain.ParentEntity;
 import com.umdc.smartkin.jpa.repository.ChildRepository;
 import com.umdc.smartkin.jpa.repository.ParentRepository;
 import com.umdc.smartkin.mapper.ChildMapper;
+import com.umdc.smartkin.security.access.AccessPolicy;
+import com.umdc.smartkin.security.access.ChildAccess;
 import com.umdc.smartkin.util.JwtUtil;
 import feign.FeignException;
 import org.slf4j.Logger;
@@ -23,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 
 /// Default implementation of [ChildService]. The caller is the `uid` claim of the session token; a parent reaches
 /// only their own children and a child only themselves (a child that is not visible answers 404, so ids of other families stay hidden).
@@ -35,6 +38,7 @@ public class ChildServiceImpl implements ChildService {
     private final ChildRepository childRepository;
     private final BackboneClient backboneClient;
     private final ChildMapper childMapper;
+    private final AccessPolicy accessPolicy;
 
     /// Creates the service.
     ///
@@ -42,12 +46,14 @@ public class ChildServiceImpl implements ChildService {
     /// @param childRepository  the child repository
     /// @param backboneClient   used to check that the child's user exists
     /// @param childMapper      the entity mapper
+    /// @param accessPolicy     who may reach which child
     public ChildServiceImpl(ParentRepository parentRepository, ChildRepository childRepository,
-                            BackboneClient backboneClient, ChildMapper childMapper) {
+                            BackboneClient backboneClient, ChildMapper childMapper, AccessPolicy accessPolicy) {
         this.parentRepository = parentRepository;
         this.childRepository = childRepository;
         this.backboneClient = backboneClient;
         this.childMapper = childMapper;
+        this.accessPolicy = accessPolicy;
     }
 
     @Override
@@ -57,7 +63,7 @@ public class ChildServiceImpl implements ChildService {
         if (callerId == null) {
             return error(HttpStatus.FORBIDDEN, SmartKinAppConstants.CALLER_UNKNOWN_MESSAGE);
         }
-        if (!parentRepository.existsById(callerId)) {
+        if (!accessPolicy.isParent(callerId)) {
             return error(HttpStatus.FORBIDDEN, SmartKinAppConstants.NOT_A_PARENT_MESSAGE);
         }
         return ResponseEntity.ok(childRepository.findAllByParentId(callerId).stream().map(childMapper::toResponse).toList());
@@ -111,13 +117,7 @@ public class ChildServiceImpl implements ChildService {
         if (callerId == null) {
             return error(HttpStatus.FORBIDDEN, SmartKinAppConstants.CALLER_UNKNOWN_MESSAGE);
         }
-        if (callerId.equals(childId)) {
-            return found(childRepository.findById(childId));
-        }
-        if (!parentRepository.existsById(callerId)) {
-            return error(HttpStatus.FORBIDDEN, SmartKinAppConstants.NOT_A_PARENT_MESSAGE);
-        }
-        return found(ownedChild(callerId, childId));
+        return answer(accessPolicy.viewChild(callerId, childId), access -> ResponseEntity.ok(childMapper.toResponse(access.child())));
     }
 
     @Override
@@ -127,25 +127,20 @@ public class ChildServiceImpl implements ChildService {
         if (callerId == null) {
             return error(HttpStatus.FORBIDDEN, SmartKinAppConstants.CALLER_UNKNOWN_MESSAGE);
         }
-        if (!parentRepository.existsById(callerId)) {
-            return error(HttpStatus.FORBIDDEN, SmartKinAppConstants.NOT_A_PARENT_MESSAGE);
-        }
-        var child = ownedChild(callerId, childId);
-        if (child.isEmpty()) {
-            return error(HttpStatus.NOT_FOUND, SmartKinAppConstants.CHILD_NOT_FOUND_MESSAGE);
-        }
-        child.get().setGradeLevel(request.gradeLevel());
-        child.get().setAvatar(request.avatar());
-        return ResponseEntity.ok(childMapper.toResponse(childRepository.save(child.get())));
+        return answer(accessPolicy.manageChild(callerId, childId), access -> {
+            var child = access.child();
+            child.setGradeLevel(request.gradeLevel());
+            child.setAvatar(request.avatar());
+            return ResponseEntity.ok(childMapper.toResponse(childRepository.save(child)));
+        });
     }
 
-    private Optional<ChildEntity> ownedChild(UUID parentId, UUID childId) {
-        return childRepository.findById(childId).filter(child -> parentId.equals(child.getParent().getId()));
-    }
-
-    private ResponseEntity<ChildResponse> found(Optional<ChildEntity> child) {
-        return child.map(entity -> ResponseEntity.ok(childMapper.toResponse(entity)))
-                .orElseGet(() -> error(HttpStatus.NOT_FOUND, SmartKinAppConstants.CHILD_NOT_FOUND_MESSAGE));
+    private ResponseEntity<ChildResponse> answer(ChildAccess access, Function<ChildAccess, ResponseEntity<ChildResponse>> whenAllowed) {
+        return switch (access.decision()) {
+            case OWNER, SELF -> whenAllowed.apply(access);
+            case NOT_VISIBLE -> error(HttpStatus.NOT_FOUND, SmartKinAppConstants.CHILD_NOT_FOUND_MESSAGE);
+            case FORBIDDEN -> error(HttpStatus.FORBIDDEN, SmartKinAppConstants.NOT_A_PARENT_MESSAGE);
+        };
     }
 
     private static <T> ResponseEntity<T> error(HttpStatus status, String message) {
