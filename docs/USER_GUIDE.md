@@ -76,6 +76,16 @@ A parent gives an activity to one of their children, and both can follow it. All
 
 Assigning an activity also sends the child a notification in their inbox. If the notification service is down at that moment the assignment is still created and only the notification is missing.
 
+## Progress and feedback (new)
+
+| Operation | Method and path | Who | Notes |
+| --- | --- | --- | --- |
+| Read the progress | `GET /api/v1/assignments/{assignmentId}/progress` | the parent or the child | 0% with no dates until the child starts |
+| Report progress | `PUT /api/v1/assignments/{assignmentId}/progress` | the assigned child | Body `completionPercentage` 0 to 100. It cannot go down; 100 marks the activity as completed and lets the parent assign it again |
+| Leave feedback | `PUT /api/v1/assignments/{assignmentId}/feedback` | the parent who assigned it | Body `parentFeedback`, not empty. The child sees it in the progress |
+
+A parent cannot report progress for the child, and a child cannot write feedback (both answer 403). Anyone outside the family gets 404.
+
 ## Catalog (new)
 
 Any signed-in user can browse what a child can learn. All calls are `GET` and carry the session token.

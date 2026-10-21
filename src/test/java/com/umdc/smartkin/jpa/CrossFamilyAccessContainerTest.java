@@ -3,10 +3,13 @@ package com.umdc.smartkin.jpa;
 import com.umdc.smartkin.api.v1.service.AssignmentServiceImpl;
 import com.umdc.smartkin.api.v1.service.ChildServiceImpl;
 import com.umdc.smartkin.api.v1.service.ParentServiceImpl;
+import com.umdc.smartkin.api.v1.service.ProgressServiceImpl;
 import com.umdc.smartkin.api.v1.to.AssignmentRequest;
 import com.umdc.smartkin.api.v1.to.ChildRequest;
 import com.umdc.smartkin.api.v1.to.ChildUpdateRequest;
+import com.umdc.smartkin.api.v1.to.FeedbackRequest;
 import com.umdc.smartkin.api.v1.to.ParentProfileRequest;
+import com.umdc.smartkin.api.v1.to.ProgressRequest;
 import com.umdc.smartkin.client.backbone.BackboneClient;
 import com.umdc.smartkin.config.ClockConfig;
 import com.umdc.smartkin.config.DataBaseConfig;
@@ -70,7 +73,7 @@ class CrossFamilyAccessContainerTest {
     @SpringBootConfiguration
     @EnableAutoConfiguration
     @Import({DataBaseConfig.class, ClockConfig.class, AccessPolicy.class, ChildServiceImpl.class, ParentServiceImpl.class,
-            AssignmentServiceImpl.class, ChildMapperImpl.class, ParentMapperImpl.class, AssignmentMapperImpl.class})
+            AssignmentServiceImpl.class, ProgressServiceImpl.class, ChildMapperImpl.class, ParentMapperImpl.class, AssignmentMapperImpl.class})
     static class AccessTestApplication {
     }
 
@@ -86,6 +89,8 @@ class CrossFamilyAccessContainerTest {
     private EntityManager entityManager;
     @Autowired
     private AssignmentServiceImpl assignments;
+    @Autowired
+    private ProgressServiceImpl progress;
     @Autowired
     private TopicRepository topicRepository;
     @Autowired
@@ -243,5 +248,52 @@ class CrossFamilyAccessContainerTest {
         assertEquals(HttpStatus.NOT_FOUND, assignments.get(tokenFor(parentB), ofA1).getStatusCode());
         assertEquals(HttpStatus.NOT_FOUND, assignments.get(tokenFor(childA2), ofA1).getStatusCode());
         assertEquals(HttpStatus.NOT_FOUND, assignments.get(tokenFor(stranger), ofA1).getStatusCode());
+    }
+
+    @Test
+    void progressBelongsToTheChildAndIsReadOnlyForEveryoneElse() {
+        var activity = newActivity();
+        var id = assignments.assign(tokenFor(parentA), new AssignmentRequest(childA1, activity, null)).getBody().assignmentId();
+        entityManager.flush();
+        entityManager.clear();
+
+        assertEquals(HttpStatus.OK, progress.update(tokenFor(childA1), id, new ProgressRequest(40)).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, progress.update(tokenFor(parentA), id, new ProgressRequest(90)).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, progress.update(tokenFor(childA2), id, new ProgressRequest(90)).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, progress.update(tokenFor(parentB), id, new ProgressRequest(90)).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, progress.get(tokenFor(parentB), id).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, progress.get(tokenFor(childA2), id).getStatusCode());
+        assertEquals(40, progress.get(tokenFor(parentA), id).getBody().completionPercentage());
+        assertEquals(HttpStatus.BAD_REQUEST, progress.update(tokenFor(childA1), id, new ProgressRequest(10)).getStatusCode());
+    }
+
+    @Test
+    void onlyTheAssigningParentLeavesFeedback() {
+        var activity = newActivity();
+        var id = assignments.assign(tokenFor(parentA), new AssignmentRequest(childA1, activity, null)).getBody().assignmentId();
+        entityManager.flush();
+        entityManager.clear();
+
+        assertEquals(HttpStatus.NOT_FOUND, progress.feedback(tokenFor(parentB), id, new FeedbackRequest("hi")).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, progress.feedback(tokenFor(childA1), id, new FeedbackRequest("hi")).getStatusCode());
+        var saved = progress.feedback(tokenFor(parentA), id, new FeedbackRequest("Nice start")).getBody();
+        assertEquals("Nice start", saved.parentFeedback());
+        assertEquals(0, saved.completionPercentage());
+        assertEquals("Nice start", assignments.get(tokenFor(childA1), id).getBody().progress().parentFeedback());
+    }
+
+    @Test
+    void completingAnAssignmentFreesTheActivityToBeAssignedAgain() {
+        var activity = newActivity();
+        var id = assignments.assign(tokenFor(parentA), new AssignmentRequest(childA1, activity, null)).getBody().assignmentId();
+        assertEquals(HttpStatus.CONFLICT, assignments.assign(tokenFor(parentA), new AssignmentRequest(childA1, activity, null)).getStatusCode());
+
+        var done = progress.update(tokenFor(childA1), id, new ProgressRequest(100)).getBody();
+        entityManager.flush();
+        entityManager.clear();
+
+        assertEquals(100, done.completionPercentage());
+        assertEquals(true, done.completionTime() != null && done.startTime() != null);
+        assertEquals(HttpStatus.CREATED, assignments.assign(tokenFor(parentA), new AssignmentRequest(childA1, activity, null)).getStatusCode());
     }
 }

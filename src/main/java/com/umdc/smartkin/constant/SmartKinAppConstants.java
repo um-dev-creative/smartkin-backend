@@ -30,6 +30,9 @@ public final class SmartKinAppConstants {
     public static final String INVALID_PAGE_MESSAGE = "page must be 0 or more and size between 1 and 100.";
     public static final int MAX_PAGE_SIZE = 100;
     public static final String ACCESS_DENIED_MESSAGE = "You cannot access this resource.";
+    public static final String ONLY_THE_CHILD_MESSAGE = "Only the assigned child can report progress.";
+    public static final String ONLY_THE_PARENT_MESSAGE = "Only the parent who assigned the activity can do this.";
+    public static final String PROGRESS_CANNOT_DECREASE_MESSAGE = "The completion percentage cannot go down.";
     public static final String CALLER_UNKNOWN_MESSAGE = "The session token does not identify a user.";
     public static final String NOT_A_PARENT_MESSAGE = "Only a parent can do this.";
     public static final String CHILD_CANNOT_BE_PARENT_MESSAGE = "A child cannot have a parent profile.";

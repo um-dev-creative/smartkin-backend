@@ -379,6 +379,35 @@ sequenceDiagram
 
 Tests: `AssignmentServiceImplTest` (every branch, publish-after-commit, no publish on rollback, a failing publisher), `AssignmentControllerTest`, `AssignmentMapperTest`, three repository cases in `JpaMappingContainerTest` (paging order, open/closed assignment, progress lookup) and two cases in `CrossFamilyAccessContainerTest` (two families assigning, listing and reading on a real PostgreSQL). `ControllerContractConformanceTest` also checks `AssignmentController`.
 
+## Progress API (BE-8)
+
+`ProgressApi`/`ProgressController` share the `/api/v1/assignments` base with the assignments controller and implement `getProgress`, `updateProgress` and `putParentFeedback`; `ProgressServiceImpl` holds the rules.
+
+| Operation | Who | Rule | Answers |
+| --- | --- | --- | --- |
+| `GET /assignments/{id}/progress` | the parent or the child of that assignment | Before the child starts it is `0%` with no times (it is not a 404) | 200, 403 (no user in token), 404 |
+| `PUT /assignments/{id}/progress` | the assigned child only | The first report creates the row and sets `startTime`; every report sets `lastAccessed`; the percentage cannot go down (400); `100` sets `completionTime` once and a later `100` leaves it unchanged | 200, 400, 403 (the parent, or no user), 404 |
+| `PUT /assignments/{id}/feedback` | the assigning parent only | Stores `parentFeedback`; if the child has not started it creates an empty row (0%, no start time) | 200, 400, 403 (the child, or no user), 404 |
+
+Anyone who cannot reach the child (another family, a sibling, a user without profile) gets 404, like for assignments. `score` is not written here: the quiz does it in BE-9.
+
+**Concurrency.** Updates read the assignment with `AssignedActivityRepository.findForUpdateById` (`PESSIMISTIC_WRITE`, `select ... for update`). Two simultaneous first reports of the same assignment therefore run one after the other: the first creates the progress row, the second finds it. This is what prevents a violation of the unique key `activity_progress.assignment_id`, so the contract needs no 409.
+
+**Link with assignments.** An assignment stops being "open" (and can be assigned again, see BE-7) when its progress has a `completionTime`, that is, when the child reports 100.
+
+```mermaid
+stateDiagram-v2
+    [*] --> NotStarted: assignment created
+    NotStarted --> InProgress: child reports 1..99 (startTime set)
+    InProgress --> InProgress: child reports a higher percentage
+    NotStarted --> Completed: child reports 100
+    InProgress --> Completed: child reports 100 (completionTime set once)
+    Completed --> Completed: 100 again (no change)
+    Completed --> [*]: the activity can be assigned again
+```
+
+Tests: `ProgressServiceImplTest` (every branch), `ProgressControllerTest` (delegation, paths, bean validation), a lock case in `JpaMappingContainerTest`, and three cases in `CrossFamilyAccessContainerTest` (only the child reports, only the assigning parent comments, completing frees the activity to be assigned again). `ControllerContractConformanceTest` also checks `ProgressController`.
+
 ## Spring Boot 4 migration notes
 
 - `@EntityScan` lives in `org.springframework.boot.persistence.autoconfigure`.

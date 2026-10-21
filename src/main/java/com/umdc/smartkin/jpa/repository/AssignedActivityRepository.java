@@ -5,9 +5,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -49,4 +52,15 @@ public interface AssignedActivityRepository extends JpaRepository<AssignedActivi
               and not exists (select p.id from ActivityProgressEntity p where p.assignment = a and p.completionTime is not null)
             """)
     boolean existsOpenAssignment(@Param("childId") UUID childId, @Param("activityId") UUID activityId);
+
+    /**
+     * Loads an assignment holding a write lock until the transaction ends, so two concurrent progress updates of the same assignment
+     * run one after the other (the first one creates the progress row, the second one finds it).
+     *
+     * @param id the assignment's id
+     * @return the locked assignment
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select a from AssignedActivityEntity a where a.id = :id")
+    Optional<AssignedActivityEntity> findForUpdateById(@Param("id") UUID id);
 }
