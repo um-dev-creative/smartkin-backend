@@ -60,6 +60,8 @@ A parent can now keep a profile and link children to it. All calls carry the ses
 | Read a child | `GET /api/v1/children/{childId}` | The parent, or the child themselves. Another family's child answers 404 |
 | Edit a child | `PUT /api/v1/children/{childId}` | Parent only; grade level and avatar |
 
+Privacy between families is enforced on every call: a parent only ever sees and edits their own children, a child only sees themselves and cannot edit anything, and asking for a child of another family answers **404** exactly as if it did not exist. A user with neither a parent nor a child profile gets 403.
+
 Errors return the HTTP status and the reason in the `message-error` header. Nothing existing changes. A user whose verification code is not completed gets 403 here.
 
 ## API contract for the MVP

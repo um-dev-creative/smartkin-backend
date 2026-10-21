@@ -202,6 +202,7 @@ as environment variables for the private Repsy repository. The workflow does not
 | `JpaMappingContainerTest` | Flyway baseline on a PostgreSQL 17 Testcontainer, CRUD round trips of the 13 entities, the 4 enums and the cascade |
 
 | `OpenApiContractTest` | `docs/api/openapi-v1.yaml` is well formed and keeps its invariants |
+| `AccessPolicyTest`, `CrossFamilyAccessContainerTest` | Ownership rules, including the cross-family cases on a real PostgreSQL |
 | `ControllerContractConformanceTest` | The implemented controllers match the contract (operation id, method, path) |
 
 Docker must be running for `JpaMappingContainerTest`.
@@ -281,6 +282,37 @@ flowchart TD
 
 Tests: `ParentServiceImplTest`, `ChildServiceImplTest` (every branch, including the cross-family cases), `ParentChildControllersTest` (delegation, paths, headers and bean validation), `ParentChildMappersTest`, a repository case in `JpaMappingContainerTest`, and `ControllerContractConformanceTest`, which compares the operation id, HTTP method and path of each implemented controller with `docs/api/openapi-v1.yaml`; every later controller ticket adds its controller to that test.
 The contract was amended in this ticket: errors are status plus `message-error` header, not a JSON `ErrorResponse` (see D-6).
+
+## Ownership rules: `AccessPolicy` (BE-5)
+
+Who may reach which child is decided in one place, `com.umdc.smartkin.security.access.AccessPolicy`, and every endpoint that touches a child asks it instead of re-implementing the rule (BE-7 assignments, BE-8 progress, BE-9 quiz and BE-10 points will).
+There is no role claim in the token: a user is a parent when a `parent` row has their id and a child when a `child` row does.
+
+| Method | Who is allowed | Decisions |
+| --- | --- | --- |
+| `viewChild(callerId, childId)` | the child themselves, or the parent the child is linked to | `SELF`, `OWNER`, `NOT_VISIBLE`, `FORBIDDEN` |
+| `manageChild(callerId, childId)` | only the linked parent (a child never manages anyone, themselves included) | `OWNER`, `NOT_VISIBLE`, `FORBIDDEN` |
+| `isParent(id)`, `isChild(id)` | role checks | boolean |
+
+`ChildAccess` carries the decision and, when allowed, the loaded `ChildEntity`, so the caller does not query it twice. The services map the decision to HTTP the same way everywhere: `OWNER`/`SELF` proceed, `NOT_VISIBLE` answers **404** (the child is missing or belongs to another family, so its id is not revealed) and `FORBIDDEN` answers **403** (the caller has no right to this kind of access at all).
+
+```mermaid
+flowchart TD
+    A[callerId, childId] --> B{Operation}
+    B -- view --> C{callerId = childId?}
+    C -- yes --> D{child row exists?}
+    D -- yes --> S[SELF]
+    D -- no --> N[NOT_VISIBLE 404]
+    C -- no --> P
+    B -- manage --> P{caller has a parent row?}
+    P -- no --> F[FORBIDDEN 403]
+    P -- yes --> Q{child linked to caller?}
+    Q -- yes --> O[OWNER]
+    Q -- no --> N
+```
+
+`ChildServiceImpl` and `ParentServiceImpl` now use the policy; their behavior and answers did not change (their tests pass unmodified apart from how the service is built).
+Tests: `AccessPolicyTest` covers every cell of the table, and `CrossFamilyAccessContainerTest` runs the real services over PostgreSQL with two families and a user without profile: a parent lists, reads and changes only their own children, another family's child is a 404 and is left untouched, a child sees only themselves and changes nobody, a user without profile reaches nothing, and a family's child cannot be linked by another parent.
 
 ## Spring Boot 4 migration notes
 

@@ -9,7 +9,7 @@ Este análisis se hizo leyendo el código, el historial de git, los CHANGELOG y 
 
 ## 0. Estado de ejecución
 
-Actualizado: 2026-10-21 (Épica 1 completa; siguiente: BE-4).
+Actualizado: 2026-10-21 (Épica 1 completa; BE-4 y BE-5 con PR abierto; siguiente: BE-6).
 
 | Ticket | Estado | Nota |
 |---|---|---|
@@ -17,6 +17,7 @@ Actualizado: 2026-10-21 (Épica 1 completa; siguiente: BE-4).
 | FE-1 | Hecho | La cadena ng-1 → ng-5 → rd-2 quedó en `development` (solo local). `pnpm test:server` en verde. Las specs de Angular tienen 27 de 45 fallos previos (`community-member`, `stage`, `partner`, `not-found`, `verify-code`), que no vienen de la migración; se corrigen en FE-4 y FE-15. |
 | FE-3 | Hecho | Rama `sak-8-fix-auth-session-id`, mergeada en `development`. Además se corrigió un `logic.isValidUUID` indefinido. 25 pruebas del BFF en verde. |
 | BE-4 | Hecho (PR abierto) | Rama `sak-24-parent-child-profiles`: perfiles de padre e hijo, 6 operaciones, 100% de cobertura de métodos en las clases nuevas. Enmienda al contrato: errores como estado + header `message-error`. |
+| BE-5 | Hecho (PR abierto, apilado sobre BE-4) | Rama `sak-25-access-policy`: `AccessPolicy` reutilizable y pruebas de acceso cruzado entre dos familias sobre PostgreSQL. 248 pruebas en verde. |
 | FE-2 | Bloqueado: acción manual | El token de Vault está en el commit `2eb6965` (2025-08-01, `run-local.sh`). Debe rotarse en Vault; no se puede hacer desde el repo. |
 | BE-2 | Bloqueado: requiere QA | Necesita Vault, Config Server y Supabase reales. |
 | BE-3 | Bloqueado: requiere QA | Crear topics de Kafka y fijar la contraseña de `smartkin_app` en el entorno real. |

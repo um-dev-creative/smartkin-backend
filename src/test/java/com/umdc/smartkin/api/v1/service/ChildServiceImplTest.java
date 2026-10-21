@@ -8,6 +8,7 @@ import com.umdc.smartkin.jpa.domain.ParentEntity;
 import com.umdc.smartkin.jpa.repository.ChildRepository;
 import com.umdc.smartkin.jpa.repository.ParentRepository;
 import com.umdc.smartkin.mapper.ChildMapperImpl;
+import com.umdc.smartkin.security.access.AccessPolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,7 +54,8 @@ class ChildServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new ChildServiceImpl(parentRepository, childRepository, backboneClient, new ChildMapperImpl());
+        service = new ChildServiceImpl(parentRepository, childRepository, backboneClient, new ChildMapperImpl(),
+                new AccessPolicy(parentRepository, childRepository));
     }
 
     private static ParentEntity parent(UUID id) {
