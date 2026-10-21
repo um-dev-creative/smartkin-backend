@@ -365,4 +365,86 @@ class JpaMappingContainerTest {
 
         assertTrue(names.indexOf("aaa-first") < names.indexOf("zzz-last"));
     }
+
+    private AssignedActivityEntity assign(ChildEntity child, ActivityEntity activity, ParentEntity parent, Instant assignedAt) {
+        var assignment = new AssignedActivityEntity();
+        assignment.setChild(child);
+        assignment.setActivity(activity);
+        assignment.setAssignedBy(parent);
+        assignment.setAssignedAt(assignedAt);
+        return assignments.save(assignment);
+    }
+
+    @Test
+    void pagesAssignmentsByChildAndByParentNewestFirst() {
+        var parent = newParent();
+        var other = newParent();
+        var child = newChild(parent);
+        var sibling = newChild(parent);
+        var stranger = newChild(other);
+        var activity = newActivity();
+        var oldest = assign(child, activity, parent, Instant.parse("2026-01-01T00:00:00Z"));
+        var newest = assign(child, activity, parent, Instant.parse("2026-03-01T00:00:00Z"));
+        assign(sibling, activity, parent, Instant.parse("2026-02-01T00:00:00Z"));
+        assign(stranger, activity, other, Instant.parse("2026-02-01T00:00:00Z"));
+        flushAndClear();
+
+        var ofChild = assignments.findByChildId(child.getId(), org.springframework.data.domain.PageRequest.of(0, 10,
+                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "assignedAt")));
+        var ofParent = assignments.findByChildParentId(parent.getId(), org.springframework.data.domain.PageRequest.of(0, 2,
+                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "assignedAt")));
+
+        assertEquals(java.util.List.of(newest.getId(), oldest.getId()), ofChild.getContent().stream().map(AssignedActivityEntity::getId).toList());
+        assertEquals(3, ofParent.getTotalElements());
+        assertEquals(2, ofParent.getTotalPages());
+        assertEquals(2, ofParent.getContent().size());
+        assertEquals("Balance your screen time", ofChild.getContent().get(0).getActivity().getTitle());
+    }
+
+    @Test
+    void anAssignmentIsOpenUntilTheChildCompletesIt() {
+        var parent = newParent();
+        var child = newChild(parent);
+        var otherChild = newChild(parent);
+        var activity = newActivity();
+        var assignment = assign(child, activity, parent, Instant.now());
+        flushAndClear();
+
+        assertTrue(assignments.existsOpenAssignment(child.getId(), activity.getId()));
+        assertTrue(!assignments.existsOpenAssignment(otherChild.getId(), activity.getId()));
+
+        var progress = new ActivityProgressEntity();
+        progress.setAssignment(assignments.getReferenceById(assignment.getId()));
+        progress.setCompletionPercentage(50);
+        progresses.save(progress);
+        flushAndClear();
+        assertTrue(assignments.existsOpenAssignment(child.getId(), activity.getId()));
+
+        var stored = progresses.findByAssignmentId(assignment.getId()).orElseThrow();
+        stored.setCompletionPercentage(100);
+        stored.setCompletionTime(Instant.now());
+        flushAndClear();
+
+        assertTrue(!assignments.existsOpenAssignment(child.getId(), activity.getId()));
+    }
+
+    @Test
+    void findsTheProgressOfSeveralAssignmentsAtOnce() {
+        var parent = newParent();
+        var child = newChild(parent);
+        var activity = newActivity();
+        var started = assign(child, activity, parent, Instant.now());
+        var notStarted = assign(child, activity, parent, Instant.now());
+        var progress = new ActivityProgressEntity();
+        progress.setAssignment(started);
+        progress.setCompletionPercentage(10);
+        progresses.save(progress);
+        flushAndClear();
+
+        var found = progresses.findAllByAssignmentIdIn(java.util.List.of(started.getId(), notStarted.getId()));
+
+        assertEquals(1, found.size());
+        assertEquals(started.getId(), found.get(0).getAssignment().getId());
+        assertTrue(progresses.findByAssignmentId(notStarted.getId()).isEmpty());
+    }
 }

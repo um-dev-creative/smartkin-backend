@@ -64,6 +64,18 @@ Privacy between families is enforced on every call: a parent only ever sees and 
 
 Errors return the HTTP status and the reason in the `message-error` header. Nothing existing changes. A user whose verification code is not completed gets 403 here.
 
+## Assignments (new)
+
+A parent gives an activity to one of their children, and both can follow it. All calls carry the session token.
+
+| Operation | Method and path | Notes |
+| --- | --- | --- |
+| Assign an activity | `POST /api/v1/assignments` | Body `childId`, `activityId`, optional `dueDate` (must be in the future). Parent only, and only for their own children. 409 if the child already has that activity assigned and not completed |
+| List assignments | `GET /api/v1/assignments` | A parent sees all their children's (add `?childId=` for one); a child sees their own. Newest first, paged with `page` (from 0) and `size` (1 to 100, default 20) |
+| Read an assignment | `GET /api/v1/assignments/{assignmentId}` | Includes the child's progress once they start. An assignment of another family answers 404 |
+
+Assigning an activity also sends the child a notification in their inbox. If the notification service is down at that moment the assignment is still created and only the notification is missing.
+
 ## Catalog (new)
 
 Any signed-in user can browse what a child can learn. All calls are `GET` and carry the session token.

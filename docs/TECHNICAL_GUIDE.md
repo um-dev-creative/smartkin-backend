@@ -202,7 +202,7 @@ as environment variables for the private Repsy repository. The workflow does not
 | `JpaMappingContainerTest` | Flyway baseline on a PostgreSQL 17 Testcontainer, CRUD round trips of the 13 entities, the 4 enums and the cascade |
 
 | `OpenApiContractTest` | `docs/api/openapi-v1.yaml` is well formed and keeps its invariants |
-| `AccessPolicyTest`, `CrossFamilyAccessContainerTest` | Ownership rules, including the cross-family cases on a real PostgreSQL |
+| `AccessPolicyTest`, `CrossFamilyAccessContainerTest` (profiles and assignments) | Ownership rules, including the cross-family cases on a real PostgreSQL |
 | `ControllerContractConformanceTest` | The implemented controllers match the contract (operation id, method, path) |
 
 Docker must be running for `JpaMappingContainerTest`.
@@ -343,6 +343,41 @@ flowchart LR
 ```
 
 Tests: `CatalogServiceImplTest`, `CatalogControllerTest`, `CatalogMapperTest`, and four cases in `JpaMappingContainerTest` (V4 column, lesson id round trip with old activities, active filtering, topic order, on a real PostgreSQL). `ControllerContractConformanceTest` now also checks `CatalogController` against the contract.
+
+## Assignments API (BE-7)
+
+`AssignmentApi`/`AssignmentController` (`/api/v1/assignments`) implement `assignActivity`, `listAssignments` and `getAssignment`; `AssignmentServiceImpl` holds the rules and asks `AccessPolicy` who may reach which child. The progress operations (`getProgress`, `updateProgress`, `putParentFeedback`) belong to BE-8.
+
+| Operation | Rule | Answers |
+| --- | --- | --- |
+| `POST /assignments` | Only the parent a child is linked to may assign. The activity must exist and be active, `dueDate` (optional) must be in the future, and the child must not already have that activity assigned and not completed. | 201, 400, 403 (not a parent), 404 (child of another family, or activity missing/inactive), 409 |
+| `GET /assignments[?childId=&page=&size=]` | A parent sees the assignments of all their children (or one); a child sees their own. Newest first. `page` >= 0 and `size` 1 to 100. | 200, 400, 403, 404 |
+| `GET /assignments/{id}` | The parent or the child of that assignment, with its progress (`null` until the child starts). Anything else is 404, so ids of other families are not revealed. | 200, 403 (no user in token), 404 |
+
+**Event.** After a successful assignment `ACTIVITY_ASSIGNED` is published with `SmartKinEventPublisher`, **after the database commit** (`TransactionSynchronization.afterCommit`; without a transaction it runs at once). A rollback publishes nothing. If the broker fails the assignment stays and the error is logged: the child just gets no inbox notification, because there is no transactional outbox yet (D-4). The consumer (KF-2) creates that notification idempotently.
+
+**Duplicate rule.** `AssignedActivityRepository.existsOpenAssignment` is true while no `activity_progress` row of the assignment has a `completion_time`. Once the child completes it, the same activity can be assigned again.
+
+**Supporting code.** `ClockConfig` provides a `Clock` bean (tests fix it), `PageResponse<T>` carries the `PageMeta` fields of the contract and is reused by later paged lists, `AssignmentMapper` maps assignments and progress (`AssignmentResponse.withProgress`), and the list loads the progress of a whole page with one query (`findAllByAssignmentIdIn`) and the activity, parent and child with an entity graph, so there is no N+1.
+
+```mermaid
+sequenceDiagram
+    actor P as Parent
+    participant S as AssignmentServiceImpl
+    participant A as AccessPolicy
+    participant DB as PostgreSQL
+    participant K as Kafka
+    P->>S: POST /assignments (child, activity, dueDate)
+    S->>A: manageChild(parent, child)
+    A-->>S: OWNER / NOT_VISIBLE / FORBIDDEN
+    S->>DB: activity active? open assignment?
+    S->>DB: insert assigned_activities
+    DB-->>S: commit
+    S->>K: ACTIVITY_ASSIGNED (after commit)
+    S-->>P: 201 Assignment
+```
+
+Tests: `AssignmentServiceImplTest` (every branch, publish-after-commit, no publish on rollback, a failing publisher), `AssignmentControllerTest`, `AssignmentMapperTest`, three repository cases in `JpaMappingContainerTest` (paging order, open/closed assignment, progress lookup) and two cases in `CrossFamilyAccessContainerTest` (two families assigning, listing and reading on a real PostgreSQL). `ControllerContractConformanceTest` also checks `AssignmentController`.
 
 ## Spring Boot 4 migration notes
 
