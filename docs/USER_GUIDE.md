@@ -47,6 +47,21 @@ Authenticated calls carry the session token in the header defined by `SESSION_TO
 - Fix: confirming a verification code no longer fails with an internal error when mercury rejects it without a `message` header; the
   response keeps mercury's status and an empty `message` header.
 
+## Parents and children (new)
+
+A parent can now keep a profile and link children to it. All calls carry the session token.
+
+| Operation | Method and path | Notes |
+| --- | --- | --- |
+| Save my parent profile | `PUT /api/v1/parents/me` | Optional phone (max 20), address, picture. Creates the profile the first time |
+| Read my parent profile | `GET /api/v1/parents/me` | 404 until it is saved |
+| Link a child | `POST /api/v1/children` | Body `childUserId` (an account already created with `POST /users`), optional `gradeLevel` and `avatar`. 409 if that account already has a parent or child profile |
+| List my children | `GET /api/v1/children` | Only the caller's children |
+| Read a child | `GET /api/v1/children/{childId}` | The parent, or the child themselves. Another family's child answers 404 |
+| Edit a child | `PUT /api/v1/children/{childId}` | Parent only; grade level and avatar |
+
+Errors return the HTTP status and the reason in the `message-error` header. Nothing existing changes. A user whose verification code is not completed gets 403 here.
+
 ## API contract for the MVP
 
 The operations the MVP will offer are described in `docs/api/openapi-v1.yaml`: link a child to a parent, browse topics, lessons and activities, assign an activity, report progress, submit a quiz,

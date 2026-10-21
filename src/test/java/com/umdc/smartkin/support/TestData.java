@@ -27,6 +27,9 @@ public final class TestData {
     public static final UUID ROLE_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
     public static final UUID PHONE_ID = UUID.fromString("44444444-4444-4444-4444-444444444444");
 
+    public static final UUID PARENT_ID = UUID.fromString("55555555-5555-5555-5555-555555555555");
+    public static final UUID CHILD_ID = UUID.fromString("66666666-6666-6666-6666-666666666666");
+
     private TestData() {
     }
 
@@ -78,5 +81,11 @@ public final class TestData {
         return new BackboneUserGetResponse(USER_ID, "alopez", "pwd", "ana@smartkin.test", "Ana",
                 LocalDateTime.of(2026, 1, 2, 3, 4, 5), LocalDateTime.of(2026, 2, 3, 4, 5, 6), true, true, false, false,
                 person, roles, applications);
+    }
+
+    /// Builds an unsigned session token whose payload carries the given `uid` claim (what `JwtUtil` reads).
+    public static String tokenFor(UUID uid) {
+        var payload = "{\"uid\":\"" + uid + "\"}";
+        return "header." + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8)) + ".signature";
     }
 }

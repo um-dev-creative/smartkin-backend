@@ -202,6 +202,7 @@ as environment variables for the private Repsy repository. The workflow does not
 | `JpaMappingContainerTest` | Flyway baseline on a PostgreSQL 17 Testcontainer, CRUD round trips of the 13 entities, the 4 enums and the cascade |
 
 | `OpenApiContractTest` | `docs/api/openapi-v1.yaml` is well formed and keeps its invariants |
+| `ControllerContractConformanceTest` | The implemented controllers match the contract (operation id, method, path) |
 
 Docker must be running for `JpaMappingContainerTest`.
 Shared builders live in `src/test/java/com/umdc/smartkin/support/TestData.java`.
@@ -242,6 +243,44 @@ sequenceDiagram
 
 `OpenApiContractTest` checks that the file parses, every `$ref` resolves, operation ids are unique and each has a 2xx response, options carry no `correct` flag, the paged lists share `PageMeta` and the existing user endpoints are not redefined.
 The frontend generates its types from this file (X-3).
+
+## Parent and child profiles (BE-4)
+
+`ParentApi`/`ParentController` (`/api/v1/parents`) and `ChildApi`/`ChildController` (`/api/v1/children`) implement `getMyParentProfile`, `putMyParentProfile`, `listMyChildren`, `linkChild`, `getChild` and `updateChild` of the contract.
+`ParentServiceImpl` and `ChildServiceImpl` hold the rules; `ParentMapper` and `ChildMapper` (MapStruct) convert the entities. `ChildRepository.findAllByParentId` is the only new query.
+
+**Who is calling.** The caller is the `uid` claim of the session token (`JwtUtil.getUidFromToken`; the security library has already verified the token). There is no role claim: a user is a *parent* when a `smartkin.parent` row has their id and a *child* when a `smartkin.child` row does.
+A token without `uid` (verification code not completed) gets 403 on every operation.
+
+| Operation | Rule | Answers |
+| --- | --- | --- |
+| `PUT /parents/me` | Creates or replaces the caller's profile (all three fields are replaced, `null` clears). Not for a child. | 200, 403 |
+| `GET /parents/me` | Caller's profile. | 200, 403 (child or no `uid`), 404 (no profile yet) |
+| `GET /children` | Children of the calling parent. | 200, 403 (not a parent) |
+| `POST /children` | Links an existing backbone user (`childUserId`) to the calling parent with 0 points. The user must exist in backbone, must not be the caller, and must not already be a child or a parent. | 201, 400, 403, 409 |
+| `GET /children/{id}` | The owning parent, or the child themselves. A child of another family answers 404, never 403, so its id is not revealed. | 200, 403, 404 |
+| `PUT /children/{id}` | Owning parent only; replaces `gradeLevel` and `avatar` (points are never editable here). | 200, 403, 404 |
+
+Errors are the status plus the `message-error` header with an empty body, like the existing endpoints. A race between two parents linking the same user is closed by the primary key: the second insert fails with `DataIntegrityViolationException` and answers 409.
+Backbone failures other than 404 while checking the user are relayed with their own status.
+
+```mermaid
+flowchart TD
+    A[Request with session-token] --> B{uid claim present?}
+    B -- no --> X[403]
+    B -- yes --> C{Operation}
+    C -- parents/me --> D{Caller has a child row?}
+    D -- yes --> X
+    D -- no --> E[200 / 404 on GET]
+    C -- children --> F{Caller has a parent row?}
+    F -- no, and not the child itself --> X
+    F -- yes --> G{Child belongs to the caller?}
+    G -- no --> N[404]
+    G -- yes --> H[200 / 201]
+```
+
+Tests: `ParentServiceImplTest`, `ChildServiceImplTest` (every branch, including the cross-family cases), `ParentChildControllersTest` (delegation, paths, headers and bean validation), `ParentChildMappersTest`, a repository case in `JpaMappingContainerTest`, and `ControllerContractConformanceTest`, which compares the operation id, HTTP method and path of each implemented controller with `docs/api/openapi-v1.yaml`; every later controller ticket adds its controller to that test.
+The contract was amended in this ticket: errors are status plus `message-error` header, not a JSON `ErrorResponse` (see D-6).
 
 ## Spring Boot 4 migration notes
 
