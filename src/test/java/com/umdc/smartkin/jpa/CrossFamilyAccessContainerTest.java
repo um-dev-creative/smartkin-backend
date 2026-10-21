@@ -3,13 +3,17 @@ package com.umdc.smartkin.jpa;
 import com.umdc.smartkin.api.v1.service.AssignmentServiceImpl;
 import com.umdc.smartkin.api.v1.service.ChildServiceImpl;
 import com.umdc.smartkin.api.v1.service.ParentServiceImpl;
+import com.umdc.smartkin.api.v1.service.ProgressRecorder;
 import com.umdc.smartkin.api.v1.service.ProgressServiceImpl;
+import com.umdc.smartkin.api.v1.service.QuizAttemptServiceImpl;
 import com.umdc.smartkin.api.v1.to.AssignmentRequest;
 import com.umdc.smartkin.api.v1.to.ChildRequest;
 import com.umdc.smartkin.api.v1.to.ChildUpdateRequest;
 import com.umdc.smartkin.api.v1.to.FeedbackRequest;
 import com.umdc.smartkin.api.v1.to.ParentProfileRequest;
 import com.umdc.smartkin.api.v1.to.ProgressRequest;
+import com.umdc.smartkin.api.v1.to.QuizAnswerRequest;
+import com.umdc.smartkin.api.v1.to.QuizAttemptRequest;
 import com.umdc.smartkin.client.backbone.BackboneClient;
 import com.umdc.smartkin.config.ClockConfig;
 import com.umdc.smartkin.config.DataBaseConfig;
@@ -17,8 +21,15 @@ import com.umdc.smartkin.jpa.domain.ActivityEntity;
 import com.umdc.smartkin.jpa.domain.TopicEntity;
 import com.umdc.smartkin.jpa.repository.ActivityRepository;
 import com.umdc.smartkin.jpa.repository.TopicRepository;
+import com.umdc.smartkin.kafka.event.DomainEventDispatcher;
 import com.umdc.smartkin.kafka.event.SmartKinEventPublisher;
 import com.umdc.smartkin.mapper.AssignmentMapperImpl;
+import com.umdc.smartkin.mapper.QuizAttemptMapper;
+import com.umdc.smartkin.mongo.document.LessonStatus;
+import com.umdc.smartkin.mongo.document.QuizAttemptDocument;
+import com.umdc.smartkin.mongo.repository.LessonRepository;
+import com.umdc.smartkin.mongo.repository.QuizAttemptRepository;
+import com.umdc.smartkin.quiz.QuizGrader;
 import com.umdc.smartkin.jpa.domain.ChildEntity;
 import com.umdc.smartkin.jpa.domain.ParentEntity;
 import com.umdc.smartkin.jpa.repository.ChildRepository;
@@ -73,7 +84,8 @@ class CrossFamilyAccessContainerTest {
     @SpringBootConfiguration
     @EnableAutoConfiguration
     @Import({DataBaseConfig.class, ClockConfig.class, AccessPolicy.class, ChildServiceImpl.class, ParentServiceImpl.class,
-            AssignmentServiceImpl.class, ProgressServiceImpl.class, ChildMapperImpl.class, ParentMapperImpl.class, AssignmentMapperImpl.class})
+            AssignmentServiceImpl.class, ProgressServiceImpl.class, QuizAttemptServiceImpl.class, ProgressRecorder.class, QuizGrader.class, QuizAttemptMapper.class,
+            DomainEventDispatcher.class, ChildMapperImpl.class, ParentMapperImpl.class, AssignmentMapperImpl.class})
     static class AccessTestApplication {
     }
 
@@ -99,6 +111,12 @@ class CrossFamilyAccessContainerTest {
     private BackboneClient backboneClient;
     @MockitoBean
     private SmartKinEventPublisher eventPublisher;
+    @MockitoBean
+    private LessonRepository lessonRepository;
+    @MockitoBean
+    private QuizAttemptRepository attemptRepository;
+    @Autowired
+    private QuizAttemptServiceImpl quiz;
 
     private UUID parentA;
     private UUID parentB;
@@ -190,6 +208,12 @@ class CrossFamilyAccessContainerTest {
     void aChildCannotBecomeAParentAndAParentCannotBecomeAChild() {
         assertEquals(HttpStatus.FORBIDDEN, parents.putMe(tokenFor(childA1), new ParentProfileRequest(null, null, null)).getStatusCode());
         assertEquals(HttpStatus.CONFLICT, children.link(tokenFor(parentA), new ChildRequest(parentB, null, null)).getStatusCode());
+    }
+
+    private UUID newActivityWithLesson(UUID lessonId) {
+        var id = newActivity();
+        activityRepository.findById(id).orElseThrow().setLessonId(lessonId);
+        return id;
     }
 
     private UUID newActivity() {
@@ -295,5 +319,57 @@ class CrossFamilyAccessContainerTest {
         assertEquals(100, done.completionPercentage());
         assertEquals(true, done.completionTime() != null && done.startTime() != null);
         assertEquals(HttpStatus.CREATED, assignments.assign(tokenFor(parentA), new AssignmentRequest(childA1, activity, null)).getStatusCode());
+    }
+
+    private static final com.umdc.smartkin.mongo.document.LessonDocument LESSON = com.umdc.smartkin.support.TestData.lesson(LessonStatus.PUBLISHED);
+
+    private UUID assignmentWithQuiz() {
+        org.mockito.Mockito.when(lessonRepository.findById(LESSON.id())).thenReturn(java.util.Optional.of(LESSON));
+        var activity = newActivityWithLesson(LESSON.id());
+        var id = assignments.assign(tokenFor(parentA), new AssignmentRequest(childA1, activity, null)).getBody().assignmentId();
+        entityManager.flush();
+        entityManager.clear();
+        return id;
+    }
+
+    private static QuizAttemptRequest answer(String option) {
+        return new QuizAttemptRequest(List.of(new QuizAnswerRequest("q1", List.of(option))));
+    }
+
+    @Test
+    void onlyTheAssignedChildTakesTheQuiz() {
+        var id = assignmentWithQuiz();
+
+        assertEquals(HttpStatus.FORBIDDEN, quiz.submit(tokenFor(parentA), id, answer("o2")).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, quiz.submit(tokenFor(childA2), id, answer("o2")).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, quiz.submit(tokenFor(parentB), id, answer("o2")).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, quiz.list(tokenFor(parentB), id).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, quiz.list(tokenFor(childA2), id).getStatusCode());
+        org.mockito.Mockito.verify(attemptRepository, org.mockito.Mockito.never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void failingKeepsTheAssignmentOpenAndPassingCompletesItWithTheBestScore() {
+        var id = assignmentWithQuiz();
+        org.mockito.Mockito.when(attemptRepository.save(org.mockito.ArgumentMatchers.any(QuizAttemptDocument.class)))
+                .thenAnswer(call -> call.getArgument(0));
+
+        var failed = quiz.submit(tokenFor(childA1), id, answer("o1")).getBody();
+        entityManager.flush();
+        entityManager.clear();
+        var afterFail = progress.get(tokenFor(parentA), id).getBody();
+        var passed = quiz.submit(tokenFor(childA1), id, answer("o2")).getBody();
+        entityManager.flush();
+        entityManager.clear();
+        var afterPass = progress.get(tokenFor(parentA), id).getBody();
+
+        assertEquals(false, failed.passed());
+        assertEquals(0, afterFail.score());
+        assertEquals(0, afterFail.completionPercentage());
+        assertEquals(null, afterFail.completionTime());
+        assertEquals(true, passed.passed());
+        assertEquals(100, afterPass.score());
+        assertEquals(100, afterPass.completionPercentage());
+        assertEquals(true, afterPass.completionTime() != null);
     }
 }

@@ -138,6 +138,20 @@ class MongoCollectionsContainerTest {
     }
 
     @Test
+    void countsAndOrdersTheAttemptsOfAnAssignment() {
+        var lessonId = UUID.randomUUID();
+        var assignment = UUID.randomUUID();
+        attempts.save(attempt(lessonId, 3, assignment));
+        attempts.save(attempt(lessonId, 1, assignment));
+        attempts.save(attempt(lessonId, 2, UUID.randomUUID()));
+
+        assertEquals(2, attempts.countByAssignmentId(assignment));
+        assertEquals(0, attempts.countByAssignmentId(UUID.randomUUID()));
+        assertEquals(List.of(1, 3), attempts.findByAssignmentIdOrderByAttemptNumber(assignment).stream()
+                .map(QuizAttemptDocument::attemptNumber).toList());
+    }
+
+    @Test
     void refusesARepeatedAttemptNumber() {
         var lessonId = UUID.randomUUID();
         attempts.save(attempt(lessonId, 1, UUID.randomUUID()));

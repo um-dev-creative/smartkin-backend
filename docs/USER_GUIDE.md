@@ -76,6 +76,17 @@ A parent gives an activity to one of their children, and both can follow it. All
 
 Assigning an activity also sends the child a notification in their inbox. If the notification service is down at that moment the assignment is still created and only the notification is missing.
 
+## Quiz (new)
+
+| Operation | Method and path | Who | Notes |
+| --- | --- | --- | --- |
+| Take the quiz | `POST /api/v1/assignments/{assignmentId}/quiz-attempts` | the assigned child | Body `answers`: for each question `questionId` and the `selectedOptionIds` picked. The server grades it and answers 201 with the score |
+| See the attempts | `GET /api/v1/assignments/{assignmentId}/quiz-attempts` | the parent or the child | Oldest first, with how each question was graded and its explanation |
+
+How it is graded: a question counts only if the child picks **exactly** the right options (there is no partial credit) and then earns all of its points; questions left unanswered earn nothing. The percentage is the points earned over the points of the quiz, rounded down, and the quiz is passed when it reaches the pass mark of the lesson (for example 70%).
+Passing the quiz **completes the activity** and gives the child the points of the quiz; failing keeps the activity open so the child can try again, up to the number of attempts the lesson allows (the next attempt answers 409). The best score is kept in the progress.
+Errors: 400 if an answer names a question or option that is not in the quiz, 403 if a parent tries to answer, 404 if the activity has no published quiz or the assignment belongs to another family.
+
 ## Progress and feedback (new)
 
 | Operation | Method and path | Who | Notes |

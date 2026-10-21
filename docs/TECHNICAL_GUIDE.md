@@ -408,6 +408,45 @@ stateDiagram-v2
 
 Tests: `ProgressServiceImplTest` (every branch), `ProgressControllerTest` (delegation, paths, bean validation), a lock case in `JpaMappingContainerTest`, and three cases in `CrossFamilyAccessContainerTest` (only the child reports, only the assigning parent comments, completing frees the activity to be assigned again). `ControllerContractConformanceTest` also checks `ProgressController`.
 
+## Quiz attempts API (BE-9)
+
+`QuizApi`/`QuizController` (base `/api/v1/assignments`) implement `submitQuizAttempt` and `listQuizAttempts`; `QuizAttemptServiceImpl` orchestrates, `QuizGrader` (`com.umdc.smartkin.quiz`) is the pure grading logic and `ProgressRecorder` writes the result into the progress. Quizzes are graded **only on the server**: the lesson sent to clients carries no `correct` flag (BE-6).
+
+**Grading rule (agreed with the owner).** A question is correct only when the selected options are **exactly** the correct ones (no partial credit) and then earns all its `points`; a question left out earns nothing (it still appears in the stored answers, in quiz order, with an empty selection). `percentage = score * 100 / maxScore`, rounded down (0 for a quiz worth no points); the quiz is **passed** when `percentage >= passingPercentage` (inclusive). A question with no correct option in the lesson never earns points. Answers that name an unknown question or option, or answer a question twice, are rejected with **400** and nothing is written.
+
+| Step | Detail |
+| --- | --- |
+| Who | Only the assigned child. The parent gets 403, anyone outside the family 404 (as for progress). |
+| Which quiz | The `PUBLISHED` lesson of the assignment's activity (`activities.lesson_id`). No lesson, an unpublished one or one without questions answers 404 (`QUIZ_NOT_AVAILABLE_MESSAGE`). |
+| Limit | `maxAttempts` counts the attempts **of this assignment** (`countByAssignmentId`); the next one answers 409. `attemptNumber` is the child's running count for that lesson (`countByChildIdAndLessonId` + 1), because the unique index of `quiz_attempts` is `childId + lessonId + attemptNumber`. |
+| Result | The attempt is stored with the lesson `version` it was graded against. `startedAt` and every `answeredAt` equal `completedAt` (the client does not send times). |
+| Progress | `ProgressRecorder` keeps the **best** percentage as `score`; **passing completes the assignment** (100% and `completionTime`, once), so the parent can assign the activity again. A failed attempt never lowers a completion already reached. |
+| Event | `QUIZ_COMPLETED` goes out after the commit through `DomainEventDispatcher`; the KF-2 consumer books `score` as points only when `passed`. |
+
+**Consistency between PostgreSQL and MongoDB.** The assignment is read with `findForUpdateById` (write lock), so attempts of one assignment are graded one at a time and the limit cannot be passed by concurrent submissions. The attempt is inserted first: a duplicate key answers 409 before anything else was written. Then the progress is written; if that fails the attempt is deleted and the error propagates, so the transaction rolls back and no event is sent. The only gap left is a failure of the commit itself after the insert, which would leave an attempt without progress (there is no distributed transaction).
+
+`feedback` (the explanation each question has in the lesson) is returned with the attempt, after the child answered, for the child and the parent; it is looked up in the current lesson and is `null` if the lesson or question no longer has one. `DomainEventDispatcher` was extracted from BE-7 so both services share the publish-after-commit behaviour.
+
+```mermaid
+sequenceDiagram
+    actor C as Child
+    participant S as QuizAttemptServiceImpl
+    participant M as MongoDB
+    participant P as PostgreSQL
+    participant K as Kafka
+    C->>S: POST /assignments/{id}/quiz-attempts (answers)
+    S->>P: lock assignment (select for update)
+    S->>M: published lesson + quiz, attempts so far
+    S->>S: QuizGrader.grade (exact match, no partial credit)
+    S->>M: insert quiz_attempts
+    S->>P: ProgressRecorder (best score, complete if passed)
+    P-->>S: commit
+    S->>K: QUIZ_COMPLETED (after commit)
+    S-->>C: 201 QuizAttempt (score, passed, feedback)
+```
+
+Tests: `QuizGraderTest` (exact-set rule, unanswered questions, rounding, pass mark, invalid answers), `QuizAttemptServiceImplTest` (every branch, including the duplicate key and the compensation), `ProgressRecorderTest`, `QuizAttemptMapperTest`, `QuizControllerTest`, `DomainEventDispatcherTest`, a MongoDB case for the new repository methods and two cases in `CrossFamilyAccessContainerTest` (only the child takes the quiz; failing keeps the assignment open, passing completes it).
+
 ## Spring Boot 4 migration notes
 
 - `@EntityScan` lives in `org.springframework.boot.persistence.autoconfigure`.

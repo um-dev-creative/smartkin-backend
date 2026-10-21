@@ -13,4 +13,8 @@ public interface QuizAttemptRepository extends MongoRepository<QuizAttemptDocume
     long countByChildIdAndLessonId(UUID childId, UUID lessonId);
 
     List<QuizAttemptDocument> findByAssignmentId(UUID assignmentId);
+
+    List<QuizAttemptDocument> findByAssignmentIdOrderByAttemptNumber(UUID assignmentId);
+
+    long countByAssignmentId(UUID assignmentId);
 }

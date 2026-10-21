@@ -10,15 +10,13 @@ import com.umdc.smartkin.jpa.repository.ActivityProgressRepository;
 import com.umdc.smartkin.jpa.repository.ActivityRepository;
 import com.umdc.smartkin.jpa.repository.AssignedActivityRepository;
 import com.umdc.smartkin.jpa.repository.ParentRepository;
-import com.umdc.smartkin.kafka.event.SmartKinEventPublisher;
+import com.umdc.smartkin.kafka.event.DomainEventDispatcher;
 import com.umdc.smartkin.kafka.event.payload.ActivityAssignedPayload;
 import com.umdc.smartkin.mapper.AssignmentMapper;
 import com.umdc.smartkin.security.access.AccessPolicy;
 import com.umdc.smartkin.security.access.ChildAccess;
 import com.umdc.smartkin.security.access.ChildAccessDecision;
 import com.umdc.smartkin.util.JwtUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -27,8 +25,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Clock;
 import java.util.Map;
@@ -41,14 +37,12 @@ import java.util.stream.Collectors;
 @Service
 public class AssignmentServiceImpl implements AssignmentService {
 
-    private static final Logger logger = LoggerFactory.getLogger(AssignmentServiceImpl.class);
-
     private final AccessPolicy accessPolicy;
     private final AssignedActivityRepository assignmentRepository;
     private final ActivityProgressRepository progressRepository;
     private final ActivityRepository activityRepository;
     private final ParentRepository parentRepository;
-    private final SmartKinEventPublisher eventPublisher;
+    private final DomainEventDispatcher events;
     private final AssignmentMapper assignmentMapper;
     private final Clock clock;
 
@@ -59,19 +53,19 @@ public class AssignmentServiceImpl implements AssignmentService {
     /// @param progressRepository   the progress repository
     /// @param activityRepository   the activity repository
     /// @param parentRepository     the parent repository
-    /// @param eventPublisher       publishes `ACTIVITY_ASSIGNED`
+    /// @param events               publishes `ACTIVITY_ASSIGNED` after the commit
     /// @param assignmentMapper     the mapper to the API representation
     /// @param clock                the current time
     public AssignmentServiceImpl(AccessPolicy accessPolicy, AssignedActivityRepository assignmentRepository,
                                  ActivityProgressRepository progressRepository, ActivityRepository activityRepository,
-                                 ParentRepository parentRepository, SmartKinEventPublisher eventPublisher,
+                                 ParentRepository parentRepository, DomainEventDispatcher events,
                                  AssignmentMapper assignmentMapper, Clock clock) {
         this.accessPolicy = accessPolicy;
         this.assignmentRepository = assignmentRepository;
         this.progressRepository = progressRepository;
         this.activityRepository = activityRepository;
         this.parentRepository = parentRepository;
-        this.eventPublisher = eventPublisher;
+        this.events = events;
         this.assignmentMapper = assignmentMapper;
         this.clock = clock;
     }
@@ -106,7 +100,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         var saved = assignmentRepository.saveAndFlush(assignment);
         var payload = new ActivityAssignedPayload(saved.getId(), request.childId(), callerId, activity.get().getId(),
                 activity.get().getTitle(), saved.getDueDate());
-        afterCommit(() -> publish(payload));
+        events.activityAssigned(payload);
         return ResponseEntity.status(HttpStatus.CREATED).body(assignmentMapper.toResponse(saved));
     }
 
@@ -157,28 +151,6 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     private AssignmentResponse toResponse(AssignedActivityEntity assignment, ActivityProgressEntity progress) {
         return assignmentMapper.toResponse(assignment).withProgress(progress == null ? null : assignmentMapper.toResponse(progress));
-    }
-
-    private void publish(ActivityAssignedPayload payload) {
-        try {
-            eventPublisher.activityAssigned(payload);
-        } catch (RuntimeException e) {
-            // The assignment is already committed; a missing event only means the child gets no inbox notification (no outbox yet, see D-4).
-            logger.error("Could not publish ACTIVITY_ASSIGNED for assignment {}: {}", payload.assignmentId(), e.getMessage(), e);
-        }
-    }
-
-    private static void afterCommit(Runnable action) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    action.run();
-                }
-            });
-        } else {
-            action.run();
-        }
     }
 
     private static <T> ResponseEntity<T> denied(ChildAccess access, String forbiddenMessage) {
