@@ -461,4 +461,73 @@ class JpaMappingContainerTest {
         assertEquals(child.getId(), locked.get().getChild().getId());
         assertTrue(assignments.findForUpdateById(UUID.randomUUID()).isEmpty());
     }
+
+    private PointEntity point(ChildEntity child, int amount, Instant at) {
+        var point = new PointEntity();
+        point.setChild(child);
+        point.setAmount(amount);
+        point.setSourceType("QUIZ");
+        point.setSourceId(UUID.randomUUID());
+        point.setTransactionDate(at);
+        point.setTransactionType(TransactionType.EARN);
+        return points.save(point);
+    }
+
+    @Test
+    void pagesThePointsOfAChildNewestFirstWithoutMixingChildren() {
+        var parent = newParent();
+        var child = newChild(parent);
+        var other = newChild(parent);
+        var oldest = point(child, 10, Instant.parse("2026-01-01T00:00:00Z"));
+        var middle = point(child, 20, Instant.parse("2026-02-01T00:00:00Z"));
+        var newest = point(child, 30, Instant.parse("2026-03-01T00:00:00Z"));
+        point(other, 99, Instant.parse("2026-04-01T00:00:00Z"));
+        flushAndClear();
+
+        var first = points.findByChildId(child.getId(), org.springframework.data.domain.PageRequest.of(0, 2,
+                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "transactionDate")));
+        var second = points.findByChildId(child.getId(), org.springframework.data.domain.PageRequest.of(1, 2,
+                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "transactionDate")));
+
+        assertEquals(3, first.getTotalElements());
+        assertEquals(java.util.List.of(newest.getId(), middle.getId()), first.getContent().stream().map(PointEntity::getId).toList());
+        assertEquals(java.util.List.of(oldest.getId()), second.getContent().stream().map(PointEntity::getId).toList());
+    }
+
+    @Test
+    void listsTheEarnedAchievementsNewestFirstWithTheirAchievementLoaded() {
+        var parent = newParent();
+        var child = newChild(parent);
+        var other = newChild(parent);
+        var first = new AchievementEntity();
+        first.setName("First lesson");
+        first.setDescription("d");
+        first.setPointsValue(10);
+        first.setRequirements("one lesson");
+        achievements.save(first);
+        var second = new AchievementEntity();
+        second.setName("Three lessons");
+        second.setDescription("d");
+        second.setPointsValue(30);
+        second.setRequirements("three lessons");
+        achievements.save(second);
+        for (var spec : java.util.List.of(java.util.Map.entry(first, "2026-01-01T00:00:00Z"), java.util.Map.entry(second, "2026-02-01T00:00:00Z"))) {
+            var earned = new ChildAchievementEntity();
+            earned.setChild(child);
+            earned.setAchievement(spec.getKey());
+            earned.setEarnedAt(Instant.parse(spec.getValue()));
+            childAchievements.save(earned);
+        }
+        var foreign = new ChildAchievementEntity();
+        foreign.setChild(other);
+        foreign.setAchievement(first);
+        foreign.setEarnedAt(Instant.now());
+        childAchievements.save(foreign);
+        flushAndClear();
+
+        var found = childAchievements.findByChildIdOrderByEarnedAtDesc(child.getId());
+
+        assertEquals(java.util.List.of("Three lessons", "First lesson"), found.stream().map(e -> e.getAchievement().getName()).toList());
+        assertTrue(childAchievements.findByChildIdOrderByEarnedAtDesc(UUID.randomUUID()).isEmpty());
+    }
 }

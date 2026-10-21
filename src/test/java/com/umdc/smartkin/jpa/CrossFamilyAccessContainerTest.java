@@ -6,6 +6,7 @@ import com.umdc.smartkin.api.v1.service.ParentServiceImpl;
 import com.umdc.smartkin.api.v1.service.ProgressRecorder;
 import com.umdc.smartkin.api.v1.service.ProgressServiceImpl;
 import com.umdc.smartkin.api.v1.service.QuizAttemptServiceImpl;
+import com.umdc.smartkin.api.v1.service.RewardsServiceImpl;
 import com.umdc.smartkin.api.v1.to.AssignmentRequest;
 import com.umdc.smartkin.api.v1.to.ChildRequest;
 import com.umdc.smartkin.api.v1.to.ChildUpdateRequest;
@@ -25,6 +26,7 @@ import com.umdc.smartkin.kafka.event.DomainEventDispatcher;
 import com.umdc.smartkin.kafka.event.SmartKinEventPublisher;
 import com.umdc.smartkin.mapper.AssignmentMapperImpl;
 import com.umdc.smartkin.mapper.QuizAttemptMapper;
+import com.umdc.smartkin.mapper.RewardsMapperImpl;
 import com.umdc.smartkin.mongo.document.LessonStatus;
 import com.umdc.smartkin.mongo.document.QuizAttemptDocument;
 import com.umdc.smartkin.mongo.repository.LessonRepository;
@@ -84,7 +86,7 @@ class CrossFamilyAccessContainerTest {
     @SpringBootConfiguration
     @EnableAutoConfiguration
     @Import({DataBaseConfig.class, ClockConfig.class, AccessPolicy.class, ChildServiceImpl.class, ParentServiceImpl.class,
-            AssignmentServiceImpl.class, ProgressServiceImpl.class, QuizAttemptServiceImpl.class, ProgressRecorder.class, QuizGrader.class, QuizAttemptMapper.class,
+            AssignmentServiceImpl.class, ProgressServiceImpl.class, QuizAttemptServiceImpl.class, RewardsServiceImpl.class, RewardsMapperImpl.class, ProgressRecorder.class, QuizGrader.class, QuizAttemptMapper.class,
             DomainEventDispatcher.class, ChildMapperImpl.class, ParentMapperImpl.class, AssignmentMapperImpl.class})
     static class AccessTestApplication {
     }
@@ -117,6 +119,8 @@ class CrossFamilyAccessContainerTest {
     private QuizAttemptRepository attemptRepository;
     @Autowired
     private QuizAttemptServiceImpl quiz;
+    @Autowired
+    private RewardsServiceImpl rewards;
 
     private UUID parentA;
     private UUID parentB;
@@ -371,5 +375,18 @@ class CrossFamilyAccessContainerTest {
         assertEquals(100, afterPass.score());
         assertEquals(100, afterPass.completionPercentage());
         assertEquals(true, afterPass.completionTime() != null);
+    }
+
+    @Test
+    void pointsAndAchievementsAreVisibleOnlyToTheChildAndTheirParent() {
+        assertEquals(HttpStatus.OK, rewards.points(tokenFor(parentA), childA1, 0, 20).getStatusCode());
+        assertEquals(HttpStatus.OK, rewards.points(tokenFor(childA1), childA1, 0, 20).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, rewards.points(tokenFor(parentB), childA1, 0, 20).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, rewards.points(tokenFor(childA2), childA1, 0, 20).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, rewards.points(tokenFor(stranger), childA1, 0, 20).getStatusCode());
+        assertEquals(HttpStatus.OK, rewards.achievements(tokenFor(parentA), childA2).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, rewards.achievements(tokenFor(parentA), childB1).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, rewards.achievements(tokenFor(childB1), childA1).getStatusCode());
+        assertEquals(0, rewards.points(tokenFor(parentA), childA1, 0, 20).getBody().totalPoints());
     }
 }
