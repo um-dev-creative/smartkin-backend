@@ -1,5 +1,6 @@
 package com.umdc.smartkin.api.v1.service;
 
+import com.umdc.smartkin.achievement.AchievementTrigger;
 import com.umdc.smartkin.api.v1.to.FeedbackRequest;
 import com.umdc.smartkin.api.v1.to.ProgressRequest;
 import com.umdc.smartkin.constant.SmartKinAppConstants;
@@ -48,6 +49,8 @@ class ProgressServiceImplTest {
     private AssignedActivityRepository assignmentRepository;
     @Mock
     private ActivityProgressRepository progressRepository;
+    @Mock
+    private AchievementTrigger achievements;
     private ProgressServiceImpl service;
     private AssignedActivityEntity assignment;
     private ChildEntity child;
@@ -55,7 +58,7 @@ class ProgressServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new ProgressServiceImpl(accessPolicy, assignmentRepository, progressRepository, new AssignmentMapperImpl(),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                achievements, Clock.fixed(NOW, ZoneOffset.UTC));
         child = new ChildEntity();
         child.setId(CHILD_ID);
         assignment = new AssignedActivityEntity();
@@ -178,9 +181,25 @@ class ProgressServiceImplTest {
         var back = service.update(tokenFor(CHILD_ID), ASSIGNMENT_ID, new ProgressRequest(50));
 
         assertEquals(NOW, done.getBody().completionTime());
+        verify(achievements).evaluateAfterCommit(CHILD_ID);
         assertEquals(NOW.minusSeconds(10), again.getBody().completionTime());
         assertEquals(HttpStatus.BAD_REQUEST, back.getStatusCode());
         assertEquals(SmartKinAppConstants.PROGRESS_CANNOT_DECREASE_MESSAGE, back.getHeaders().getFirst(SmartKinAppConstants.MESSAGE_ERROR_HEADER));
+    }
+
+    @Test
+    void onlyTheReportThatCompletesTheActivityChecksTheAchievements() {
+        var stored = row(80);
+        when(assignmentRepository.findForUpdateById(ASSIGNMENT_ID)).thenReturn(Optional.of(assignment));
+        caller(CHILD_ID, ChildAccessDecision.SELF);
+        when(progressRepository.findByAssignmentId(ASSIGNMENT_ID)).thenReturn(Optional.of(stored));
+        saveReturnsItsArgument();
+
+        service.update(tokenFor(CHILD_ID), ASSIGNMENT_ID, new ProgressRequest(90));
+        verify(achievements, never()).evaluateAfterCommit(any());
+        stored.setCompletionTime(NOW.minusSeconds(10));
+        service.update(tokenFor(CHILD_ID), ASSIGNMENT_ID, new ProgressRequest(100));
+        verify(achievements, never()).evaluateAfterCommit(any());
     }
 
     @Test

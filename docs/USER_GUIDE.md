@@ -76,6 +76,17 @@ A parent gives an activity to one of their children, and both can follow it. All
 
 Assigning an activity also sends the child a notification in their inbox. If the notification service is down at that moment the assignment is still created and only the notification is missing.
 
+## How achievements are earned (new)
+
+Achievements are given automatically, once per child, when one of these conditions is met (the number is set per achievement):
+- **Quizzes passed:** the child passed the quiz of N different lessons.
+- **Activities completed:** the child completed N different activities.
+- **Points reached:** the child's balance reached N points.
+
+When a child earns one they receive its points, a notification, and it shows up in `GET /api/v1/children/{childId}/achievements`. It can take a few seconds after passing a quiz, because the points and the achievements are processed in the background. The first release comes with three example achievements (first quiz passed, 3 activities completed, 100 points); the team in charge of content can change them or add more directly in the database.
+
+**Operators:** this release adds database migration V5 (a unique index so a child cannot earn the same achievement twice, and the three starter achievements). It runs at startup with the Flyway account and does not change existing data.
+
 ## Points and achievements (new)
 
 | Operation | Method and path | Notes |

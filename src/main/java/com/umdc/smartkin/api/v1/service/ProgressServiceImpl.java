@@ -3,6 +3,7 @@ package com.umdc.smartkin.api.v1.service;
 import com.umdc.smartkin.api.v1.to.FeedbackRequest;
 import com.umdc.smartkin.api.v1.to.ProgressRequest;
 import com.umdc.smartkin.api.v1.to.ProgressResponse;
+import com.umdc.smartkin.achievement.AchievementTrigger;
 import com.umdc.smartkin.constant.SmartKinAppConstants;
 import com.umdc.smartkin.jpa.domain.ActivityProgressEntity;
 import com.umdc.smartkin.jpa.domain.AssignedActivityEntity;
@@ -32,6 +33,7 @@ public class ProgressServiceImpl implements ProgressService {
     private final AssignedActivityRepository assignmentRepository;
     private final ActivityProgressRepository progressRepository;
     private final AssignmentMapper assignmentMapper;
+    private final AchievementTrigger achievements;
     private final Clock clock;
 
     /// Creates the service.
@@ -40,13 +42,16 @@ public class ProgressServiceImpl implements ProgressService {
     /// @param assignmentRepository the assignment repository
     /// @param progressRepository   the progress repository
     /// @param assignmentMapper     the mapper to the API representation
+    /// @param achievements         evaluates the achievements when an activity gets completed
     /// @param clock                the current time
     public ProgressServiceImpl(AccessPolicy accessPolicy, AssignedActivityRepository assignmentRepository,
-                               ActivityProgressRepository progressRepository, AssignmentMapper assignmentMapper, Clock clock) {
+                               ActivityProgressRepository progressRepository, AssignmentMapper assignmentMapper,
+                               AchievementTrigger achievements, Clock clock) {
         this.accessPolicy = accessPolicy;
         this.assignmentRepository = assignmentRepository;
         this.progressRepository = progressRepository;
         this.assignmentMapper = assignmentMapper;
+        this.achievements = achievements;
         this.clock = clock;
     }
 
@@ -93,6 +98,7 @@ public class ProgressServiceImpl implements ProgressService {
         progress.setLastAccessed(now);
         if (percentage == COMPLETE && progress.getCompletionTime() == null) {
             progress.setCompletionTime(now);
+            achievements.evaluateAfterCommit(assignment.get().getChild().getId());
         }
         return ResponseEntity.ok(assignmentMapper.toResponse(progressRepository.save(progress)));
     }

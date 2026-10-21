@@ -1,5 +1,6 @@
 package com.umdc.smartkin.jpa;
 
+import com.umdc.smartkin.achievement.AchievementTrigger;
 import com.umdc.smartkin.api.v1.service.AssignmentServiceImpl;
 import com.umdc.smartkin.api.v1.service.ChildServiceImpl;
 import com.umdc.smartkin.api.v1.service.ParentServiceImpl;
@@ -113,6 +114,8 @@ class CrossFamilyAccessContainerTest {
     private BackboneClient backboneClient;
     @MockitoBean
     private SmartKinEventPublisher eventPublisher;
+    @MockitoBean
+    private AchievementTrigger achievementTrigger;
     @MockitoBean
     private LessonRepository lessonRepository;
     @MockitoBean

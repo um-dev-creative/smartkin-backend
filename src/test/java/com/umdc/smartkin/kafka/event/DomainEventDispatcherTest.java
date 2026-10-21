@@ -1,5 +1,6 @@
 package com.umdc.smartkin.kafka.event;
 
+import com.umdc.smartkin.kafka.event.payload.AchievementEarnedPayload;
 import com.umdc.smartkin.kafka.event.payload.ActivityAssignedPayload;
 import com.umdc.smartkin.kafka.event.payload.QuizCompletedPayload;
 import org.junit.jupiter.api.AfterEach;
@@ -24,6 +25,8 @@ class DomainEventDispatcherTest {
     private static final UUID ID = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
     private static final ActivityAssignedPayload ASSIGNED = new ActivityAssignedPayload(ID, ID, ID, ID, "Passwords", null);
     private static final QuizCompletedPayload COMPLETED = new QuizCompletedPayload(ID, ID, ID, ID, 1, 10, 10, 100, true, Instant.parse("2026-10-21T12:00:00Z"));
+
+    private static final AchievementEarnedPayload EARNED = new AchievementEarnedPayload(ID, ID, ID, "Explorer", 20, Instant.parse("2026-10-21T12:00:00Z"));
 
     @Mock
     private SmartKinEventPublisher publisher;
@@ -86,5 +89,33 @@ class DomainEventDispatcherTest {
 
         verify(publisher).activityAssigned(ASSIGNED);
         verify(publisher).quizCompleted(COMPLETED);
+    }
+
+    @Test
+    void achievementsGoOutAfterTheCommitToo() {
+        var dispatcher = new DomainEventDispatcher(publisher);
+        TransactionSynchronizationManager.initSynchronization();
+
+        dispatcher.achievementEarned(EARNED);
+        verify(publisher, never()).achievementEarned(any());
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+        verify(publisher).achievementEarned(EARNED);
+    }
+
+    @Test
+    void anyWorkCanRunAfterTheCommitAndNeverFailsTheCaller() {
+        var dispatcher = new DomainEventDispatcher(publisher);
+        var ran = new java.util.concurrent.atomic.AtomicInteger();
+        TransactionSynchronizationManager.initSynchronization();
+
+        dispatcher.afterCommit("work", ran::incrementAndGet);
+        dispatcher.afterCommit("broken work", () -> {
+            throw new IllegalStateException("boom");
+        });
+        org.junit.jupiter.api.Assertions.assertEquals(0, ran.get());
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+        org.junit.jupiter.api.Assertions.assertEquals(1, ran.get());
     }
 }
