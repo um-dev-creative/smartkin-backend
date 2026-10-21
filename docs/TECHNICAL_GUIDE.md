@@ -447,6 +447,32 @@ sequenceDiagram
 
 Tests: `QuizGraderTest` (exact-set rule, unanswered questions, rounding, pass mark, invalid answers), `QuizAttemptServiceImplTest` (every branch, including the duplicate key and the compensation), `ProgressRecorderTest`, `QuizAttemptMapperTest`, `QuizControllerTest`, `DomainEventDispatcherTest`, a MongoDB case for the new repository methods and two cases in `CrossFamilyAccessContainerTest` (only the child takes the quiz; failing keeps the assignment open, passing completes it).
 
+## Points and achievements API (BE-10)
+
+`RewardsApi`/`RewardsController` (base `/api/v1/children`, shared with `ChildController`) implement `getChildPoints` and `listChildAchievements`; `RewardsServiceImpl` reads through the existing repositories and `RewardsMapper`. Both are read-only: points and achievements are **written only by the event consumers** (KF-2) and the achievement rules (BE-11), never by these endpoints.
+
+| Operation | Path | Rule |
+| --- | --- | --- |
+| `getChildPoints` | `GET /children/{childId}/points?page=&size=` | `{childId, totalPoints, transactions}` where `transactions` is a `PageResponse` (page from 0, size 1 to 100, default 20) of the child's point movements, newest first (`transactionDate` desc). Bad page or size is 400. |
+| `listChildAchievements` | `GET /children/{childId}/achievements` | The achievements the child earned, newest first, each with the data of the achievement (`name`, `description`, `icon`, `pointsValue`) loaded in the same query (`@EntityGraph`). |
+
+**Access.** `AccessPolicy.viewChild`: the child themselves or the parent they are linked to. A child of another family answers **404**; a sibling or a user without profile answers **403**; a token without `uid` answers 403.
+
+**Balance.** `totalPoints` is `child.total_points`, which the KF-2 consumers raise in the same transaction in which they insert the `points` row, so it equals the sum of the `EARN` movements minus the `SPEND` ones as long as every movement goes through them. Nothing here recomputes it.
+
+```mermaid
+flowchart LR
+    Q[QUIZ_COMPLETED / ACHIEVEMENT_EARNED] --> K[KF-2 consumers]
+    K -->|insert points, raise total_points| DB[(PostgreSQL smartkin)]
+    DB --> R[RewardsServiceImpl]
+    R --> P[GET /children/id/points]
+    R --> A[GET /children/id/achievements]
+    P --> U[Child or linked parent]
+    A --> U
+```
+
+Tests: `RewardsServiceImplTest` (every branch, sort order and paging), `RewardsControllerTest`, `RewardsMapperTest`, two repository cases in `JpaMappingContainerTest` (paging and ordering without mixing children, achievements with their achievement loaded) and one in `CrossFamilyAccessContainerTest`. `ControllerContractConformanceTest` also checks `RewardsController`.
+
 ## Spring Boot 4 migration notes
 
 - `@EntityScan` lives in `org.springframework.boot.persistence.autoconfigure`.

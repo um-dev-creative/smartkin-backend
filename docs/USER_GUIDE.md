@@ -76,6 +76,15 @@ A parent gives an activity to one of their children, and both can follow it. All
 
 Assigning an activity also sends the child a notification in their inbox. If the notification service is down at that moment the assignment is still created and only the notification is missing.
 
+## Points and achievements (new)
+
+| Operation | Method and path | Notes |
+| --- | --- | --- |
+| Points of a child | `GET /api/v1/children/{childId}/points` | The balance and the child's point movements, newest first, paged with `page` (from 0) and `size` (1 to 100, default 20). Each movement says whether it was earned or spent and why |
+| Achievements of a child | `GET /api/v1/children/{childId}/achievements` | The achievements the child has earned, newest first |
+
+The child can see their own and the parent can see those of their children; a child of another family answers 404 and a sibling 403. Points arrive by themselves when a quiz is passed or an achievement is earned; they cannot be edited through these calls.
+
 ## Quiz (new)
 
 | Operation | Method and path | Who | Notes |
