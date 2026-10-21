@@ -447,4 +447,18 @@ class JpaMappingContainerTest {
         assertEquals(started.getId(), found.get(0).getAssignment().getId());
         assertTrue(progresses.findByAssignmentId(notStarted.getId()).isEmpty());
     }
+
+    @Test
+    void loadsAnAssignmentForUpdateInsideATransaction() {
+        var parent = newParent();
+        var child = newChild(parent);
+        var assignment = assign(child, newActivity(), parent, Instant.now());
+        flushAndClear();
+
+        var locked = assignments.findForUpdateById(assignment.getId());
+
+        assertTrue(locked.isPresent());
+        assertEquals(child.getId(), locked.get().getChild().getId());
+        assertTrue(assignments.findForUpdateById(UUID.randomUUID()).isEmpty());
+    }
 }
