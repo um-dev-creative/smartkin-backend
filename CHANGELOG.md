@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `docs/BACKLOG_MVP.md`: analysis of smartkin-backend and smartkin-frontend and the unified MVP backlog (tickets BE-n, FE-n and X-n) with the execution status of each ticket.
+
+### Added
 - Container images aligned with mercury, backbone-rest and zerobound-rest. `Dockerfile` (JVM) is now two-stage with Spring Boot layers, a `docker-entrypoint.sh` (`exec java`, `-XX:+UseCompactObjectHeaders`, `MaxRAMPercentage=75`, `ExitOnOutOfMemoryError`, `JAVA_OPTS`), a non-root user and a `HEALTHCHECK` on `/actuator/health/liveness`; the internal CA is an optional BuildKit secret. `Dockerfile.native` (experimental: it builds but the binary does not start yet, see the technical guide) builds a GraalVM native image (Debian builder, Maven repository cache mount, `umdc-local` fallback for a Repsy outage, `NATIVE_QUICK_BUILD`) with its own `Dockerfile.native.dockerignore`, `config/native.env` and a `native` Maven profile; `NativeRuntimeHints` registers the reflection, resource and proxy hints the dependencies lack.
 - `docker-compose.yml`, `config/local.env` and `secrets/local.env.example`: the same two-file split (versioned bootstrap identity, git-ignored `VAULT_TOKEN`), `extra_hosts` for the `*.umdc-qa.tst` names, static IP `172.22.0.12` on `nginx_umdc-net`, port 8166, health check, 30 s stop grace period, `no-new-privileges`, read-only root with a `/tmp` tmpfs, and `SMARTKIN_TAG` to run the native image.
 - `management.endpoints`: only `health` is exposed, with the liveness/readiness probes; `HealthProbeSecurityConfig` opens `/actuator/health/**` without a token (the security library answered 401 to everything else).
