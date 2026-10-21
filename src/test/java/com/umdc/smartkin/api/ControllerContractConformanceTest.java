@@ -5,6 +5,7 @@ import com.umdc.smartkin.api.v1.controller.CatalogController;
 import com.umdc.smartkin.api.v1.controller.ChildController;
 import com.umdc.smartkin.api.v1.controller.ParentController;
 import com.umdc.smartkin.api.v1.controller.ProgressController;
+import com.umdc.smartkin.api.v1.controller.QuizController;
 import io.swagger.v3.oas.annotations.Operation;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.annotation.AnnotatedElementUtils;
@@ -29,7 +30,7 @@ class ControllerContractConformanceTest {
 
     private static final String BASE = "/api/v1";
     private static final List<Class<?>> IMPLEMENTED = List.of(ParentController.class, ChildController.class, CatalogController.class,
-            AssignmentController.class, ProgressController.class);
+            AssignmentController.class, ProgressController.class, QuizController.class);
 
     @SuppressWarnings("unchecked")
     private static Map<String, String> contractOperations() throws IOException {
@@ -79,7 +80,7 @@ class ControllerContractConformanceTest {
         var contract = contractOperations();
         var expected = Arrays.asList("getMyParentProfile", "putMyParentProfile", "listMyChildren", "linkChild", "getChild", "updateChild",
                 "listTopics", "listTopicLessons", "getLesson", "listActivities", "getActivity",
-                "assignActivity", "listAssignments", "getAssignment", "getProgress", "updateProgress", "putParentFeedback");
+                "assignActivity", "listAssignments", "getAssignment", "getProgress", "updateProgress", "putParentFeedback", "submitQuizAttempt", "listQuizAttempts");
         var implemented = new TreeMap<String, String>();
         IMPLEMENTED.forEach(controller -> implemented.putAll(implementedOperations(controller)));
 

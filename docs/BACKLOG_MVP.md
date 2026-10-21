@@ -9,7 +9,7 @@ Este análisis se hizo leyendo el código, el historial de git, los CHANGELOG y 
 
 ## 0. Estado de ejecución
 
-Actualizado: 2026-10-21 (Épica 1 completa; BE-4 a BE-8 con PR abierto; los merges de #20 a #23 están pendientes de permiso; siguiente: BE-9).
+Actualizado: 2026-10-21 (Épica 1 completa; BE-4 a BE-9 con PR abierto; los merges de #20 a #24 están pendientes de permiso; siguiente: BE-10).
 
 | Ticket | Estado | Nota |
 |---|---|---|
@@ -21,6 +21,7 @@ Actualizado: 2026-10-21 (Épica 1 completa; BE-4 a BE-8 con PR abierto; los merg
 | BE-6 | Hecho (PR abierto, apilado sobre BE-5) | Rama `sak-26-catalog-api`: 5 operaciones del catálogo y migración V4 (`activities.lesson_id`). 266 pruebas en verde. |
 | BE-7 | Hecho (PR abierto, apilado sobre BE-6) | Rama `sak-27-assignments`: asignar, listar y consultar asignaciones; evento `ACTIVITY_ASSIGNED` tras el commit. 294 pruebas en verde. |
 | BE-8 | Hecho (PR abierto, apilado sobre BE-7) | Rama `sak-28-progress`: leer/reportar progreso y comentario del padre, con bloqueo por asignación. 313 pruebas en verde. |
+| BE-9 | Hecho (PR abierto, apilado sobre BE-8) | Rama `sak-29-quiz-attempts`: calificación en servidor (conjunto exacto, sin crédito parcial), intentos, progreso y `QUIZ_COMPLETED`. 345 pruebas en verde. |
 | FE-2 | Bloqueado: acción manual | El token de Vault está en el commit `2eb6965` (2025-08-01, `run-local.sh`). Debe rotarse en Vault; no se puede hacer desde el repo. |
 | BE-2 | Bloqueado: requiere QA | Necesita Vault, Config Server y Supabase reales. |
 | BE-3 | Bloqueado: requiere QA | Crear topics de Kafka y fijar la contraseña de `smartkin_app` en el entorno real. |

@@ -33,6 +33,9 @@ public final class SmartKinAppConstants {
     public static final String ONLY_THE_CHILD_MESSAGE = "Only the assigned child can report progress.";
     public static final String ONLY_THE_PARENT_MESSAGE = "Only the parent who assigned the activity can do this.";
     public static final String PROGRESS_CANNOT_DECREASE_MESSAGE = "The completion percentage cannot go down.";
+    public static final String QUIZ_NOT_AVAILABLE_MESSAGE = "This assignment has no published quiz.";
+    public static final String MAX_ATTEMPTS_REACHED_MESSAGE = "The maximum number of quiz attempts was reached.";
+    public static final String ATTEMPT_CONFLICT_MESSAGE = "The attempt could not be recorded, try again.";
     public static final String CALLER_UNKNOWN_MESSAGE = "The session token does not identify a user.";
     public static final String NOT_A_PARENT_MESSAGE = "Only a parent can do this.";
     public static final String CHILD_CANNOT_BE_PARENT_MESSAGE = "A child cannot have a parent profile.";

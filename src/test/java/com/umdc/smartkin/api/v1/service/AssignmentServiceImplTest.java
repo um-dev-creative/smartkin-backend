@@ -12,13 +12,12 @@ import com.umdc.smartkin.jpa.repository.ActivityProgressRepository;
 import com.umdc.smartkin.jpa.repository.ActivityRepository;
 import com.umdc.smartkin.jpa.repository.AssignedActivityRepository;
 import com.umdc.smartkin.jpa.repository.ParentRepository;
-import com.umdc.smartkin.kafka.event.SmartKinEventPublisher;
+import com.umdc.smartkin.kafka.event.DomainEventDispatcher;
 import com.umdc.smartkin.kafka.event.payload.ActivityAssignedPayload;
 import com.umdc.smartkin.mapper.AssignmentMapperImpl;
 import com.umdc.smartkin.security.access.AccessPolicy;
 import com.umdc.smartkin.security.access.ChildAccess;
 import com.umdc.smartkin.security.access.ChildAccessDecision;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,8 +27,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -70,7 +67,7 @@ class AssignmentServiceImplTest {
     @Mock
     private ParentRepository parentRepository;
     @Mock
-    private SmartKinEventPublisher eventPublisher;
+    private DomainEventDispatcher events;
     private AssignmentServiceImpl service;
     private ChildEntity child;
     private ParentEntity parent;
@@ -79,7 +76,7 @@ class AssignmentServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new AssignmentServiceImpl(accessPolicy, assignmentRepository, progressRepository, activityRepository, parentRepository,
-                eventPublisher, new AssignmentMapperImpl(), Clock.fixed(NOW, ZoneOffset.UTC));
+                events, new AssignmentMapperImpl(), Clock.fixed(NOW, ZoneOffset.UTC));
         parent = new ParentEntity();
         parent.setId(PARENT_ID);
         child = new ChildEntity();
@@ -92,13 +89,6 @@ class AssignmentServiceImplTest {
         activity.setTopic(topic);
         activity.setTitle("Passwords");
         activity.setLessonId(LESSON_ID);
-    }
-
-    @AfterEach
-    void clearSynchronization() {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
     }
 
     private AssignedActivityEntity assignment() {
@@ -148,48 +138,8 @@ class AssignmentServiceImplTest {
         assertEquals(due, body.dueDate());
         assertNull(body.progress());
         var payload = ArgumentCaptor.forClass(ActivityAssignedPayload.class);
-        verify(eventPublisher).activityAssigned(payload.capture());
+        verify(events).activityAssigned(payload.capture());
         assertEquals(new ActivityAssignedPayload(ASSIGNMENT_ID, CHILD_ID, PARENT_ID, ACTIVITY_ID, "Passwords", due), payload.getValue());
-    }
-
-    @Test
-    void assignPublishesOnlyAfterTheTransactionCommits() {
-        parentOwnsChild();
-        when(activityRepository.findByIdAndIsActiveTrue(ACTIVITY_ID)).thenReturn(Optional.of(activity));
-        saveReturnsTheAssignment();
-        TransactionSynchronizationManager.initSynchronization();
-
-        service.assign(tokenFor(PARENT_ID), new AssignmentRequest(CHILD_ID, ACTIVITY_ID, null));
-
-        verify(eventPublisher, never()).activityAssigned(any());
-        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
-        verify(eventPublisher).activityAssigned(any());
-    }
-
-    @Test
-    void assignDoesNotPublishWhenTheTransactionRollsBack() {
-        parentOwnsChild();
-        when(activityRepository.findByIdAndIsActiveTrue(ACTIVITY_ID)).thenReturn(Optional.of(activity));
-        saveReturnsTheAssignment();
-        TransactionSynchronizationManager.initSynchronization();
-
-        service.assign(tokenFor(PARENT_ID), new AssignmentRequest(CHILD_ID, ACTIVITY_ID, null));
-        TransactionSynchronizationManager.getSynchronizations()
-                .forEach(synchronization -> synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
-
-        verify(eventPublisher, never()).activityAssigned(any());
-    }
-
-    @Test
-    void aFailingPublisherDoesNotFailTheAssignment() {
-        parentOwnsChild();
-        when(activityRepository.findByIdAndIsActiveTrue(ACTIVITY_ID)).thenReturn(Optional.of(activity));
-        saveReturnsTheAssignment();
-        when(eventPublisher.activityAssigned(any())).thenThrow(new IllegalStateException("broker down"));
-
-        var response = service.assign(tokenFor(PARENT_ID), new AssignmentRequest(CHILD_ID, ACTIVITY_ID, null));
-
-        assertEquals(HttpStatus.CREATED, response.getStatusCode());
     }
 
     @Test
@@ -212,7 +162,7 @@ class AssignmentServiceImplTest {
         assertEquals(HttpStatus.FORBIDDEN, notParent.getStatusCode());
         assertEquals(HttpStatus.NOT_FOUND, notYours.getStatusCode());
         verify(assignmentRepository, never()).saveAndFlush(any());
-        verify(eventPublisher, never()).activityAssigned(any());
+        verify(events, never()).activityAssigned(any());
     }
 
     @Test
@@ -248,7 +198,7 @@ class AssignmentServiceImplTest {
 
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
         verify(assignmentRepository, never()).saveAndFlush(any());
-        verify(eventPublisher, never()).activityAssigned(any());
+        verify(events, never()).activityAssigned(any());
     }
 
     // list
