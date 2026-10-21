@@ -3,6 +3,7 @@ package com.umdc.smartkin.jpa;
 import com.umdc.smartkin.achievement.AchievementTrigger;
 import com.umdc.smartkin.api.v1.service.AssignmentServiceImpl;
 import com.umdc.smartkin.api.v1.service.ChildServiceImpl;
+import com.umdc.smartkin.api.v1.service.NotificationServiceImpl;
 import com.umdc.smartkin.api.v1.service.ParentServiceImpl;
 import com.umdc.smartkin.api.v1.service.ProgressRecorder;
 import com.umdc.smartkin.api.v1.service.ProgressServiceImpl;
@@ -26,6 +27,7 @@ import com.umdc.smartkin.jpa.repository.TopicRepository;
 import com.umdc.smartkin.kafka.event.DomainEventDispatcher;
 import com.umdc.smartkin.kafka.event.SmartKinEventPublisher;
 import com.umdc.smartkin.mapper.AssignmentMapperImpl;
+import com.umdc.smartkin.mapper.NotificationMapperImpl;
 import com.umdc.smartkin.mapper.QuizAttemptMapper;
 import com.umdc.smartkin.mapper.RewardsMapperImpl;
 import com.umdc.smartkin.mongo.document.LessonStatus;
@@ -87,7 +89,7 @@ class CrossFamilyAccessContainerTest {
     @SpringBootConfiguration
     @EnableAutoConfiguration
     @Import({DataBaseConfig.class, ClockConfig.class, AccessPolicy.class, ChildServiceImpl.class, ParentServiceImpl.class,
-            AssignmentServiceImpl.class, ProgressServiceImpl.class, QuizAttemptServiceImpl.class, RewardsServiceImpl.class, RewardsMapperImpl.class, ProgressRecorder.class, QuizGrader.class, QuizAttemptMapper.class,
+            AssignmentServiceImpl.class, ProgressServiceImpl.class, QuizAttemptServiceImpl.class, RewardsServiceImpl.class, RewardsMapperImpl.class, NotificationServiceImpl.class, NotificationMapperImpl.class, ProgressRecorder.class, QuizGrader.class, QuizAttemptMapper.class,
             DomainEventDispatcher.class, ChildMapperImpl.class, ParentMapperImpl.class, AssignmentMapperImpl.class})
     static class AccessTestApplication {
     }
@@ -124,6 +126,10 @@ class CrossFamilyAccessContainerTest {
     private QuizAttemptServiceImpl quiz;
     @Autowired
     private RewardsServiceImpl rewards;
+    @Autowired
+    private NotificationServiceImpl inbox;
+    @Autowired
+    private com.umdc.smartkin.jpa.repository.NotificationRepository notificationRepository;
 
     private UUID parentA;
     private UUID parentB;
@@ -391,5 +397,36 @@ class CrossFamilyAccessContainerTest {
         assertEquals(HttpStatus.NOT_FOUND, rewards.achievements(tokenFor(parentA), childB1).getStatusCode());
         assertEquals(HttpStatus.FORBIDDEN, rewards.achievements(tokenFor(childB1), childA1).getStatusCode());
         assertEquals(0, rewards.points(tokenFor(parentA), childA1, 0, 20).getBody().totalPoints());
+    }
+
+    private UUID newNotification(UUID userId) {
+        var notification = new com.umdc.smartkin.jpa.domain.NotificationEntity();
+        notification.setUserId(userId);
+        notification.setType(com.umdc.smartkin.jpa.domain.NotificationType.ASSIGNMENT);
+        notification.setTitle("t");
+        notification.setMessage("m");
+        notification.setCreatedAt(java.time.Instant.now());
+        return notificationRepository.save(notification).getId();
+    }
+
+    @Test
+    void everyoneHasTheirOwnInbox() {
+        var ofA1 = newNotification(childA1);
+        var ofB1 = newNotification(childB1);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertEquals(List.of(ofA1), inbox.list(tokenFor(childA1), false, 0, 20).getBody().content().stream().map(n -> n.notificationId()).toList());
+        assertEquals(1, inbox.unreadCount(tokenFor(childB1)).getBody().count());
+        assertEquals(HttpStatus.NOT_FOUND, inbox.markRead(tokenFor(childB1), ofA1).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, inbox.markRead(tokenFor(parentA), ofA1).getStatusCode());
+        assertEquals(HttpStatus.NO_CONTENT, inbox.markRead(tokenFor(childA1), ofA1).getStatusCode());
+        assertEquals(0, inbox.unreadCount(tokenFor(childA1)).getBody().count());
+        assertEquals(1, inbox.unreadCount(tokenFor(childB1)).getBody().count());
+        assertEquals(HttpStatus.NO_CONTENT, inbox.markAllRead(tokenFor(parentA)).getStatusCode());
+        entityManager.flush();
+        entityManager.clear();
+        assertEquals(1, inbox.unreadCount(tokenFor(childB1)).getBody().count());
+        assertEquals(false, notificationRepository.findById(ofB1).orElseThrow().getIsRead());
     }
 }

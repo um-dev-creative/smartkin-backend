@@ -3,6 +3,7 @@ package com.umdc.smartkin.api;
 import com.umdc.smartkin.api.v1.controller.AssignmentController;
 import com.umdc.smartkin.api.v1.controller.CatalogController;
 import com.umdc.smartkin.api.v1.controller.ChildController;
+import com.umdc.smartkin.api.v1.controller.NotificationController;
 import com.umdc.smartkin.api.v1.controller.ParentController;
 import com.umdc.smartkin.api.v1.controller.ProgressController;
 import com.umdc.smartkin.api.v1.controller.QuizController;
@@ -32,7 +33,7 @@ class ControllerContractConformanceTest {
     private static final String BASE = "/api/v1";
     private static final List<Class<?>> IMPLEMENTED = List.of(ParentController.class, ChildController.class, CatalogController.class,
             AssignmentController.class, ProgressController.class, QuizController.class,
-            RewardsController.class);
+            RewardsController.class, NotificationController.class);
 
     @SuppressWarnings("unchecked")
     private static Map<String, String> contractOperations() throws IOException {
@@ -82,7 +83,8 @@ class ControllerContractConformanceTest {
         var contract = contractOperations();
         var expected = Arrays.asList("getMyParentProfile", "putMyParentProfile", "listMyChildren", "linkChild", "getChild", "updateChild",
                 "listTopics", "listTopicLessons", "getLesson", "listActivities", "getActivity",
-                "assignActivity", "listAssignments", "getAssignment", "getProgress", "updateProgress", "putParentFeedback", "submitQuizAttempt", "listQuizAttempts", "getChildPoints", "listChildAchievements");
+                "assignActivity", "listAssignments", "getAssignment", "getProgress", "updateProgress", "putParentFeedback", "submitQuizAttempt", "listQuizAttempts", "getChildPoints", "listChildAchievements",
+                "listNotifications", "getUnreadNotificationCount", "markAllNotificationsRead", "markNotificationRead");
         var implemented = new TreeMap<String, String>();
         IMPLEMENTED.forEach(controller -> implemented.putAll(implementedOperations(controller)));
 

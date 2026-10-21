@@ -76,6 +76,19 @@ A parent gives an activity to one of their children, and both can follow it. All
 
 Assigning an activity also sends the child a notification in their inbox. If the notification service is down at that moment the assignment is still created and only the notification is missing.
 
+## Notifications (new)
+
+Every user has an inbox. The service puts notifications in it by itself (a new activity for the child, a new achievement) and these calls read and mark them. All carry the session token.
+
+| Operation | Method and path | Notes |
+| --- | --- | --- |
+| Read the inbox | `GET /api/v1/notifications` | Newest first, paged with `page` (from 0) and `size` (1 to 100, default 20). Add `?unread=true` for the unread ones only. Each notification says its type, title, text, whether it was read and when |
+| Count the unread | `GET /api/v1/notifications/unread-count` | `{"count": 3}`, meant for the badge in the header |
+| Mark one as read | `POST /api/v1/notifications/{notificationId}/read` | 204. Doing it twice is harmless. A notification of someone else answers 404 |
+| Mark all as read | `POST /api/v1/notifications/read-all` | 204. Only your own notifications change |
+
+The notification about a new activity or achievement appears a few seconds after it happens, because it is created in the background.
+
 ## How achievements are earned (new)
 
 Achievements are given automatically, once per child, when one of these conditions is met (the number is set per achievement):

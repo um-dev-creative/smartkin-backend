@@ -530,4 +530,68 @@ class JpaMappingContainerTest {
         assertEquals(java.util.List.of("Three lessons", "First lesson"), found.stream().map(e -> e.getAchievement().getName()).toList());
         assertTrue(childAchievements.findByChildIdOrderByEarnedAtDesc(UUID.randomUUID()).isEmpty());
     }
+
+    private NotificationEntity notification(UUID userId, boolean read, Instant createdAt) {
+        var notification = new NotificationEntity();
+        notification.setUserId(userId);
+        notification.setType(NotificationType.SYSTEM);
+        notification.setTitle("t");
+        notification.setMessage("m");
+        notification.setCreatedAt(createdAt);
+        notification.setIsRead(read);
+        return notifications.save(notification);
+    }
+
+    @Test
+    void pagesTheInboxOfAUserNewestFirstAndFiltersTheUnread() {
+        var user = UUID.randomUUID();
+        var oldest = notification(user, true, Instant.parse("2026-01-01T00:00:00Z"));
+        var middle = notification(user, false, Instant.parse("2026-02-01T00:00:00Z"));
+        var newest = notification(user, false, Instant.parse("2026-03-01T00:00:00Z"));
+        notification(UUID.randomUUID(), false, Instant.parse("2026-04-01T00:00:00Z"));
+        flushAndClear();
+        var newestFirst = org.springframework.data.domain.PageRequest.of(0, 10,
+                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+
+        var all = notifications.findByUserId(user, newestFirst);
+        var unread = notifications.findByUserIdAndIsReadFalse(user, newestFirst);
+
+        assertEquals(java.util.List.of(newest.getId(), middle.getId(), oldest.getId()), all.getContent().stream().map(NotificationEntity::getId).toList());
+        assertEquals(java.util.List.of(newest.getId(), middle.getId()), unread.getContent().stream().map(NotificationEntity::getId).toList());
+        assertEquals(2, notifications.countByUserIdAndIsReadFalse(user));
+        assertEquals(0, notifications.countByUserIdAndIsReadFalse(UUID.randomUUID()));
+    }
+
+    @Test
+    void aNotificationIsOnlyFoundForItsOwner() {
+        var owner = UUID.randomUUID();
+        var saved = notification(owner, false, Instant.now());
+        flushAndClear();
+
+        assertTrue(notifications.findByIdAndUserId(saved.getId(), owner).isPresent());
+        assertTrue(notifications.findByIdAndUserId(saved.getId(), UUID.randomUUID()).isEmpty());
+    }
+
+    @Test
+    void markAllReadOnlyChangesTheUnreadOnesOfThatUser() {
+        var user = UUID.randomUUID();
+        var other = UUID.randomUUID();
+        var alreadyRead = notification(user, true, Instant.now());
+        alreadyRead.setReadAt(Instant.parse("2026-01-01T00:00:00Z"));
+        notification(user, false, Instant.now());
+        notification(user, false, Instant.now());
+        var foreign = notification(other, false, Instant.now());
+        flushAndClear();
+        var readAt = Instant.parse("2026-10-21T12:00:00Z");
+
+        var changed = notifications.markAllRead(user, readAt);
+        flushAndClear();
+
+        assertEquals(2, changed);
+        assertEquals(0, notifications.countByUserIdAndIsReadFalse(user));
+        assertEquals(1, notifications.countByUserIdAndIsReadFalse(other));
+        assertTrue(notifications.findById(foreign.getId()).orElseThrow().getReadAt() == null);
+        assertEquals(Instant.parse("2026-01-01T00:00:00Z"), notifications.findById(alreadyRead.getId()).orElseThrow().getReadAt());
+        assertEquals(0, notifications.markAllRead(user, readAt));
+    }
 }
