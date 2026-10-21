@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- X-2: MVP API contract `docs/api/openapi-v1.yaml` (OpenAPI 3.0.3, 25 operations: parents and children, catalog, assignments and progress, quiz attempts, points and achievements, notifications) and decision record `docs/decisions/D-6-mvp-api-contract.md`. It is documentation only: no controller or behavior changes. `OpenApiContractTest` keeps it well formed (resolved references, unique operation ids, no `correct` flag on quiz options, existing user endpoints not redefined).
 - `docs/BACKLOG_MVP.md`: analysis of smartkin-backend and smartkin-frontend and the unified MVP backlog (tickets BE-n, FE-n and X-n) with the execution status of each ticket.
 
 ### Added
