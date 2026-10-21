@@ -12,7 +12,7 @@ The contract is `docs/api/openapi-v1.yaml` (OpenAPI 3.0.3, 25 operations). It is
 4. **An activity points at a lesson.** `assigned_activities` references `activities` (PostgreSQL) while lessons and quizzes live in MongoDB, and nothing links them today. BE-7 adds migration `V4` with a nullable `activities.lesson_id`; the contract exposes it as `Activity.lessonId` and `Assignment.lessonId`. Existing rows keep working (the column is nullable).
 5. **Grading is server-side.** The lesson payload sent to clients has no `correct` flag on options (`Option` has only `id` and `text`); the server grades `POST .../quiz-attempts` against the lesson version, stores the attempt and publishes `QUIZ_COMPLETED`. Points are booked by the existing consumer (KF-2), not by the endpoint, so the idempotent path stays the only writer of points.
 6. **Pagination** (`page`, `size`, `PageMeta`) only on lists that grow without bound: assignments, notifications and point transactions. Small lists (children, topics, lessons, activities, achievements, quiz attempts) return arrays.
-7. **Errors** keep the convention of the existing endpoints: the HTTP status plus the `message` header, and a small `ErrorResponse` body. 404 is used both for a missing resource and for one the caller may not see, so ids of other families are not revealed.
+7. **Errors** keep the convention of the existing endpoints: the HTTP status plus the `message-error` header (`MESSAGE_ERROR_HEADER`) and an empty body; the first draft of the contract described a JSON `ErrorResponse` body, which no existing endpoint sends, so it was dropped before any controller used it. 404 is used both for a missing resource and for one the caller may not see, so ids of other families are not revealed.
 
 ## Consequences
 

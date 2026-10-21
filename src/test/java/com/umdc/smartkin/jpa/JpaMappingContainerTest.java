@@ -295,4 +295,20 @@ class JpaMappingContainerTest {
 
         assertTrue(jdbc.queryForList("select 1 from smartkin.child where child_id = ?", child.getId()).isEmpty());
     }
+
+    @Test
+    void findsTheChildrenOfAParentWithoutMixingFamilies() {
+        var parent = newParent();
+        var other = newParent();
+        var first = newChild(parent);
+        var second = newChild(parent);
+        newChild(other);
+        flushAndClear();
+
+        var found = children.findAllByParentId(parent.getId());
+
+        assertEquals(2, found.size());
+        assertTrue(found.stream().map(ChildEntity::getId).toList().containsAll(java.util.List.of(first.getId(), second.getId())));
+        assertTrue(children.findAllByParentId(UUID.randomUUID()).isEmpty());
+    }
 }

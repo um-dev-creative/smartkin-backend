@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- BE-4: parent and child profiles. `GET/PUT /api/v1/parents/me` and `GET/POST /api/v1/children`, `GET/PUT /api/v1/children/{childId}` (operations `getMyParentProfile`, `putMyParentProfile`, `listMyChildren`, `linkChild`, `getChild`, `updateChild` of the contract). The caller is the `uid` of the session token: a user with a `parent` row is a parent, one with a `child` row a child. A parent reaches only their own children; a child of another family answers 404. Linking checks that the user exists in backbone, is not the caller and has no parent or child profile yet (409 otherwise, also on a concurrent link). New `ParentService`/`ChildService`, `ParentMapper`/`ChildMapper` and `ChildRepository.findAllByParentId`. `ControllerContractConformanceTest` compares every implemented controller with `docs/api/openapi-v1.yaml`.
 - X-2: MVP API contract `docs/api/openapi-v1.yaml` (OpenAPI 3.0.3, 25 operations: parents and children, catalog, assignments and progress, quiz attempts, points and achievements, notifications) and decision record `docs/decisions/D-6-mvp-api-contract.md`. It is documentation only: no controller or behavior changes. `OpenApiContractTest` keeps it well formed (resolved references, unique operation ids, no `correct` flag on quiz options, existing user endpoints not redefined).
 - `docs/BACKLOG_MVP.md`: analysis of smartkin-backend and smartkin-frontend and the unified MVP backlog (tickets BE-n, FE-n and X-n) with the execution status of each ticket.
 
@@ -18,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pom.xml` copies `certs/smartkin/` (git-ignored: `smartkin.jks`, `umdc-truststore.jks`) onto the classpath, like backbone-rest, so the keystores of the TLS bundle travel inside the jar.
 
 ### Changed
+- X-2 contract amendment: errors are the HTTP status plus the `message-error` header with an empty body (the existing convention) instead of a JSON `ErrorResponse`; the `ErrorResponse` schema was removed before any controller used it.
 - The old `Dockerfile` imported five `.crt` files and a keystore from `src/main/resources` that are not in the repository, so it could not be built from a fresh checkout; those imports are gone.
 - `bootstrap.yml` now sets `umdc.security.keystore` / `truststore` (the RestTemplate of the security library, whose absence threw a `NullPointerException` at start) and `eureka.client.tls`, from the same `SSL_*` variables as the TLS bundle.
 

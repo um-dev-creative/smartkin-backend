@@ -12,7 +12,7 @@ info:
     - The caller's identity and role (parent or child) come from the token; a parent only reaches their own children, a child only themselves
       (403 otherwise, 404 when the resource does not exist or is not visible to the caller).
     - Identifiers are UUIDs. Instants are ISO-8601 UTC. Lists that can grow are paged with `page` (0-based) and `size` (default 20, max 100).
-    - Errors use `ErrorResponse`. The `message` response header keeps the value the existing endpoints already send.
+    - Errors keep the convention of the existing endpoints: the HTTP status plus the `message-error` response header, with an empty body.
 servers:
   - url: /api/v1
 security:
@@ -313,17 +313,11 @@ components:
     Page: {name: page, in: query, required: false, schema: {type: integer, minimum: 0, default: 0}}
     Size: {name: size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
   responses:
-    BadRequest: {description: Invalid request, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
-    Forbidden: {description: The caller may not do this, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
-    NotFound: {description: Not found or not visible to the caller, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
-    Conflict: {description: The request conflicts with the current state, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+    BadRequest: {description: Invalid request, headers: {message-error: {description: Reason, schema: {type: string}}}}
+    Forbidden: {description: The caller may not do this, headers: {message-error: {description: Reason, schema: {type: string}}}}
+    NotFound: {description: Not found or not visible to the caller, headers: {message-error: {description: Reason, schema: {type: string}}}}
+    Conflict: {description: The request conflicts with the current state, headers: {message-error: {description: Reason, schema: {type: string}}}}
   schemas:
-    ErrorResponse:
-      type: object
-      required: [status, message]
-      properties:
-        status: {type: integer}
-        message: {type: string}
     ParentProfile:
       type: object
       required: [parentId]
