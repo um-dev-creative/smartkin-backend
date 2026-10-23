@@ -35,6 +35,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -53,6 +54,7 @@ class ConsumerRetryContainerTest {
     static class Wiring {
         static final AtomicInteger calls = new AtomicInteger();
         static final EventEffectsService effects = mock(EventEffectsService.class);
+        static final io.micrometer.core.instrument.simple.SimpleMeterRegistry METRICS = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
 
         @Bean
         ObjectMapper mapper() {
@@ -62,6 +64,11 @@ class ConsumerRetryContainerTest {
         @Bean
         EventEffectsService effects() {
             return effects;
+        }
+
+        @Bean
+        io.micrometer.core.instrument.MeterRegistry meterRegistry() {
+            return METRICS;
         }
 
         @Bean
@@ -138,6 +145,16 @@ class ConsumerRetryContainerTest {
                 Thread.sleep(100);
             }
             assertEquals(4, Wiring.calls.get());
+            var metrics = Wiring.METRICS;
+            var metricsDeadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+            while (metrics.find("smartkin.events.dead_lettered").counters().stream().mapToDouble(c -> c.count()).sum() < 2
+                    && System.nanoTime() < metricsDeadline) {
+                Thread.sleep(100);
+            }
+            assertEquals(2.0, metrics.find("smartkin.events.dead_lettered").counters().stream().mapToDouble(c -> c.count()).sum());
+            assertEquals(1.0, metrics.find("smartkin.events.dead_lettered").tag("exception", "IllegalStateException").counter().count());
+            assertTrue(metrics.find("smartkin.events.delivery_failed").tag("topic", quizTopic).counter().count() >= 2);
+            assertNull(metrics.find("smartkin.events.dead_letter_failed").counter());
         }
     }
 

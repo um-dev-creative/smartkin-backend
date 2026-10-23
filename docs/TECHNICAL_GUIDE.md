@@ -540,6 +540,33 @@ flowchart LR
 
 Tests: `NotificationServiceImplTest` (every branch), `NotificationControllerTest` (routing of `/unread-count`, `/read-all` and `/{id}/read`), `NotificationMapperTest`, three repository cases in `JpaMappingContainerTest` (paging and the unread filter, ownership, `markAllRead`) and one in `CrossFamilyAccessContainerTest` (each user has their own inbox). `ControllerContractConformanceTest` also checks `NotificationController`; with this ticket **every operation of the contract is implemented and checked**.
 
+## Error topic monitoring (BE-14)
+
+`ErrorTopicMonitor` wraps the consumer's error handling (`KafkaConsumerConfig.smartKinErrorHandler`) so failures are visible. It does not change what happens to a record: retries, back-off and the move to `smartkin.events.error.v1` are exactly those of KF-3.
+
+| Signal | Meaning |
+| --- | --- |
+| counter `smartkin.events.delivery_failed` (tag `topic`) | a delivery of a record failed and it is being retried (one increment per failed attempt; a malformed record fails once) |
+| counter `smartkin.events.dead_lettered` (tags `topic`, `exception`) | a record gave up and was published to the error topic; `exception` is the simple class name of the cause |
+| counter `smartkin.events.dead_letter_failed` (tag `topic`) | publishing to the error topic itself failed (typically: the topic does not exist). The error propagates, the offset is not committed and the record is retried, so nothing is lost |
+| log `ERROR DEAD_LETTERED topic-partition@offset key=... cause=...` | the same event for log based alerting; `DEAD_LETTER_FAILED ...` for the last row |
+
+**What to alert on** (suggested): any increase of `smartkin.events.dead_lettered` over 5 minutes (a record needs a human), and **any** `smartkin.events.dead_letter_failed` (events are stuck until the error topic exists). A sustained rise of `delivery_failed` without `dead_lettered` means a dependency (database, MongoDB) is flapping.
+
+**Scraping.** The counters live in the application's `MeterRegistry`. The service exposes only `health` (`management.endpoints.web.exposure.include`), so nothing is scrapeable yet and no registry such as Prometheus is on the classpath: choosing one and securing its endpoint depends on the platform, so this ticket does not do it. Until then the log marker is the alertable signal.
+
+```mermaid
+flowchart LR
+    R[Record fails] --> F[ErrorTopicMonitor.failedDelivery: delivery_failed +1]
+    F --> Q{retries left?}
+    Q -- yes --> R
+    Q -- no --> D[DeadLetterPublishingRecoverer]
+    D -- ok --> M[dead_lettered +1 and ERROR DEAD_LETTERED]
+    D -- fails --> X[dead_letter_failed +1, ERROR DEAD_LETTER_FAILED, offset not committed]
+```
+
+Tests: `ErrorTopicMonitorTest` (counting, tags, failure of the error topic) and the extended `ConsumerRetryContainerTest`, which on a real Kafka asserts the counters for one malformed record and one record that fails its retries.
+
 ## Spring Boot 4 migration notes
 
 - `@EntityScan` lives in `org.springframework.boot.persistence.autoconfigure`.
@@ -562,6 +589,6 @@ The com.umdc libraries bind `umdc.*` properties, not the old `prx.*` ones: `umdc
 - The service starts only with the full environment (Vault, Config Server, SSL bundle, OAuth clients); startup with a complete
   environment was not verified in this task.
 - The Docker image was not built in this task.
-- The error topic must exist before the first failure (the application does not create topics), and nothing alerts on it yet.
+- The error topic must exist before the first failure (the application does not create topics). The application now counts and logs what goes to it (see *Error topic monitoring*), but the **alert rule itself** is the platform team's: it needs a metrics scraper or a log monitor that this repository does not configure.
 - The enum labels (D-2) and the baseline DDL are derived from the entities and need confirmation against any existing `smartkin` schema in `umdevc`.
 - Flyway and the Supabase connection were exercised only against a Testcontainers PostgreSQL, not against Supabase.

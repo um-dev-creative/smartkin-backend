@@ -19,6 +19,7 @@ class KafkaConsumerConfigTest {
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withUserConfiguration(KafkaConsumerConfig.class)
             .withBean(KafkaOperations.class, () -> mock(KafkaOperations.class))
+            .withBean(io.micrometer.core.instrument.MeterRegistry.class, io.micrometer.core.instrument.simple.SimpleMeterRegistry::new)
             .withPropertyValues("prx.bootstrap.server.url=broker");
 
     @Test

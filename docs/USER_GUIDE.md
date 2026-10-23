@@ -76,6 +76,10 @@ A parent gives an activity to one of their children, and both can follow it. All
 
 Assigning an activity also sends the child a notification in their inbox. If the notification service is down at that moment the assignment is still created and only the notification is missing.
 
+## Monitoring the error topic (new, for operators)
+
+Events that fail all their retries go to `smartkin.events.error.v1` (see the events section). The service now records it: metrics `smartkin.events.dead_lettered`, `smartkin.events.delivery_failed` and `smartkin.events.dead_letter_failed`, and an `ERROR` log line starting with `DEAD_LETTERED` (or `DEAD_LETTER_FAILED` when the error topic itself cannot be written, for example because it was never created). Alert on any `DEAD_LETTERED` or `DEAD_LETTER_FAILED` line. The metrics are not scrapeable yet because only `health` is exposed; there is no change for API consumers.
+
 ## Notifications (new)
 
 Every user has an inbox. The service puts notifications in it by itself (a new activity for the child, a new achievement) and these calls read and mark them. All carry the session token.

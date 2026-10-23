@@ -25,6 +25,7 @@ Actualizado: 2026-10-21 (Épica 1 completa; BE-4 a BE-12 con PR abierto (Épica 
 | BE-10 | Hecho (PR abierto, apilado sobre BE-9) | Rama `sak-30-points-achievements`: puntos paginados y logros del hijo, solo lectura. 359 pruebas en verde. |
 | BE-11 | Hecho (PR abierto, apilado sobre BE-10) | Rama `sak-31-achievement-rules`: reglas `QUIZZES_PASSED`, `ACTIVITIES_COMPLETED`, `POINTS_REACHED`; migración V5 (índice único y 3 logros de ejemplo). 380 pruebas en verde. |
 | BE-12 | Hecho (PR abierto, apilado sobre BE-11) | Rama `sak-32-notifications`: bandeja, contador, marcar una/todas como leídas. 396 pruebas en verde. Con este ticket las 25 operaciones del contrato están implementadas. |
+| BE-14 | Hecho en código (PR abierto) | Rama `sak-33-error-topic-metric`: contadores y logs `DEAD_LETTERED`. La regla de alerta y el endpoint/registro de métricas quedan para plataforma; depende además de BE-3. 399 pruebas en verde. |
 | FE-2 | Bloqueado: acción manual | El token de Vault está en el commit `2eb6965` (2025-08-01, `run-local.sh`). Debe rotarse en Vault; no se puede hacer desde el repo. |
 | BE-2 | Bloqueado: requiere QA | Necesita Vault, Config Server y Supabase reales. |
 | BE-3 | Bloqueado: requiere QA | Crear topics de Kafka y fijar la contraseña de `smartkin_app` en el entorno real. |
