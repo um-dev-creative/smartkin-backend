@@ -1,5 +1,6 @@
 package com.umdc.smartkin.kafka.consumer;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,10 +49,13 @@ public class KafkaConsumerConfig {
     }
 
     @Bean
-    public DefaultErrorHandler smartKinErrorHandler(KafkaOperations<String, String> kafkaTemplate, KafkaConsumerProperties properties) {
+    public DefaultErrorHandler smartKinErrorHandler(KafkaOperations<String, String> kafkaTemplate, KafkaConsumerProperties properties,
+                                                    MeterRegistry meterRegistry) {
+        var monitor = new ErrorTopicMonitor(meterRegistry);
         var recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate,
                 (record, error) -> new TopicPartition(properties.errorTopic(), -1));
-        var handler = new DefaultErrorHandler(recoverer, backOff(properties));
+        var handler = new DefaultErrorHandler(monitor.monitoring(recoverer), backOff(properties));
+        handler.setRetryListeners(monitor);
         // A malformed record fails the same way every time; do not wait for retries that cannot help.
         handler.addNotRetryableExceptions(JacksonException.class, IllegalArgumentException.class);
         return handler;
