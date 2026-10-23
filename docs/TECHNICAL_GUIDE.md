@@ -202,6 +202,7 @@ as environment variables for the private Repsy repository. The workflow does not
 | `JpaMappingContainerTest` | Flyway baseline on a PostgreSQL 17 Testcontainer, CRUD round trips of the 13 entities, the 4 enums and the cascade |
 
 | `OpenApiContractTest` | `docs/api/openapi-v1.yaml` is well formed and keeps its invariants |
+| `EndToEndFlowContainerTest` | The whole MVP slice on real PostgreSQL, MongoDB and Kafka, through Kafka consumers |
 | `AccessPolicyTest`, `CrossFamilyAccessContainerTest` (profiles and assignments) | Ownership rules, including the cross-family cases on a real PostgreSQL |
 | `ControllerContractConformanceTest` | The implemented controllers match the contract (operation id, method, path) |
 
@@ -540,6 +541,45 @@ flowchart LR
 
 Tests: `NotificationServiceImplTest` (every branch), `NotificationControllerTest` (routing of `/unread-count`, `/read-all` and `/{id}/read`), `NotificationMapperTest`, three repository cases in `JpaMappingContainerTest` (paging and the unread filter, ownership, `markAllRead`) and one in `CrossFamilyAccessContainerTest` (each user has their own inbox). `ControllerContractConformanceTest` also checks `NotificationController`; with this ticket **every operation of the contract is implemented and checked**.
 
+## End-to-end flow test (BE-13)
+
+`EndToEndFlowContainerTest` (`com.umdc.smartkin.flow`) runs the whole MVP slice on **real infrastructure**: PostgreSQL 17 with Flyway V1 to V5, MongoDB 7 and Kafka 4.0, all in Testcontainers (Docker must be running). The services, the Kafka publisher, the consumers (`SmartKinEventListener`, `EventEffectsService`) and the achievement evaluator are the production beans; the test calls the same service methods the controllers call, with real session-token payloads.
+
+It walks one family through the product:
+1. a parent saves their profile and links a child; another family's parent exists too;
+2. the parent finds the published lesson in the catalog;
+3. the parent assigns the activity: `ACTIVITY_ASSIGNED` goes through Kafka and the child gets an inbox notification, which they mark as read;
+4. the child reports 40%; the parent reads it;
+5. a **wrong** quiz attempt is graded on the server: no completion, score 0;
+6. a **passing** attempt completes the assignment, and asynchronously through Kafka the quiz points arrive (`QUIZ_COMPLETED`), the achievement "Primer quiz aprobado" is awarded, its points are booked and its notification created (`ACHIEVEMENT_EARNED`), for a final balance of 20 points, two point movements and one unread notification;
+7. the parent can assign the same activity again, but not twice; the other family gets 404 on points, progress and attempts;
+8. no `dead_lettered` or `dead_letter_failed` counter moved (BE-14), so no event fell into the error topic.
+
+```mermaid
+sequenceDiagram
+    participant S as Services (real)
+    participant PG as PostgreSQL
+    participant MG as MongoDB
+    participant K as Kafka
+    participant C as Consumers (real)
+    S->>PG: assign activity
+    S->>K: ACTIVITY_ASSIGNED
+    K->>C: consume
+    C->>PG: inbox notification
+    S->>MG: quiz attempt (graded on the server)
+    S->>PG: progress completed
+    S->>K: QUIZ_COMPLETED
+    K->>C: consume
+    C->>PG: quiz points
+    C->>PG: award achievement (own transaction)
+    C->>K: ACHIEVEMENT_EARNED
+    K->>C: consume
+    C->>PG: achievement points and notification
+```
+
+**What it deliberately does not start.** The web layer (the controllers have their own MockMvc tests and the conformance test), the PRX security library, Vault, the TLS bundle and Redis (RD-1 and RD-2 have their own container tests). Booting the complete application needs the QA environment of BE-2: about 40 variables and keystores that are not in the repository, so it cannot be hermetic in CI. This test closes the gap that mattered most: before it, no test had ever run the services, the real Kafka consumers and the databases together.
+
+It waits for the asynchronous steps with a polling helper (up to 60 s each, 200 ms step). In three consecutive runs it took 9 s.
 ## Error topic monitoring (BE-14)
 
 `ErrorTopicMonitor` wraps the consumer's error handling (`KafkaConsumerConfig.smartKinErrorHandler`) so failures are visible. It does not change what happens to a record: retries, back-off and the move to `smartkin.events.error.v1` are exactly those of KF-3.
