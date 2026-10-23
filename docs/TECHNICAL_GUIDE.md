@@ -607,6 +607,26 @@ flowchart LR
 
 Tests: `ErrorTopicMonitorTest` (counting, tags, failure of the error topic) and the extended `ConsumerRetryContainerTest`, which on a real Kafka asserts the counters for one malformed record and one record that fails its retries.
 
+## Security review of the MVP (X-5)
+
+`docs/SECURITY_REVIEW_MVP.md` records the review of both repositories: what was verified (ownership and cross-family isolation, answers never leaving the server, Row Level Security, bounded inputs, token revocation), what was **fixed** (the BFF wrote tokens, passwords and Vault values to its logs; fixed in smartkin-frontend, see its guide) and what stays **open**:
+
+- **S-1, verify in QA:** the controllers take the caller from the `uid` of the token payload without checking its signature (`JwtUtil.getUidFromToken`); that is safe only if the PRX security library rejects forged, unsigned, expired and revoked tokens before the controller runs, which no test here starts. The document lists the exact calls to make in X-1/X-4 and what to do if any is not a 401.
+- **S-2, product decision:** `POST /children` links any existing user id without that user's consent.
+- Rotate the Vault token in the git history (FE-2) and re-check the frontend's dependency alerts after the upgrade chain is merged.
+
+```mermaid
+flowchart LR
+    R[Request + session token] --> L{PRX security library validates signature, expiry, jti}
+    L -- invalid --> X[401 / 503]
+    L -- valid --> C[Controller: JwtUtil reads uid]
+    C --> P[AccessPolicy: parent / child / other family]
+    P -- not visible --> N[404]
+    P -- allowed --> S[Service]
+```
+
+The first box is the assumption of S-1: everything after it is covered by tests.
+
 ## Spring Boot 4 migration notes
 
 - `@EntityScan` lives in `org.springframework.boot.persistence.autoconfigure`.

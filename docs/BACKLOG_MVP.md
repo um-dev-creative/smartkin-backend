@@ -27,6 +27,7 @@ Actualizado: 2026-10-21 (Épica 1 completa; BE-4 a BE-12 con PR abierto (Épica 
 | BE-12 | Hecho (PR abierto, apilado sobre BE-11) | Rama `sak-32-notifications`: bandeja, contador, marcar una/todas como leídas. 396 pruebas en verde. Con este ticket las 25 operaciones del contrato están implementadas. |
 | BE-13 | Hecho (PR abierto) | Rama `sak-34-end-to-end-flow`: flujo completo sobre PostgreSQL, MongoDB y Kafka reales. No arranca la app completa (Vault/TLS/seguridad): eso es BE-2. |
 | BE-14 | Hecho en código (PR abierto) | Rama `sak-33-error-topic-metric`: contadores y logs `DEAD_LETTERED`. La regla de alerta y el endpoint/registro de métricas quedan para plataforma; depende además de BE-3. 399 pruebas en verde. |
+| X-5 | Hecho (revisión); hallazgos abiertos | `docs/SECURITY_REVIEW_MVP.md`. Corregido: secretos en los logs del BFF (frontend PR #22). Abiertos: S-1 (verificar en QA que la librería PRX rechaza tokens falsos), S-2 (vincular sin consentimiento), S-4 (rotar token de Vault). |
 | FE-2 | Bloqueado: acción manual | El token de Vault está en el commit `2eb6965` (2025-08-01, `run-local.sh`). Debe rotarse en Vault; no se puede hacer desde el repo. |
 | BE-2 | Bloqueado: requiere QA | Necesita Vault, Config Server y Supabase reales. |
 | BE-3 | Bloqueado: requiere QA | Crear topics de Kafka y fijar la contraseña de `smartkin_app` en el entorno real. |

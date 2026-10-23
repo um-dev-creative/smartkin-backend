@@ -154,6 +154,10 @@ The operations the MVP will offer are described in `docs/api/openapi-v1.yaml`: l
 see points and achievements, and read the notification inbox. This release only publishes the description; **none of these endpoints exists yet**, and the current ones (users, registration, session token) work as before.
 Each endpoint will be available as its ticket is delivered. The quiz answers are graded by the server and the lessons never tell the client which option is correct.
 
+## Security review (for operators)
+
+The security review of the MVP is in `docs/SECURITY_REVIEW_MVP.md`. Before opening the service to real families: verify in QA that the API refuses forged, unsigned, expired and revoked tokens (the exact checks are listed there), decide how a child's account consents to being linked, and rotate the Vault token that is in the history of smartkin-frontend. Secrets are no longer written to the BFF logs (see the frontend guide); older logs may contain them.
+
 ## Running in a container
 
 1. Put the TLS keystores in `certs/smartkin/` (`smartkin.jks`, `umdc-truststore.jks`; git-ignored) **before** `mvn clean package`: they are copied into the jar.
