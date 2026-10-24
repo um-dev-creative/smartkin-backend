@@ -2,7 +2,6 @@ package com.umdc.smartkin.api.v1.controller;
 
 import com.umdc.smartkin.api.v1.service.ChildService;
 import com.umdc.smartkin.api.v1.service.ParentService;
-import com.umdc.smartkin.api.v1.to.ChildRequest;
 import com.umdc.smartkin.api.v1.to.ChildResponse;
 import com.umdc.smartkin.api.v1.to.ChildUpdateRequest;
 import com.umdc.smartkin.api.v1.to.ParentProfileRequest;
@@ -24,13 +23,9 @@ import static com.umdc.smartkin.support.TestData.CHILD_ID;
 import static com.umdc.smartkin.support.TestData.PARENT_ID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -70,15 +65,12 @@ class ParentChildControllersTest {
     @Test
     void childControllerDelegatesToTheService() {
         var child = new ChildResponse(CHILD_ID, PARENT_ID, "5", "fox.png", 0);
-        var linkRequest = new ChildRequest(CHILD_ID, "5", "fox.png");
         var updateRequest = new ChildUpdateRequest("6", null);
         when(childService.list(TOKEN)).thenReturn(ResponseEntity.ok(List.of(child)));
-        when(childService.link(TOKEN, linkRequest)).thenReturn(ResponseEntity.status(HttpStatus.CREATED).body(child));
         when(childService.get(TOKEN, CHILD_ID)).thenReturn(ResponseEntity.ok(child));
         when(childService.update(TOKEN, CHILD_ID, updateRequest)).thenReturn(ResponseEntity.ok(child));
 
         assertEquals(List.of(child), childController.listMyChildren(TOKEN).getBody());
-        assertEquals(HttpStatus.CREATED, childController.linkChild(TOKEN, linkRequest).getStatusCode());
         assertEquals(child, childController.getChild(TOKEN, CHILD_ID).getBody());
         assertEquals(child, childController.updateChild(TOKEN, CHILD_ID, updateRequest).getBody());
         assertSame(childService, childController.getService());
@@ -92,7 +84,6 @@ class ParentChildControllersTest {
         assertEquals(HttpStatus.NOT_IMPLEMENTED, parentApi.getMyParentProfile(TOKEN).getStatusCode());
         assertEquals(HttpStatus.NOT_IMPLEMENTED, parentApi.putMyParentProfile(TOKEN, new ParentProfileRequest(null, null, null)).getStatusCode());
         assertEquals(HttpStatus.NOT_IMPLEMENTED, childApi.listMyChildren(TOKEN).getStatusCode());
-        assertEquals(HttpStatus.NOT_IMPLEMENTED, childApi.linkChild(TOKEN, new ChildRequest(CHILD_ID, null, null)).getStatusCode());
         assertEquals(HttpStatus.NOT_IMPLEMENTED, childApi.getChild(TOKEN, CHILD_ID).getStatusCode());
         assertEquals(HttpStatus.NOT_IMPLEMENTED, childApi.updateChild(TOKEN, CHILD_ID, new ChildUpdateRequest(null, null)).getStatusCode());
     }
@@ -101,7 +92,6 @@ class ParentChildControllersTest {
     void theHttpLayerMapsPathsHeadersAndBodies() throws Exception {
         var child = new ChildResponse(CHILD_ID, PARENT_ID, "5", null, 12);
         when(childService.get(TOKEN, CHILD_ID)).thenReturn(ResponseEntity.ok(child));
-        when(childService.link(any(), any())).thenReturn(ResponseEntity.status(HttpStatus.CREATED).body(child));
         when(parentService.getMe(TOKEN)).thenReturn(ResponseEntity.ok(new ParentProfileResponse(PARENT_ID, null, null, null)));
 
         mvc.perform(get("/api/v1/children/{id}", CHILD_ID).header("session-token", TOKEN))
@@ -111,18 +101,10 @@ class ParentChildControllersTest {
         mvc.perform(get("/api/v1/parents/me").header("session-token", TOKEN))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.parentId").value(PARENT_ID.toString()));
-        mvc.perform(post("/api/v1/children").header("session-token", TOKEN).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"childUserId\":\"" + CHILD_ID + "\",\"gradeLevel\":\"5\"}"))
-                .andExpect(status().isCreated());
     }
 
     @Test
     void invalidBodiesAndMissingHeadersAreRejectedBeforeTheService() throws Exception {
-        mvc.perform(post("/api/v1/children").header("session-token", TOKEN).contentType(MediaType.APPLICATION_JSON).content("{}"))
-                .andExpect(status().isBadRequest());
-        mvc.perform(post("/api/v1/children").header("session-token", TOKEN).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"childUserId\":\"" + CHILD_ID + "\",\"gradeLevel\":\"" + "x".repeat(51) + "\"}"))
-                .andExpect(status().isBadRequest());
         mvc.perform(put("/api/v1/parents/me").header("session-token", TOKEN).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phoneNumber\":\"" + "9".repeat(21) + "\"}"))
                 .andExpect(status().isBadRequest());
@@ -132,6 +114,5 @@ class ParentChildControllersTest {
         mvc.perform(get("/api/v1/children")).andExpect(status().isBadRequest());
 
         verifyNoInteractions(childService, parentService);
-        verify(childService, never()).link(any(), any());
     }
 }

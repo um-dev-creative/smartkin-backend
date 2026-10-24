@@ -49,13 +49,12 @@ Authenticated calls carry the session token in the header defined by `SESSION_TO
 
 ## Parents and children (new)
 
-A parent can now keep a profile and link children to it. All calls carry the session token.
+A parent can now keep a profile and add children to the family (see the next section). All calls carry the session token.
 
 | Operation | Method and path | Notes |
 | --- | --- | --- |
 | Save my parent profile | `PUT /api/v1/parents/me` | Optional phone (max 20), address, picture. Creates the profile the first time |
 | Read my parent profile | `GET /api/v1/parents/me` | 404 until it is saved |
-| Link a child | `POST /api/v1/children` | Body `childUserId` (an account already created with `POST /users`), optional `gradeLevel` and `avatar`. 409 if that account already has a parent or child profile |
 | List my children | `GET /api/v1/children` | Only the caller's children |
 | Read a child | `GET /api/v1/children/{childId}` | The parent, or the child themselves. Another family's child answers 404 |
 | Edit a child | `PUT /api/v1/children/{childId}` | Parent only; grade level and avatar |
@@ -63,6 +62,30 @@ A parent can now keep a profile and link children to it. All calls carry the ses
 Privacy between families is enforced on every call: a parent only ever sees and edits their own children, a child only sees themselves and cannot edit anything, and asking for a child of another family answers **404** exactly as if it did not exist. A user with neither a parent nor a child profile gets 403.
 
 Errors return the HTTP status and the reason in the `message-error` header. Nothing existing changes. A user whose verification code is not completed gets 403 here.
+
+## Adding a child to the family (new)
+
+A child joins a family in one of two ways. In both, nobody is added without an explicit action: a parent can no longer type any user id and link it.
+
+**A. The child already has a SmartKin account: invitation.**
+
+1. The parent calls `POST /api/v1/children/invitations` (optional `gradeLevel` and `avatar`). The answer carries a code such as `K7M2-QX9P`. **It is shown only once**; write it down or send it to the child.
+2. The child signs in with their own account and calls `POST /api/v1/children/invitations/accept` with `{"code": "K7M2-QX9P"}` (upper or lower case, with or without the hyphen). They become the parent's child, with the grade and avatar the parent chose.
+3. The parent can follow the invitations with `GET /api/v1/children/invitations` (`PENDING`, `ACCEPTED`, `REVOKED` or `EXPIRED`) and cancel one that was not used with `DELETE /api/v1/children/invitations/{invitationId}`.
+
+Rules: a code works **once** and for **7 days**; a parent can have at most **10 pending** invitations (409 after that); a user who is already a parent or a child cannot accept (409); a wrong, used, revoked or expired code always answers the same **404**.
+
+**B. The child has no account: the parent creates it.**
+
+The parent calls `POST /api/v1/children/accounts` with the child's first name, last name, birth date (`yyyy-MM-dd`, the child must be **under 18**), an e-mail address that no other SmartKin user uses, a password of 8 to 72 characters and, optionally, grade and avatar. The answer gives the child profile and the **alias** (user name) the child signs in with. A verification code is sent to the e-mail, exactly as for any new account. If the e-mail is already used the answer is 409 and nothing is created.
+
+```mermaid
+flowchart LR
+    P[Parent] -->|A: creates invitation| I[Code ABCD-EFGH]
+    I -->|shared by the parent| C[Child with an account]
+    C -->|accepts the code| F[Child joins the family]
+    P -->|B: creates the child account| F
+```
 
 ## Assignments (new)
 
@@ -150,13 +173,13 @@ Any signed-in user can browse what a child can learn. All calls are `GET` and ca
 
 ## API contract for the MVP
 
-The operations the MVP will offer are described in `docs/api/openapi-v1.yaml`: link a child to a parent, browse topics, lessons and activities, assign an activity, report progress, submit a quiz,
+The operations the MVP will offer are described in `docs/api/openapi-v1.yaml`: invite a child (or create the child's account), browse topics, lessons and activities, assign an activity, report progress, submit a quiz,
 see points and achievements, and read the notification inbox. This release only publishes the description; **none of these endpoints exists yet**, and the current ones (users, registration, session token) work as before.
 Each endpoint will be available as its ticket is delivered. The quiz answers are graded by the server and the lessons never tell the client which option is correct.
 
 ## Security review (for operators)
 
-The security review of the MVP is in `docs/SECURITY_REVIEW_MVP.md`. Before opening the service to real families: verify in QA that the API refuses forged, unsigned, expired and revoked tokens (the exact checks are listed there), decide how a child's account consents to being linked, and rotate the Vault token that is in the history of smartkin-frontend. Secrets are no longer written to the BFF logs (see the frontend guide); older logs may contain them.
+The security review of the MVP is in `docs/SECURITY_REVIEW_MVP.md`. Before opening the service to real families: verify in QA that the API refuses forged, unsigned, expired and revoked tokens (the exact checks are listed there), and rotate the Vault token that is in the history of smartkin-frontend. Secrets are no longer written to the BFF logs (see the frontend guide); older logs may contain them.
 
 ## Running in a container
 

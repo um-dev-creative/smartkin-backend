@@ -1,7 +1,6 @@
 package com.umdc.smartkin.api.v1.controller;
 
 import com.umdc.smartkin.api.v1.service.ChildService;
-import com.umdc.smartkin.api.v1.to.ChildRequest;
 import com.umdc.smartkin.api.v1.to.ChildResponse;
 import com.umdc.smartkin.api.v1.to.ChildUpdateRequest;
 import org.springframework.http.ResponseEntity;
@@ -33,11 +32,6 @@ public class ChildController implements ChildApi {
     @Override
     public ResponseEntity<List<ChildResponse>> listMyChildren(String token) {
         return childService.list(token);
-    }
-
-    @Override
-    public ResponseEntity<ChildResponse> linkChild(String token, ChildRequest request) {
-        return childService.link(token, request);
     }
 
     @Override

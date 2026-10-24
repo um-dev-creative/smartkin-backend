@@ -2,6 +2,8 @@ package com.umdc.smartkin.jpa;
 
 import com.umdc.smartkin.achievement.AchievementTrigger;
 import com.umdc.smartkin.api.v1.service.AssignmentServiceImpl;
+import com.umdc.smartkin.api.v1.service.ChildInvitationServiceImpl;
+import com.umdc.smartkin.api.v1.service.ChildLinker;
 import com.umdc.smartkin.api.v1.service.ChildServiceImpl;
 import com.umdc.smartkin.api.v1.service.NotificationServiceImpl;
 import com.umdc.smartkin.api.v1.service.ParentServiceImpl;
@@ -10,7 +12,8 @@ import com.umdc.smartkin.api.v1.service.ProgressServiceImpl;
 import com.umdc.smartkin.api.v1.service.QuizAttemptServiceImpl;
 import com.umdc.smartkin.api.v1.service.RewardsServiceImpl;
 import com.umdc.smartkin.api.v1.to.AssignmentRequest;
-import com.umdc.smartkin.api.v1.to.ChildRequest;
+import com.umdc.smartkin.api.v1.to.AcceptInvitationRequest;
+import com.umdc.smartkin.api.v1.to.InvitationRequest;
 import com.umdc.smartkin.api.v1.to.ChildUpdateRequest;
 import com.umdc.smartkin.api.v1.to.FeedbackRequest;
 import com.umdc.smartkin.api.v1.to.ParentProfileRequest;
@@ -88,7 +91,7 @@ class CrossFamilyAccessContainerTest {
 
     @SpringBootConfiguration
     @EnableAutoConfiguration
-    @Import({DataBaseConfig.class, ClockConfig.class, AccessPolicy.class, ChildServiceImpl.class, ParentServiceImpl.class,
+    @Import({DataBaseConfig.class, ClockConfig.class, AccessPolicy.class, ChildServiceImpl.class, ChildInvitationServiceImpl.class, ChildLinker.class, ParentServiceImpl.class,
             AssignmentServiceImpl.class, ProgressServiceImpl.class, QuizAttemptServiceImpl.class, RewardsServiceImpl.class, RewardsMapperImpl.class, NotificationServiceImpl.class, NotificationMapperImpl.class, ProgressRecorder.class, QuizGrader.class, QuizAttemptMapper.class,
             DomainEventDispatcher.class, ChildMapperImpl.class, ParentMapperImpl.class, AssignmentMapperImpl.class})
     static class AccessTestApplication {
@@ -96,6 +99,8 @@ class CrossFamilyAccessContainerTest {
 
     @Autowired
     private ChildServiceImpl children;
+    @Autowired
+    private ChildInvitationServiceImpl invitations;
     @Autowired
     private ParentServiceImpl parents;
     @Autowired
@@ -205,13 +210,15 @@ class CrossFamilyAccessContainerTest {
         assertEquals(HttpStatus.FORBIDDEN, children.get(tokenFor(stranger), childA1).getStatusCode());
         assertEquals(HttpStatus.FORBIDDEN, children.update(tokenFor(stranger), childA1, new ChildUpdateRequest("9", null)).getStatusCode());
         assertEquals(HttpStatus.FORBIDDEN, children.list(tokenFor(stranger)).getStatusCode());
-        assertEquals(HttpStatus.FORBIDDEN, children.link(tokenFor(stranger), new ChildRequest(UUID.randomUUID(), null, null)).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, invitations.create(tokenFor(stranger), new InvitationRequest(null, null)).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, invitations.list(tokenFor(stranger)).getStatusCode());
         assertEquals(HttpStatus.NOT_FOUND, parents.getMe(tokenFor(stranger)).getStatusCode());
     }
 
     @Test
-    void aFamilysChildCannotBeLinkedByAnotherParent() {
-        var response = children.link(tokenFor(parentB), new ChildRequest(childA1, null, null));
+    void aFamilysChildCannotJoinAnotherFamilyByAcceptingAnInvitation() {
+        var code = invitations.create(tokenFor(parentB), new InvitationRequest(null, null)).getBody().code();
+        var response = invitations.accept(tokenFor(childA1), new AcceptInvitationRequest(code));
 
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
         assertEquals(parentA, childRepository.findById(childA1).orElseThrow().getParent().getId());
@@ -220,7 +227,8 @@ class CrossFamilyAccessContainerTest {
     @Test
     void aChildCannotBecomeAParentAndAParentCannotBecomeAChild() {
         assertEquals(HttpStatus.FORBIDDEN, parents.putMe(tokenFor(childA1), new ParentProfileRequest(null, null, null)).getStatusCode());
-        assertEquals(HttpStatus.CONFLICT, children.link(tokenFor(parentA), new ChildRequest(parentB, null, null)).getStatusCode());
+        var code = invitations.create(tokenFor(parentA), new InvitationRequest(null, null)).getBody().code();
+        assertEquals(HttpStatus.CONFLICT, invitations.accept(tokenFor(parentB), new AcceptInvitationRequest(code)).getStatusCode());
     }
 
     private UUID newActivityWithLesson(UUID lessonId) {
