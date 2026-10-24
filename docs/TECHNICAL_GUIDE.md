@@ -657,6 +657,37 @@ flowchart LR
 
 Tests: `ErrorTopicMonitorTest` (counting, tags, failure of the error topic) and the extended `ConsumerRetryContainerTest`, which on a real Kafka asserts the counters for one malformed record and one record that fails its retries.
 
+## QA verification kit (BE-2, BE-3, X-1, X-4, S-1)
+
+Some tickets can only be closed in the QA environment. The repository ships what can be prepared so that closing them is mechanical:
+
+| File | What it is |
+| --- | --- |
+| `docs/QA_RUNBOOK_MVP.md` | The ordered procedure and a "done when" checklist |
+| `scripts/qa-smoke.sh` | Automated S-1 check, invitation flow and vertical slice against a running service |
+| `docs/ops/smartkin-events.rules.yml` | Prometheus rules for the error topic (`AlertRulesTest` keeps them aligned with the code) |
+| `docs/ACHIEVEMENTS_CATALOG.md`, `docs/db/achievements_catalog_proposal.sql` | The proposed achievement catalog (`AchievementCatalogProposalTest`) |
+
+**What the smoke test proves about S-1.** The controllers read `uid` with `JwtUtil` without verifying the signature, which is safe only if the PRX library rejects bad tokens first. The script sends, to `GET /parents/me`, `GET /children`, `GET /notifications` and `POST /assignments`: a token with a wrong signature, a token with `alg: none` and no signature, the payload of one user with the signature of another, and optionally an expired and a revoked token. **All must answer 401.** Any 2xx or 403 means the unverified `uid` is trusted: replace `JwtUtil.getUidFromToken` by the validated `Claims`.
+
+```mermaid
+sequenceDiagram
+    participant T as qa-smoke.sh
+    participant L as PRX security library
+    participant C as Controllers
+    T->>L: request with a forged / unsigned / expired / revoked token
+    alt the library rejects it (expected)
+        L-->>T: 401
+    else it lets it through (S-1 is real)
+        L->>C: request reaches the controller
+        C-->>T: 2xx or 403 with the data of the user in the payload
+    end
+```
+
+**Alerts.** `ErrorTopicMonitor` registers `smartkin.events.delivery_failed`, `smartkin.events.dead_lettered` and `smartkin.events.dead_letter_failed`; Prometheus sees them as `smartkin_events_*_total`. `AlertRulesTest` parses the rules, requires a severity and a description on each, and compares the metrics they query with the names in `ErrorTopicMonitor`, so renaming a counter without updating the alert fails the build. The service exposes only `health` today; a Prometheus registry and a protected scrape path are a platform decision (see the runbook).
+
+**Achievements.** The catalog proposal is a SQL script, not a migration, because the names, points and thresholds belong to the product team. `AchievementCatalogProposalTest` parses every `requirements` with `AchievementRule.parse`, so a typo in a rule fails the build instead of silently never awarding.
+
 ## Security review of the MVP (X-5)
 
 `docs/SECURITY_REVIEW_MVP.md` records the review of both repositories: what was verified (ownership and cross-family isolation, answers never leaving the server, Row Level Security, bounded inputs, token revocation), what was **fixed** (the BFF wrote tokens, passwords and Vault values to its logs; fixed in smartkin-frontend, see its guide) and what stays **open**:

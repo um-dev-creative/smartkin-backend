@@ -9,30 +9,36 @@ Este análisis se hizo leyendo el código, el historial de git, los CHANGELOG y 
 
 ## 0. Estado de ejecución
 
-Actualizado: 2026-10-21 (Épica 1 completa; BE-4 a BE-12 con PR abierto (Épica 2 completa salvo BE-13 y BE-14); los merges de #20 a #27 están pendientes de permiso; siguiente: BE-13).
+Actualizado: 2026-10-23. Backend: todo lo que no necesita QA está en `development` (PR #20 a #31) más S-2 en el PR #32. Frontend: pila de PR #7 a #24 pendiente de fusión. Lo que queda depende de QA, de plataforma o de una persona: BE-2, BE-3, X-1, X-4, FE-2, S-1, S-4 y el registro de métricas de BE-14.
 
 | Ticket | Estado | Nota |
 |---|---|---|
 | BE-1 | Hecho | La cadena completa quedó en `development` (fast-forward, solo local). `mvn -o test` en verde con cobertura cumplida. |
 | FE-1 | Hecho | La cadena ng-1 → ng-5 → rd-2 quedó en `development` (solo local). `pnpm test:server` en verde. Las specs de Angular tienen 27 de 45 fallos previos (`community-member`, `stage`, `partner`, `not-found`, `verify-code`), que no vienen de la migración; se corrigen en FE-4 y FE-15. |
 | FE-3 | Hecho | Rama `sak-8-fix-auth-session-id`, mergeada en `development`. Además se corrigió un `logic.isValidUUID` indefinido. 25 pruebas del BFF en verde. |
-| BE-4 | Hecho (PR abierto) | Rama `sak-24-parent-child-profiles`: perfiles de padre e hijo, 6 operaciones, 100% de cobertura de métodos en las clases nuevas. Enmienda al contrato: errores como estado + header `message-error`. |
-| BE-5 | Hecho (PR abierto, apilado sobre BE-4) | Rama `sak-25-access-policy`: `AccessPolicy` reutilizable y pruebas de acceso cruzado entre dos familias sobre PostgreSQL. 248 pruebas en verde. |
-| BE-6 | Hecho (PR abierto, apilado sobre BE-5) | Rama `sak-26-catalog-api`: 5 operaciones del catálogo y migración V4 (`activities.lesson_id`). 266 pruebas en verde. |
-| BE-7 | Hecho (PR abierto, apilado sobre BE-6) | Rama `sak-27-assignments`: asignar, listar y consultar asignaciones; evento `ACTIVITY_ASSIGNED` tras el commit. 294 pruebas en verde. |
-| BE-8 | Hecho (PR abierto, apilado sobre BE-7) | Rama `sak-28-progress`: leer/reportar progreso y comentario del padre, con bloqueo por asignación. 313 pruebas en verde. |
-| BE-9 | Hecho (PR abierto, apilado sobre BE-8) | Rama `sak-29-quiz-attempts`: calificación en servidor (conjunto exacto, sin crédito parcial), intentos, progreso y `QUIZ_COMPLETED`. 345 pruebas en verde. |
-| BE-10 | Hecho (PR abierto, apilado sobre BE-9) | Rama `sak-30-points-achievements`: puntos paginados y logros del hijo, solo lectura. 359 pruebas en verde. |
-| BE-11 | Hecho (PR abierto, apilado sobre BE-10) | Rama `sak-31-achievement-rules`: reglas `QUIZZES_PASSED`, `ACTIVITIES_COMPLETED`, `POINTS_REACHED`; migración V5 (índice único y 3 logros de ejemplo). 380 pruebas en verde. |
-| BE-12 | Hecho (PR abierto, apilado sobre BE-11) | Rama `sak-32-notifications`: bandeja, contador, marcar una/todas como leídas. 396 pruebas en verde. Con este ticket las 25 operaciones del contrato están implementadas. |
-| BE-13 | Hecho (PR abierto) | Rama `sak-34-end-to-end-flow`: flujo completo sobre PostgreSQL, MongoDB y Kafka reales. No arranca la app completa (Vault/TLS/seguridad): eso es BE-2. |
-| BE-14 | Hecho en código (PR abierto) | Rama `sak-33-error-topic-metric`: contadores y logs `DEAD_LETTERED`. La regla de alerta y el endpoint/registro de métricas quedan para plataforma; depende además de BE-3. 399 pruebas en verde. |
-| X-5 | Hecho (revisión); hallazgos abiertos | `docs/SECURITY_REVIEW_MVP.md`. Corregido: secretos en los logs del BFF (frontend PR #22). Abiertos: S-1 (verificar en QA que la librería PRX rechaza tokens falsos), S-2 (vincular sin consentimiento), S-4 (rotar token de Vault). |
+| BE-4 | Hecho (en `development`) | PR #20: perfiles de padre e hijo. Enmienda al contrato: errores como estado + header `message-error`. `POST /children` (vincular por ID) fue **reemplazado** por invitaciones y alta de cuenta (S-2, PR #32). |
+| BE-5 | Hecho (en `development`) | `AccessPolicy` reutilizable y pruebas de acceso cruzado entre dos familias sobre PostgreSQL. |
+| BE-6 | Hecho (en `development`) | 5 operaciones del catálogo y migración V4 (`activities.lesson_id`). |
+| BE-7 | Hecho (en `development`) | Asignar, listar y consultar asignaciones; evento `ACTIVITY_ASSIGNED` tras el commit. |
+| BE-8 | Hecho (en `development`) | Leer/reportar progreso y comentario del padre, con bloqueo por asignación. |
+| BE-9 | Hecho (en `development`) | Calificación en servidor (conjunto exacto, sin crédito parcial), intentos, progreso y `QUIZ_COMPLETED`. |
+| BE-10 | Hecho (en `development`) | Puntos paginados y logros del hijo, solo lectura. |
+| BE-11 | Hecho (en `development`) | Reglas `QUIZZES_PASSED`, `ACTIVITIES_COMPLETED`, `POINTS_REACHED`; migración V5. Los 3 logros de V5 son de ejemplo: ver `docs/ACHIEVEMENTS_CATALOG.md`. |
+| BE-12 | Hecho (en `development`) | Bandeja, contador, marcar una/todas como leídas. |
+| BE-13 | Hecho (en `development`) | Flujo completo sobre PostgreSQL, MongoDB y Kafka reales. No arranca la app completa (Vault/TLS/seguridad): eso es BE-2. |
+| BE-14 | Hecho en código; falta plataforma | Contadores y logs `DEAD_LETTERED` (en `development`). Reglas de alerta listas en `docs/ops/smartkin-events.rules.yml`; falta el registro Prometheus expuesto al scraper y cargar las reglas (ver `docs/QA_RUNBOOK_MVP.md`). |
+| S-2 | Hecho (PR #32 y frontend #23) | Invitación con código de un solo uso y alta de la cuenta del hijo por el padre; `POST /children` eliminado. Migración V6. |
+| S-5 | Hecho en código (frontend #24, sin fusionar) | `pnpm audit`: de 33 avisos (2 críticos) a 0. Backend: 0. |
+| X-5 | Hecho (revisión); hallazgos abiertos | `docs/SECURITY_REVIEW_MVP.md`. Corregidos: S-2, S-3 (secretos en logs), S-9. Abiertos: S-1 (verificar en QA que la librería PRX rechaza tokens falsos; el script `scripts/qa-smoke.sh` lo comprueba), S-4 (rotar token de Vault). |
+| X-6 | Hecho (frontend #21) | README del frontend alineado con el producto real. |
+| FE-4 a FE-14 | Hechos (frontend #10 a #20 y #23, sin fusionar) | Limpieza de pantallas heredadas, proxy del BFF, capa de datos, panel del padre, vista del hijo, quiz, puntos, notificaciones, roles y alta de hijos. Specs de Angular: 218 en verde. |
+| FE-15 | Hecho de forma continua | Cada ticket trajo sus specs (de 18 a 218). |
 | FE-2 | Bloqueado: acción manual | El token de Vault está en el commit `2eb6965` (2025-08-01, `run-local.sh`). Debe rotarse en Vault; no se puede hacer desde el repo. |
-| BE-2 | Bloqueado: requiere QA | Necesita Vault, Config Server y Supabase reales. |
-| BE-3 | Bloqueado: requiere QA | Crear topics de Kafka y fijar la contraseña de `smartkin_app` en el entorno real. |
+| BE-2 | Bloqueado: requiere QA | Necesita Vault, Config Server y Supabase reales. Pasos en `docs/QA_RUNBOOK_MVP.md`. |
+| BE-3 | Bloqueado: requiere QA | Crear topics de Kafka y fijar la contraseña de `smartkin_app` en el entorno real. Comandos en `docs/QA_RUNBOOK_MVP.md`. |
 | X-1 | Bloqueado | Depende de BE-2. |
-| X-2 | Hecho | Rama `sak-21-mvp-openapi-contract`: `docs/api/openapi-v1.yaml` (25 operaciones), decisión D-6 y `OpenApiContractTest`. 200 pruebas en verde. |
+| X-4 | Bloqueado: requiere QA | El script `scripts/qa-smoke.sh` automatiza S-1, la invitación y la rebanada; falta ejecutarlo contra QA y la prueba con el frontend. |
+| X-2 | Hecho | Rama `sak-21-mvp-openapi-contract`: `docs/api/openapi-v1.yaml` (25 operaciones al inicio, 29 con S-2), decisión D-6 y `OpenApiContractTest`. 200 pruebas en verde. |
 | X-3 | Hecho | Frontend, rama `sak-22-api-types`: `pnpm gen:api` / `pnpm check:api` y tipos en `src/app/shared/api`. |
 
 ---

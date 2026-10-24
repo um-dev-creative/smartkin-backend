@@ -181,6 +181,14 @@ Each endpoint will be available as its ticket is delivered. The quiz answers are
 
 The security review of the MVP is in `docs/SECURITY_REVIEW_MVP.md`. Before opening the service to real families: verify in QA that the API refuses forged, unsigned, expired and revoked tokens (the exact checks are listed there), and rotate the Vault token that is in the history of smartkin-frontend. Secrets are no longer written to the BFF logs (see the frontend guide); older logs may contain them.
 
+## Verifying the service in QA (for operators)
+
+`docs/QA_RUNBOOK_MVP.md` lists, in order, what to do in the QA environment: database and the `smartkin_app` password, the four Kafka topics, the Vault values, starting the service and confirming Flyway V1 to V6. `scripts/qa-smoke.sh` then checks, with the session tokens of two real users, that the API refuses forged, unsigned, expired and revoked tokens (S-1), that an invitation works once, and that the parent-to-child slice runs. The alert rules for the error topic are in `docs/ops/smartkin-events.rules.yml`.
+
+## Achievements (for the product team)
+
+The three achievements that ship today are examples. `docs/ACHIEVEMENTS_CATALOG.md` explains what a rule can express and proposes a catalog of eight; once the team edits `docs/db/achievements_catalog_proposal.sql`, running it once replaces the examples. Nothing changes for families until it is run.
+
 ## Running in a container
 
 1. Put the TLS keystores in `certs/smartkin/` (`smartkin.jks`, `umdc-truststore.jks`; git-ignored) **before** `mvn clean package`: they are copied into the jar.
