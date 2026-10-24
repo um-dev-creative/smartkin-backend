@@ -157,7 +157,7 @@ class JpaMappingContainerTest {
     }
 
     @Test
-    void flywayCreatesTheThirteenTablesAndTheFourEnums() {
+    void flywayCreatesTheFourteenTablesAndTheFourEnums() {
         var tables = jdbc.queryForObject("""
                 select count(*) from information_schema.tables
                 where table_schema = 'smartkin' and table_type = 'BASE TABLE' and table_name <> 'flyway_schema_history'""",
@@ -166,17 +166,17 @@ class JpaMappingContainerTest {
                 select count(*) from pg_type t join pg_namespace n on n.oid = t.typnamespace
                 where n.nspname = 'smartkin' and t.typtype = 'e'""", Integer.class);
 
-        assertEquals(13, tables);
+        assertEquals(14, tables);
         assertEquals(4, enums);
     }
 
     @Test
-    void registersTheThirteenEntitiesOfTheSmartkinSchema() {
+    void registersTheFourteenEntitiesOfTheSmartkinSchema() {
         Set<String> names = entityManager.getMetamodel().getEntities().stream()
                 .map(EntityType::getName).collect(Collectors.toSet());
 
         assertEquals(Set.of("AchievementEntity", "ActivityEntity", "ActivityProgressEntity", "AssignedActivityEntity",
-                "ChildAchievementEntity", "ChildEntity", "ChildRewardEntity", "GoalEntity", "NotificationEntity",
+                "ChildAchievementEntity", "ChildEntity", "ChildInvitationEntity", "ChildRewardEntity", "GoalEntity", "NotificationEntity",
                 "ParentEntity", "PointEntity", "RewardEntity", "TopicEntity"), names);
     }
 

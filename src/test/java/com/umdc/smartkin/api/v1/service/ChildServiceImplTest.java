@@ -1,8 +1,6 @@
 package com.umdc.smartkin.api.v1.service;
 
-import com.umdc.smartkin.api.v1.to.ChildRequest;
 import com.umdc.smartkin.api.v1.to.ChildUpdateRequest;
-import com.umdc.smartkin.client.backbone.BackboneClient;
 import com.umdc.smartkin.jpa.domain.ChildEntity;
 import com.umdc.smartkin.jpa.domain.ParentEntity;
 import com.umdc.smartkin.jpa.repository.ChildRepository;
@@ -14,7 +12,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 
 import java.util.List;
@@ -22,15 +19,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static com.umdc.smartkin.constant.SmartKinAppConstants.CALLER_UNKNOWN_MESSAGE;
-import static com.umdc.smartkin.constant.SmartKinAppConstants.CHILD_ALREADY_LINKED_MESSAGE;
-import static com.umdc.smartkin.constant.SmartKinAppConstants.CHILD_IS_CALLER_MESSAGE;
 import static com.umdc.smartkin.constant.SmartKinAppConstants.CHILD_NOT_FOUND_MESSAGE;
-import static com.umdc.smartkin.constant.SmartKinAppConstants.CHILD_USER_NOT_FOUND_MESSAGE;
 import static com.umdc.smartkin.constant.SmartKinAppConstants.MESSAGE_ERROR_HEADER;
 import static com.umdc.smartkin.constant.SmartKinAppConstants.NOT_A_PARENT_MESSAGE;
 import static com.umdc.smartkin.support.TestData.CHILD_ID;
 import static com.umdc.smartkin.support.TestData.PARENT_ID;
-import static com.umdc.smartkin.support.TestData.feign;
 import static com.umdc.smartkin.support.TestData.tokenFor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -48,14 +41,11 @@ class ChildServiceImplTest {
     private ParentRepository parentRepository;
     @Mock
     private ChildRepository childRepository;
-    @Mock
-    private BackboneClient backboneClient;
     private ChildServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new ChildServiceImpl(parentRepository, childRepository, backboneClient, new ChildMapperImpl(),
-                new AccessPolicy(parentRepository, childRepository));
+        service = new ChildServiceImpl(childRepository, new ChildMapperImpl(), new AccessPolicy(parentRepository, childRepository));
     }
 
     private static ParentEntity parent(UUID id) {
@@ -104,95 +94,6 @@ class ChildServiceImplTest {
         assertEquals(HttpStatus.FORBIDDEN, notParent.getStatusCode());
         assertEquals(NOT_A_PARENT_MESSAGE, notParent.getHeaders().getFirst(MESSAGE_ERROR_HEADER));
         assertEquals(CALLER_UNKNOWN_MESSAGE, unknown.getHeaders().getFirst(MESSAGE_ERROR_HEADER));
-    }
-
-    // link
-
-    @Test
-    void linkCreatesTheChildWithZeroPoints() {
-        when(parentRepository.findById(PARENT_ID)).thenReturn(Optional.of(parent(PARENT_ID)));
-        when(childRepository.saveAndFlush(any(ChildEntity.class))).thenAnswer(call -> call.getArgument(0));
-
-        var response = service.link(tokenFor(PARENT_ID), new ChildRequest(CHILD_ID, "4", "owl.png"));
-
-        assertEquals(HttpStatus.CREATED, response.getStatusCode());
-        assertEquals(CHILD_ID, response.getBody().childId());
-        assertEquals(PARENT_ID, response.getBody().parentId());
-        assertEquals("4", response.getBody().gradeLevel());
-        assertEquals(0, response.getBody().totalPoints());
-        verify(backboneClient).findUserById(CHILD_ID);
-    }
-
-    @Test
-    void linkRefusesACallerWithoutParentProfileOrToken() {
-        when(parentRepository.findById(PARENT_ID)).thenReturn(Optional.empty());
-
-        var notParent = service.link(tokenFor(PARENT_ID), new ChildRequest(CHILD_ID, null, null));
-        var unknown = service.link(null, new ChildRequest(CHILD_ID, null, null));
-
-        assertEquals(HttpStatus.FORBIDDEN, notParent.getStatusCode());
-        assertEquals(HttpStatus.FORBIDDEN, unknown.getStatusCode());
-        verify(childRepository, never()).saveAndFlush(any());
-    }
-
-    @Test
-    void linkRefusesTheCallerAsTheirOwnChild() {
-        when(parentRepository.findById(PARENT_ID)).thenReturn(Optional.of(parent(PARENT_ID)));
-
-        var response = service.link(tokenFor(PARENT_ID), new ChildRequest(PARENT_ID, null, null));
-
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals(CHILD_IS_CALLER_MESSAGE, response.getHeaders().getFirst(MESSAGE_ERROR_HEADER));
-    }
-
-    @Test
-    void linkAnswers409WhenTheUserAlreadyHasAProfile() {
-        when(parentRepository.findById(PARENT_ID)).thenReturn(Optional.of(parent(PARENT_ID)));
-        when(childRepository.existsById(CHILD_ID)).thenReturn(true);
-
-        var alreadyChild = service.link(tokenFor(PARENT_ID), new ChildRequest(CHILD_ID, null, null));
-
-        when(childRepository.existsById(CHILD_ID)).thenReturn(false);
-        when(parentRepository.existsById(CHILD_ID)).thenReturn(true);
-        var alreadyParent = service.link(tokenFor(PARENT_ID), new ChildRequest(CHILD_ID, null, null));
-
-        assertEquals(HttpStatus.CONFLICT, alreadyChild.getStatusCode());
-        assertEquals(HttpStatus.CONFLICT, alreadyParent.getStatusCode());
-        assertEquals(CHILD_ALREADY_LINKED_MESSAGE, alreadyParent.getHeaders().getFirst(MESSAGE_ERROR_HEADER));
-        verify(backboneClient, never()).findUserById(any());
-    }
-
-    @Test
-    void linkAnswers400WhenBackboneDoesNotKnowTheUser() {
-        when(parentRepository.findById(PARENT_ID)).thenReturn(Optional.of(parent(PARENT_ID)));
-        when(backboneClient.findUserById(CHILD_ID)).thenThrow(feign(404));
-
-        var response = service.link(tokenFor(PARENT_ID), new ChildRequest(CHILD_ID, null, null));
-
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals(CHILD_USER_NOT_FOUND_MESSAGE, response.getHeaders().getFirst(MESSAGE_ERROR_HEADER));
-        verify(childRepository, never()).saveAndFlush(any());
-    }
-
-    @Test
-    void linkRelaysOtherBackboneFailures() {
-        when(parentRepository.findById(PARENT_ID)).thenReturn(Optional.of(parent(PARENT_ID)));
-        when(backboneClient.findUserById(CHILD_ID)).thenThrow(feign(503));
-
-        var response = service.link(tokenFor(PARENT_ID), new ChildRequest(CHILD_ID, null, null));
-
-        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
-    }
-
-    @Test
-    void linkAnswers409WhenTwoParentsLinkTheSameChildAtOnce() {
-        when(parentRepository.findById(PARENT_ID)).thenReturn(Optional.of(parent(PARENT_ID)));
-        when(childRepository.saveAndFlush(any(ChildEntity.class))).thenThrow(new DataIntegrityViolationException("duplicate"));
-
-        var response = service.link(tokenFor(PARENT_ID), new ChildRequest(CHILD_ID, null, null));
-
-        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
-        assertEquals(CHILD_ALREADY_LINKED_MESSAGE, response.getHeaders().getFirst(MESSAGE_ERROR_HEADER));
     }
 
     // get

@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: |
     MVP contract of smartkin-backend (X-2). It extends the existing `/api/v1/users` and `/api/v1/user-register` operations, which do not change,
-    with the resources of the vertical slice: a parent links a child, assigns an activity, the child completes the lesson quiz and earns points,
+    with the resources of the vertical slice: a parent invites (or creates the account of) a child, assigns an activity, the child completes the lesson quiz and earns points,
     and the parent follows the progress.
 
     Conventions
@@ -54,16 +54,64 @@ paths:
       responses:
         '200': {description: Children, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Child'}}}}}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /children/invitations:
+    get:
+      tags: [children]
+      operationId: listChildInvitations
+      summary: Invitations sent by the authenticated parent (newest first, without codes)
+      responses:
+        '200': {description: Invitations, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Invitation'}}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
     post:
       tags: [children]
-      operationId: linkChild
-      summary: Link an existing user as a child of the authenticated parent
-      description: The child's account is created first with `POST /users`; this call only creates the child profile that points at it.
+      operationId: createChildInvitation
+      summary: Invite an existing user to become a child of the authenticated parent
+      description: The response carries the one-time code; it is stored only as a hash and cannot be read again. The code is valid for 7 days and a parent may have at most 10 pending invitations.
       requestBody:
         required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/ChildRequest'}}}
+        content: {application/json: {schema: {$ref: '#/components/schemas/InvitationRequest'}}}
       responses:
-        '201': {description: Child linked, content: {application/json: {schema: {$ref: '#/components/schemas/Child'}}}}
+        '201': {description: Invitation created, content: {application/json: {schema: {$ref: '#/components/schemas/Invitation'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /children/invitations/{invitationId}:
+    delete:
+      tags: [children]
+      operationId: revokeChildInvitation
+      summary: Revoke a pending invitation of the authenticated parent
+      parameters:
+        - {$ref: '#/components/parameters/InvitationId'}
+      responses:
+        '204': {description: Invitation revoked}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /children/invitations/accept:
+    post:
+      tags: [children]
+      operationId: acceptChildInvitation
+      summary: Accept an invitation and become a child of the parent who sent it
+      description: Any signed-in user without a parent or child profile may call it. An unknown, used, revoked or expired code answers 404 alike, so codes cannot be probed.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AcceptInvitationRequest'}}}
+      responses:
+        '201': {description: Child created, content: {application/json: {schema: {$ref: '#/components/schemas/Child'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /children/accounts:
+    post:
+      tags: [children]
+      operationId: createChildAccount
+      summary: Create the account of a child and link it to the authenticated parent
+      description: The account is created like any SmartKin account (a verification code is sent to the e-mail) and linked in the same call. The child must be under 18.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChildAccountRequest'}}}
+      responses:
+        '201': {description: Account created and linked, content: {application/json: {schema: {$ref: '#/components/schemas/ChildAccount'}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
@@ -309,6 +357,7 @@ components:
       name: session-token
   parameters:
     ChildId: {name: childId, in: path, required: true, schema: {type: string, format: uuid}}
+    InvitationId: {name: invitationId, in: path, required: true, schema: {type: string, format: uuid}}
     AssignmentId: {name: assignmentId, in: path, required: true, schema: {type: string, format: uuid}}
     Page: {name: page, in: query, required: false, schema: {type: integer, minimum: 0, default: 0}}
     Size: {name: size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
@@ -341,13 +390,45 @@ components:
         gradeLevel: {type: string, maxLength: 50, nullable: true}
         avatar: {type: string, nullable: true}
         totalPoints: {type: integer, minimum: 0}
-    ChildRequest:
+    InvitationRequest:
       type: object
-      required: [childUserId]
       properties:
-        childUserId: {type: string, format: uuid}
         gradeLevel: {type: string, maxLength: 50}
-        avatar: {type: string}
+        avatar: {type: string, maxLength: 255}
+    Invitation:
+      type: object
+      required: [invitationId, status, expiresAt, createdAt]
+      properties:
+        invitationId: {type: string, format: uuid}
+        code: {type: string, nullable: true, description: 'One-time code (ABCD-EFGH); present only in the creation response'}
+        status: {type: string, enum: [PENDING, ACCEPTED, REVOKED, EXPIRED]}
+        gradeLevel: {type: string, nullable: true}
+        avatar: {type: string, nullable: true}
+        expiresAt: {type: string, format: date-time}
+        createdAt: {type: string, format: date-time}
+    AcceptInvitationRequest:
+      type: object
+      required: [code]
+      properties:
+        code: {type: string, maxLength: 20, description: 'The code the parent shared, with or without the hyphen'}
+    ChildAccountRequest:
+      type: object
+      required: [firstname, lastname, dateOfBirth, email, password]
+      properties:
+        firstname: {type: string, maxLength: 100}
+        lastname: {type: string, maxLength: 100}
+        dateOfBirth: {type: string, format: date, description: 'The child must be under 18'}
+        email: {type: string, format: email}
+        password: {type: string, minLength: 8, maxLength: 72, format: password}
+        gradeLevel: {type: string, maxLength: 50}
+        avatar: {type: string, maxLength: 255}
+    ChildAccount:
+      type: object
+      required: [child, alias, email]
+      properties:
+        child: {$ref: '#/components/schemas/Child'}
+        alias: {type: string, description: The user name the child signs in with}
+        email: {type: string, format: email}
     ChildUpdateRequest:
       type: object
       properties:

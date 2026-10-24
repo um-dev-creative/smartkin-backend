@@ -4,6 +4,8 @@ import com.umdc.smartkin.achievement.AchievementEvaluator;
 import com.umdc.smartkin.achievement.AchievementTrigger;
 import com.umdc.smartkin.api.v1.service.AssignmentServiceImpl;
 import com.umdc.smartkin.api.v1.service.CatalogServiceImpl;
+import com.umdc.smartkin.api.v1.service.ChildInvitationServiceImpl;
+import com.umdc.smartkin.api.v1.service.ChildLinker;
 import com.umdc.smartkin.api.v1.service.ChildServiceImpl;
 import com.umdc.smartkin.api.v1.service.NotificationServiceImpl;
 import com.umdc.smartkin.api.v1.service.ParentServiceImpl;
@@ -12,7 +14,8 @@ import com.umdc.smartkin.api.v1.service.ProgressServiceImpl;
 import com.umdc.smartkin.api.v1.service.QuizAttemptServiceImpl;
 import com.umdc.smartkin.api.v1.service.RewardsServiceImpl;
 import com.umdc.smartkin.api.v1.to.AssignmentRequest;
-import com.umdc.smartkin.api.v1.to.ChildRequest;
+import com.umdc.smartkin.api.v1.to.AcceptInvitationRequest;
+import com.umdc.smartkin.api.v1.to.InvitationRequest;
 import com.umdc.smartkin.api.v1.to.ParentProfileRequest;
 import com.umdc.smartkin.api.v1.to.ProgressRequest;
 import com.umdc.smartkin.api.v1.to.QuizAnswerRequest;
@@ -90,7 +93,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /// BE-13: the whole MVP slice on **real infrastructure** — PostgreSQL (Flyway V1 to V5), MongoDB and Kafka — with the real services,
 /// the real publisher and the real consumers, through the same service methods the controllers call:
-/// a parent links a child and assigns an activity, the child gets a notification, reports progress, fails and then passes the quiz,
+/// a parent invites a child, who accepts, and assigns an activity, the child gets a notification, reports progress, fails and then passes the quiz,
 /// and the points, the achievement and its notification arrive asynchronously through Kafka.
 ///
 /// What it does **not** start: the web layer, the security library, Vault, the TLS bundle and Redis (RD-1/RD-2 have their own tests);
@@ -146,7 +149,7 @@ class EndToEndFlowContainerTest {
     @SpringBootConfiguration
     @AutoConfigurationPackage(basePackages = "com.umdc.smartkin.mongo")
     @Import({DataBaseConfig.class, ClockConfig.class, AccessPolicy.class, ParentServiceImpl.class, ChildServiceImpl.class,
-            CatalogServiceImpl.class, AssignmentServiceImpl.class, ProgressServiceImpl.class, QuizAttemptServiceImpl.class,
+            ChildInvitationServiceImpl.class, ChildLinker.class, CatalogServiceImpl.class, AssignmentServiceImpl.class, ProgressServiceImpl.class, QuizAttemptServiceImpl.class,
             RewardsServiceImpl.class, NotificationServiceImpl.class, ProgressRecorder.class, QuizGrader.class, QuizAttemptMapper.class,
             ParentMapperImpl.class, ChildMapperImpl.class, CatalogMapperImpl.class, AssignmentMapperImpl.class, RewardsMapperImpl.class,
             NotificationMapperImpl.class, LessonCatalogService.class, NoLessonCatalogCache.class, SmartKinEventPublisher.class,
@@ -177,6 +180,8 @@ class EndToEndFlowContainerTest {
     private ParentServiceImpl parents;
     @Autowired
     private ChildServiceImpl children;
+    @Autowired
+    private ChildInvitationServiceImpl invitations;
     @Autowired
     private CatalogServiceImpl catalog;
     @Autowired
@@ -252,7 +257,9 @@ class EndToEndFlowContainerTest {
         // Family setup
         assertEquals(HttpStatus.OK, parents.putMe(parentToken, new ParentProfileRequest("+15550100", "Elm St", null)).getStatusCode());
         assertEquals(HttpStatus.OK, parents.putMe(tokenFor(otherParent), new ParentProfileRequest(null, null, null)).getStatusCode());
-        assertEquals(HttpStatus.CREATED, children.link(parentToken, new ChildRequest(child, "5", "fox.png")).getStatusCode());
+        var invitation = invitations.create(parentToken, new InvitationRequest("5", "fox.png"));
+        assertEquals(HttpStatus.CREATED, invitation.getStatusCode());
+        assertEquals(HttpStatus.CREATED, invitations.accept(childToken, new AcceptInvitationRequest(invitation.getBody().code())).getStatusCode());
 
         // Catalog: the parent browses and finds the published lesson
         var topic = new TopicEntity();

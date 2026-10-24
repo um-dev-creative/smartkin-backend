@@ -99,8 +99,9 @@ class OpenApiContractTest {
     @Test
     void coversTheOperationsOfTheMvpSlice() {
         var ids = operations().stream().map(operation -> (String) operation.get("operationId")).toList();
-        assertEquals(25, ids.size());
-        assertTrue(ids.containsAll(List.of("linkChild", "listMyChildren", "listTopicLessons", "getLesson", "assignActivity",
+        assertEquals(29, ids.size());
+        assertFalse(ids.contains("linkChild"), "S-2: linking a user without their consent is gone");
+        assertTrue(ids.containsAll(List.of("createChildInvitation", "acceptChildInvitation", "revokeChildInvitation", "listChildInvitations", "createChildAccount", "listMyChildren", "listTopicLessons", "getLesson", "assignActivity",
                 "listAssignments", "updateProgress", "submitQuizAttempt", "getChildPoints", "listChildAchievements",
                 "listNotifications", "markNotificationRead", "markAllNotificationsRead", "getUnreadNotificationCount")));
     }
