@@ -20,30 +20,44 @@
 # Empty placeholder for the optional `umdc-local` build context (Repsy outage fallback, see the Maven step below).
 FROM scratch AS umdc-local
 
-FROM debian:12-slim AS builder
+# The two toolchains are downloaded in their own stages so BuildKit fetches GraalVM (~350 MB) and Maven in parallel with the apt
+# step of the builder, and a version bump of one does not invalidate the others.
+FROM debian:12-slim AS graalvm
 ARG TARGETARCH
-WORKDIR /build
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates build-essential zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 ARG GRAALVM_VERSION=25.0.2
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 RUN set -eu; \
     case "${TARGETARCH}" in \
       amd64) GRAAL_ARCH=x64 ;; \
       arm64) GRAAL_ARCH=aarch64 ;; \
       *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-${GRAALVM_VERSION}/graalvm-community-jdk-${GRAALVM_VERSION}_linux-${GRAAL_ARCH}_bin.tar.gz" -o /tmp/graalvm.tar.gz \
-    && mkdir -p /opt/graalvm && tar xzf /tmp/graalvm.tar.gz -C /opt/graalvm --strip-components=1 && rm /tmp/graalvm.tar.gz
-ENV JAVA_HOME=/opt/graalvm
-ENV PATH="${JAVA_HOME}/bin:${PATH}"
+    mkdir -p /opt/graalvm \
+    && curl -fsSL "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-${GRAALVM_VERSION}/graalvm-community-jdk-${GRAALVM_VERSION}_linux-${GRAAL_ARCH}_bin.tar.gz" \
+    | tar xz -C /opt/graalvm --strip-components=1
 
 # archive.apache.org keeps every release; dlcdn only has the latest 3.9.x and 404s once it moves on
+FROM debian:12-slim AS maven
 ARG MAVEN_VERSION=3.9.14
-RUN curl -fsSL "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
-    | tar xz -C /opt && ln -s "/opt/apache-maven-${MAVEN_VERSION}/bin/mvn" /usr/local/bin/mvn
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /opt/maven \
+    && curl -fsSL "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
+    | tar xz -C /opt/maven --strip-components=1
+
+FROM debian:12-slim AS builder
+WORKDIR /build
+
+# Only the native toolchain's own needs: the compiler driver and the static zlib headers.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates build-essential zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=graalvm /opt/graalvm /opt/graalvm
+COPY --from=maven /opt/maven /opt/maven
+ENV JAVA_HOME=/opt/graalvm
+ENV PATH="${JAVA_HOME}/bin:/opt/maven/bin:${PATH}"
 
 # Only what the native build reads (see Dockerfile.native.dockerignore). certs/smartkin/ (git-ignored) supplies the keystores that
 # pom.xml's <resource> puts on the classpath, so NativeRuntimeHints' `*.jks` pattern has something to embed; it must exist on the
@@ -70,7 +84,7 @@ COPY src/main ./src/main
 # NATIVE_QUICK_BUILD=true (-Ob) shortens the compile and slows peak throughput: for local smoke-test images only.
 ARG NATIVE_QUICK_BUILD=false
 RUN --mount=type=secret,id=maven_settings,target=/root/.m2/settings.xml,required=false \
-    --mount=type=cache,id=maven-repo,target=/root/.m2/repository,sharing=locked \
+    --mount=type=cache,id=maven-repo,target=/root/.m2/repository,sharing=shared \
     --mount=type=bind,from=umdc-local,target=/umdc-local \
     sh -c 'rm -rf /root/.m2/repository/com/umdc; \
     if [ -n "$(ls -A /umdc-local 2>/dev/null)" ]; then \
@@ -80,7 +94,7 @@ RUN --mount=type=secret,id=maven_settings,target=/root/.m2/settings.xml,required
       find /root/.m2/repository/com/umdc -name "*.lastUpdated" -delete; \
     fi; \
     set -a; . ./config/native.env; set +a; \
-    mvn -Pnative -B -Dmaven.test.skip=true -Dpmd.skip=true -Dcpd.skip=true -Djacoco.skip=true \
+    mvn -Pnative -B -ntp -Dmaven.artifact.threads=8 -Dmaven.test.skip=true -Dpmd.skip=true -Dcpd.skip=true -Djacoco.skip=true \
         -DquickBuild="${NATIVE_QUICK_BUILD}" package native:compile'
 
 # The internal CA is git-ignored, so it is staged from an optional BuildKit secret instead of a COPY from a path that may be missing.
@@ -89,6 +103,12 @@ RUN --mount=type=secret,id=prx_internal_ca,target=/run/secrets/prx-internal-ca.c
     if [ -f /run/secrets/prx-internal-ca.crt ]; then cp /run/secrets/prx-internal-ca.crt /staging-certs/prx-internal-ca.crt; fi
 
 FROM debian:12-slim
+# which build this is (same ARG names as zerobound-rest, filled by the CI or `--build-arg BUILD_COMMIT=$(git rev-parse --short HEAD)`)
+ARG BUILD_COMMIT=unknown
+ARG BUILD_BRANCH=unknown
+ARG BUILD_TIME=unknown
+ENV BUILD_COMMIT=$BUILD_COMMIT BUILD_BRANCH=$BUILD_BRANCH BUILD_TIME=$BUILD_TIME
+LABEL org.opencontainers.image.revision="${BUILD_COMMIT}" org.opencontainers.image.created="${BUILD_TIME}" org.opencontainers.image.ref.name="${BUILD_BRANCH}"
 LABEL version="0.0.1-native"
 LABEL description="SmartKin Backend API (GraalVM native image)"
 LABEL maintainer="Luis Mata luis.antonio.mata@gmail.com"
@@ -97,9 +117,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system appmng && useradd --system --gid appmng --no-create-home jvapps
 WORKDIR /usr/local/runme
-COPY --from=builder /build/target/smartkin-backend /usr/local/runme/smartkin-backend
-COPY --from=builder /staging-certs/ /usr/local/runme/certs/smartkin/
-RUN chown -R jvapps:appmng . && chmod 750 smartkin-backend
+COPY --link --from=builder --chown=jvapps:appmng --chmod=750 /build/target/smartkin-backend /usr/local/runme/smartkin-backend
+COPY --link --from=builder --chown=jvapps:appmng /staging-certs/ /usr/local/runme/certs/smartkin/
 USER jvapps:appmng
 EXPOSE 8166
 # Liveness over the loopback; the certificate is not verified because it only reaches this process.
