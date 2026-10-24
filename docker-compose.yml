@@ -79,13 +79,8 @@ services:
       - "config-server.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
       - "api.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
     env_file:
-      - secrets/local.env       # VAULT_TOKEN
-    environment:
-      PORT: "7003"
-      ENVM: ${SMARTKIN_FRONTEND_ENVM:-qa}
-      VAULT_URI: https://vault.umdc-qa.tst
-      VAULT_PATH: ${SMARTKIN_FRONTEND_VAULT_PATH:?define SMARTKIN_FRONTEND_VAULT_PATH (shell or .env)}
-      IS_DEBUG_ENABLED: "false"
+      - ../smartkin-frontend/local.env   # PORT, ENVM, VAULT_URI, VAULT_PATH, IS_DEBUG_ENABLED
+      - secrets/local.env                # VAULT_TOKEN
     networks:
       nginx_umdc-net:
         aliases:
