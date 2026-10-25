@@ -71,7 +71,8 @@ A child joins a family in one of two ways. In both, nobody is added without an e
 
 1. The parent calls `POST /api/v1/children/invitations` (optional `gradeLevel` and `avatar`). The answer carries a code such as `K7M2-QX9P`. **It is shown only once**; write it down or send it to the child.
 2. The child signs in with their own account and calls `POST /api/v1/children/invitations/accept` with `{"code": "K7M2-QX9P"}` (upper or lower case, with or without the hyphen). They become the parent's child, with the grade and avatar the parent chose.
-3. The parent can follow the invitations with `GET /api/v1/children/invitations` (`PENDING`, `ACCEPTED`, `REVOKED` or `EXPIRED`) and cancel one that was not used with `DELETE /api/v1/children/invitations/{invitationId}`.
+3. A user belongs to one family only: if two invitations are accepted at the same moment, one is accepted and the other answers 409 and stays usable.
+4. The parent can follow the invitations with `GET /api/v1/children/invitations` (`PENDING`, `ACCEPTED`, `REVOKED` or `EXPIRED`) and cancel one that was not used with `DELETE /api/v1/children/invitations/{invitationId}`.
 
 Rules: a code works **once** and for **7 days**; a parent can have at most **10 pending** invitations (409 after that); a user who is already a parent or a child cannot accept (409); a wrong, used, revoked or expired code always answers the same **404**.
 
@@ -189,20 +190,41 @@ The security review of the MVP is in `docs/SECURITY_REVIEW_MVP.md`. Before openi
 
 The three achievements that ship today are examples. `docs/ACHIEVEMENTS_CATALOG.md` explains what a rule can express and proposes a catalog of eight; once the team edits `docs/db/achievements_catalog_proposal.sql`, running it once replaces the examples. Nothing changes for families until it is run.
 
+## Database users (for operators)
+
+Before the first deployment of an environment, create the two database users once with `docs/db/smartkin_roles.sql` (the QA runbook, step 1, has the exact command):
+
+- `smartkin_owner` runs the migrations (put it in `SMARTKIN_FLYWAY_USERNAME` / `SMARTKIN_FLYWAY_PASSWORD`).
+- `smartkin_app` is what the service connects as (`SMARTKIN_DB_USERNAME` / `SMARTKIN_DB_PASSWORD`). It can read and write data but cannot change the structure.
+
+Take both passwords from Vault and pass them to the script as `-v owner_password=...` and `-v app_password=...`; they never go in a file. Run the same script again to change a password. Do not use `postgres` for the service.
+
+## Preparing an environment (for operators)
+
+Three steps, in this order, before the first start of the service in QA or production. The technical guide has the details and the QA runbook (steps 1 and 2) the exact commands.
+
+1. **Database users:** `docs/db/smartkin_roles.sql` creates `smartkin_owner` and `smartkin_app`.
+2. **Tables:** `scripts/db-migrate.sh` creates the tables as `smartkin_owner`. Without arguments it only shows what is pending; add `migrate` to apply it. It needs Docker, the direct database host (not the pooler) and the owner's password from Vault.
+3. **Kafka topics:** `scripts/kafka-create-topics.sh` creates the four topics the service uses and checks them. Give it the brokers and, if they need a login, a `client.properties` file.
+
+Both scripts are safe to run again, and both stop with a clear message when something is wrong.
+
 ## Running in a container
 
 1. Put the TLS keystores in `certs/smartkin/` (`smartkin.jks`, `umdc-truststore.jks`; git-ignored) **before** `mvn clean package`: they are copied into the jar.
 2. Copy `secrets/local.env.example` to `secrets/local.env` and set `VAULT_TOKEN`. `config/local.env` already points at the QA Vault and Config Server; everything else (Supabase, Atlas, Redis, Kafka, the backbone and mercury clients) comes from Vault.
 3. Once per Docker host, create the shared network: `docker network create --driver bridge --subnet 172.22.0.0/16 --gateway 172.22.0.1 nginx_umdc-net`.
 4. `mvn -B clean package && docker compose build && docker compose up -d`. The service listens on HTTPS 8166, has the fixed IP `172.22.0.12`, and `docker compose ps` shows its health. Put `api.umdc-qa.tst/smartkin-backend/` in nginx in front of it.
-5. Native image: **experimental, do not deploy yet**. `Dockerfile.native` builds, but the binary does not start (see the technical guide). Use the JVM image from step 4.
+5. Native image: **starts, but not yet checked against the real environment, so keep deploying the JVM image** (see the technical guide). The binary does not embed the keystores: mount `certs/smartkin/` into the container and set `SSL_KEYSTORE_URL=file:/usr/local/runme/certs/smartkin/smartkin.jks` and `SSL_TRUSTSTORE_URL=file:/usr/local/runme/certs/smartkin/umdc-truststore.jks`. Use the JVM image from step 4.
+
+How requests are authenticated changed: the API now accepts the `session-token` header (what the BFF sends) and answers 401 to a forged, unsigned, expired or missing token. The Keycloak-style bearer-token chain of the security library is no longer used.
 
 The container stops gracefully on `docker stop` (up to 30 s). A new Vault token or Config Server change needs a restart.
 
 ## Running locally
 
 1. Install JDK 25 and Maven 3.9.
-2. Export the variables listed in `src/main/resources/bootstrap.yml` (profile, Vault, Config Server, SSL, OAuth clients).
+2. Export the variables listed in `src/main/resources/application.yml` (profile, Vault, Config Server, SSL, OAuth clients).
 3. Run `mvn spring-boot:run`.
 
 Without those variables the service stops at startup with a message such as

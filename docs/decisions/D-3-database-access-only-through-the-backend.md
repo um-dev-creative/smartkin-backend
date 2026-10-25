@@ -22,7 +22,7 @@ policies would require passing the end user's identity into the database, which 
 
 ## Operational steps (not automated)
 
-- Enable the role: `alter role smartkin_app with login password '<from Vault>'`, then set `SMARTKIN_DB_USERNAME`/`SMARTKIN_DB_PASSWORD` to it (see `docs/db/smartkin_schema_bootstrap.sql`).
+- Create the roles with `docs/db/smartkin_roles.sql` (it creates `smartkin_owner` for Flyway and gives `smartkin_app` login, with passwords from Vault; idempotent), then set `SMARTKIN_FLYWAY_USERNAME`/`_PASSWORD` to the owner and `SMARTKIN_DB_USERNAME`/`_PASSWORD` to `smartkin_app`.
 - In the Supabase dashboard, keep `smartkin` out of *Settings > API > Exposed schemas* (the default exposes only `public` and `graphql_public`). This setting is not in the repository, so it must be checked by hand.
 - `V2` needs a Flyway user that can `create role`; where it cannot, create `smartkin_app` first and V2 will reuse it.
 

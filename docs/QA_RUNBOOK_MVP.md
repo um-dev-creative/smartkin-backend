@@ -19,20 +19,24 @@ flowchart TD
 
 ## 1. Database (BE-2)
 
-1. Bootstrap the schema once, with a role that can create schemas, against the `umdevc` database (not `postgres`):
-   `psql "host=<host> port=5432 dbname=umdevc user=postgres" -f docs/db/smartkin_schema_bootstrap.sql`
-2. Start the service (step 4). Flyway runs on startup with `SMARTKIN_FLYWAY_USERNAME` (the schema owner) and applies **V1 to V6**. Check:
+1. Create the two database roles and the schema once, with a role that can create roles, against the `umdevc` database (not `postgres`). The script is idempotent and refuses to run in another database:
+   `psql "host=<host> port=5432 dbname=umdevc user=postgres" -v ON_ERROR_STOP=1 -v expected_database=umdevc -v owner_password="$(vault kv get -field=flyway_password <path>)" -v app_password="$(vault kv get -field=app_password <path>)" -f docs/db/smartkin_roles.sql`
+   It creates `smartkin_owner` (owns the schema, runs Flyway) and `smartkin_app` (data only, what the service uses), both without superuser, `CREATEROLE`, `CREATEDB` or `BYPASSRLS`. Put the owner in `SMARTKIN_FLYWAY_USERNAME` / `SMARTKIN_FLYWAY_PASSWORD` and the application role in `SMARTKIN_DB_USERNAME` / `SMARTKIN_DB_PASSWORD` (Vault).
+2. Create the tables. Either start the service (step 4), whose Flyway applies **V1 to V6** at start with `SMARTKIN_FLYWAY_USERNAME` (`smartkin_owner`), or do it first and on its own with `scripts/db-migrate.sh` (Docker; the same Flyway version, schema and history table, so the service then finds nothing pending):
+   `SMARTKIN_DB_URI=<direct host> SMARTKIN_FLYWAY_USERNAME=smartkin_owner SMARTKIN_FLYWAY_PASSWORD=<from Vault> JDBC_PARAMS=sslmode=require ./scripts/db-migrate.sh` shows what is pending; add `migrate` to apply it and `validate` to check it later. It refuses the pooler port (6543) and the `postgres` user. Check:
    `select version, description, success from smartkin.flyway_schema_history order by installed_rank;` → six rows, all `t`.
-3. Enable the application role V2 created without login, with a password kept in Vault:
-   `psql ... -v app_password="$(vault kv get -field=password <path>)" -c "alter role smartkin_app with login password :'app_password'"`
-   Then put that role and password in `SMARTKIN_DB_USERNAME` / `SMARTKIN_DB_PASSWORD` (Vault). The pooler port is `SMARTKIN_DB_PORT` (default 6543); Flyway uses the direct port `SMARTKIN_DB_DIRECT_PORT` (default 5432).
+3. Check the application role (the script of step 1 already gave it login): as `smartkin_app`, `select count(*) from smartkin.parent` works and `create table smartkin.x(id int)` fails with `permission denied`. On Supabase's pooler the user name has the project suffix (`smartkin_app.<project-ref>`). The pooler port is `SMARTKIN_DB_PORT` (default 6543); Flyway uses the direct port `SMARTKIN_DB_DIRECT_PORT` (default 5432).
 4. Confirm D-2: the 14 tables and 4 enum types of the `smartkin` schema match `docs/decisions/D-2-baseline-schema-and-enum-labels.md`:
    `select count(*) from information_schema.tables where table_schema='smartkin' and table_type='BASE TABLE' and table_name <> 'flyway_schema_history';` → 14.
 5. Confirm the API roles are locked out (D-3): as `anon` or `authenticated`, `select * from smartkin.parent` must fail or return no rows.
 
 ## 2. Kafka topics (BE-3)
 
-The application does not create topics. Create them before the first request (partitions and replication are a platform choice; the numbers below are a starting point):
+The application does not create topics. Create them before the first request with `scripts/kafka-create-topics.sh` (Docker, or a local `kafka-topics.sh` through `KAFKA_TOPICS_BIN`; idempotent; verifies that the four topics exist with the expected partitions):
+
+`KAFKA_BOOTSTRAP_SERVERS=<brokers> KAFKA_CLIENT_PROPERTIES=<client.properties with the SASL/SSL settings> ./scripts/kafka-create-topics.sh` (`--dry-run` only prints the plan; `PARTITIONS` and `REPLICATION_FACTOR` default to 3, and the replication factor cannot exceed the number of brokers).
+
+Partitions and replication are a platform choice; the numbers below are a starting point, and the table lists what the script creates:
 
 | Topic | Purpose | Property |
 | --- | --- | --- |

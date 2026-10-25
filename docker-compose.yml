@@ -1,7 +1,7 @@
 # docker-compose.yml - local and QA runs of smartkin-backend. For Kubernetes (cert-manager, Ingress...) use its own manifests.
 #
 # Config is split in two, by sensitivity (the scheme of mercury, backbone-rest and zerobound-rest):
-#   config/local.env   (versioned)  bootstrap identity: profile, label, how to reach Vault / the Config Server, TLS identity. No credentials.
+#   config/local.env   (versioned)  startup identity: profile, label, how to reach Vault / the Config Server, TLS identity. No credentials.
 #   secrets/local.env  (git-ignored, copy secrets/local.env.example)  VAULT_TOKEN only.
 # Supabase (SMARTKIN_DB_*), MongoDB Atlas (SMARTKIN_MONGO_*), the Redis instances (REVOCATION_REDIS_URL, CACHE_REDIS_URL), Kafka, the
 # backbone / mercury clients and APP_TOKEN_SECRET come from Vault / the Config Server. Never put them in those files, not even
@@ -9,7 +9,7 @@
 #
 # The image this file runs is built beforehand:
 #   JVM (default)   mvn -B clean package && docker compose build
-#   GraalVM native  (experimental, the binary does not start yet) docker build -f Dockerfile.native -t lamata/smartkin-backend:0.0.1-native ...   (secrets and flags: see Dockerfile.native;
+#   GraalVM native  (experimental, see Dockerfile.native: mount certs/smartkin and set SSL_KEYSTORE_URL / SSL_TRUSTSTORE_URL) docker build -f Dockerfile.native -t lamata/smartkin-backend:0.0.1-native ...   (secrets and flags: see Dockerfile.native;
 #                   10-15 min, ~8 GB RAM) and then run it with SMARTKIN_TAG=0.0.1-native docker compose up -d
 # The internal CA of the *.tst services is an optional BuildKit secret of both Dockerfiles:
 #   docker build --secret id=prx_internal_ca,src=certs/smartkin/prx-internal-ca.crt -t lamata/smartkin-backend:0.0.1 .

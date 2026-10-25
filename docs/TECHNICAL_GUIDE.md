@@ -6,10 +6,10 @@
 | --- | --- |
 | Java | 25 |
 | Spring Boot | 4.1.1 |
-| Spring Cloud | 2025.1.3 (Config, Bootstrap, OpenFeign, Vault, Eureka client) |
-| springdoc | 3.1.0 (`springdoc-openapi-starter-webmvc-ui`) |
+| Spring Cloud | 2025.1.3 (Config, OpenFeign, Vault, Eureka client; no bootstrap context) |
+| springdoc | 3.2.0 (`springdoc-openapi-starter-webmvc-ui`) |
 | MapStruct | 1.6.3 |
-| PostgreSQL JDBC | 42.7.13 |
+| PostgreSQL JDBC | 42.7.14 |
 | Shared libraries | `com.umdc:commons`, `commons-services`, `security-oauth` 0.0.3 (Repsy) |
 | Docker base image | `amazoncorretto:25.0.4-alpine3.24` |
 
@@ -25,6 +25,61 @@ mvn test -Dtest=Class#method # single test
 
 The private Repsy repository needs `REPSY_ACCOUNT_USER` and `REPSY_ACCOUNT_PASSWORD`; the `com.umdc` libraries can also come
 from the local Maven cache.
+
+## Configuration loading (`spring.config.import`)
+
+All configuration is in `src/main/resources/application.yml` (it used to be `bootstrap.yml`). Vault and the Config Server are not read by the legacy Spring Cloud bootstrap context any more: `spring-cloud-starter-bootstrap` is gone and `spring.config.import: "optional:vault://,optional:configserver:"` loads both before the application context exists, the way mercury, backbone-rest and zerobound-rest do. The reason is GraalVM: the bootstrap context starts a second, nested `SpringApplication`, Spring AOT captured that one instead of the real application, and the native binary stopped with `no ServletWebServerFactory bean defined in the context`. The `spring.cloud.vault.*` and `spring.cloud.config.*` properties are the same as before; only the loading mechanism changed.
+
+```mermaid
+flowchart LR
+    ENV[Environment variables<br/>config/local.env + secrets/local.env] --> YML[application.yml<br/>placeholders]
+    YML -->|spring.config.import| V[optional:vault://<br/>kv UMDC / smartkin-backend]
+    YML -->|spring.config.import| C[optional:configserver:<br/>CNFS_URI + label + profile]
+    V --> CTX[Application context]
+    C --> CTX
+    YML --> CTX
+```
+
+Precedence, from lowest to highest: `application.yml`, Vault, Config Server; an environment variable beats all of them, which is why Vault-owned values must never appear in `config/local.env`. New variables: `VAULT_KV_BACKEND` (default `UMDC`) and `VAULT_KV_CONTEXT` (default the application name) choose the Vault path `<backend>/<context>[/<profile>]`; `VAULT_ENABLED` (default `false`) switches Vault on; `CNFS_URI` defaults to `http://localhost:8888` and `SPRING_CLOUD_CONFIG_LABEL`/`SPRING_BOOT_PROFILE_ACTIVE` default to empty. `SPRING_BOOT_CLOUD_BOOTSTRAP_ENABLED` and `SPRING_CLOUD_BOOTSTRAP_ENABLED` no longer exist. `spring.cloud.config.port` was removed (the client has no such field; `CNFS_PORT` is ignored). Both clients now trust the PRX internal CA from `classpath:${SSL_TRUSTSTORE_LOCATION}` (`spring.cloud.vault.ssl` and `spring.cloud.config.tls`), because the native image has no JVM `cacerts` import of it.
+
+`NativeRuntimeHints` registers the properties types bound during the import (`VaultProperties`, `VaultKeyValueBackendProperties`, `ConfigClientProperties`, `RetryProperties`, `TlsProperties` and their nested classes), which AOT cannot see because they are bound before the context exists (`NativeRuntimeHintsTest`).
+
+## Authentication (`SessionTokenSecurityConfig`)
+
+Same model as mercury and zerobound-rest. The Spring Security chain (`SessionTokenSecurityConfig`) lets `umdc.api.endpoint` + `/**` (`/api/v1/**`), the health probes, `/error` and Swagger through and denies everything else; the authentication itself happens at the MVC layer in security-oauth's `SessionJwtInterceptor`, which reads the `session-token` header and asks `SessionJwtServiceImpl.isValid` (HMAC signature with `APP_TOKEN_SECRET`, expiry, token type `session-token`, and the `jti` revocation list in Redis; it fails closed with 503 when the list is down). Anything else answers 401.
+
+`SmartKinBackendApplication` excludes the library's `com.umdc.security.config.SecurityConfig` from the component scan (`SmartKinBackendApplicationScanTest`). That class is a decommissioned Keycloak-style JWT resource server: it needs a `jwk-set-uri`, builds a `RestTemplate` whose keystore it reads with `ClassLoader.getResourceAsStream` (classpath only, which the GraalVM binary does not embed), and answers 401 to a request that carries a `session-token` and no bearer token, which is what every client sends. The `spring.security.oauth2.*` and `umdc.security.keystore/truststore` properties and the OAuth2 resource-server autoconfiguration were removed with it; `HealthProbeSecurityConfig` was folded into the new class.
+
+```mermaid
+flowchart LR
+    R[Request] --> F{SessionTokenSecurityConfig}
+    F -->|/api/v1/**| I[SessionJwtInterceptor<br/>session-token header]
+    F -->|/actuator/health/**, Swagger, /error| C[Controller / probe]
+    F -->|anything else| D[403]
+    I -->|isValid: signature, expiry, type, jti not revoked| C
+    I -->|invalid, missing or forged| U[401]
+    I -->|revocation list down| S[503]
+```
+
+**Verified on the JVM jar** (a throwaway PostgreSQL, a token signed with the configured secret): a valid `session-token` reaches the repository (before the change the same token answered 401 from the library's chain); a token signed with another key, an unsigned one (`alg: none`), an expired one and a request with no token answer 401; `/actuator/health/liveness` is `UP` and `/actuator/env` is 403. This is the local half of finding S-1 in `docs/SECURITY_REVIEW_MVP.md`; the check against the real environment (Redis revocation list, the PRX library as deployed) still belongs to `scripts/qa-smoke.sh` in QA.
+
+## Environment setup scripts
+
+Three scripts bring an empty environment to the point where the service can start. Run them in this order; each is idempotent and takes its secrets from the environment (Vault), never from a file in the repository.
+
+```mermaid
+flowchart LR
+    R["docs/db/smartkin_roles.sql<br/>psql as postgres"] -->|smartkin_owner, smartkin_app| M["scripts/db-migrate.sh<br/>Flyway CLI as smartkin_owner"]
+    M -->|14 tables, 4 enums, V1..V6| K["scripts/kafka-create-topics.sh<br/>kafka-topics.sh"]
+    K -->|4 topics| S[smartkin-backend starts<br/>nothing pending]
+```
+
+| Script | Needs | Does | Refuses |
+| --- | --- | --- | --- |
+| `scripts/db-migrate.sh [info\|validate\|migrate]` | Docker, `SMARTKIN_DB_URI`, `SMARTKIN_FLYWAY_USERNAME`, `SMARTKIN_FLYWAY_PASSWORD` | runs the files of `src/main/resources/db/migration` with the Flyway CLI image `flyway/flyway:12.4.0` (the version Spring Boot 4.1.1 brings), schema `smartkin`, `validateOnMigrate`; the password reaches the container through the environment, not a command line; `info` (default) changes nothing | the pooler port 6543 (migrations need session locks), the `postgres` user (the tables would belong to it) unless `ALLOW_ADMIN_USER=1`, any other command |
+| `scripts/kafka-create-topics.sh [--dry-run]` | Docker (or `KAFKA_TOPICS_BIN`), `KAFKA_BOOTSTRAP_SERVERS`, optionally `KAFKA_CLIENT_PROPERTIES` | creates `smartkin.activity.assigned.v1`, `smartkin.quiz.completed.v1`, `smartkin.achievement.earned.v1` and `smartkin.events.error.v1` (same names and overrides as the service: `TOPIC_*`, `KAFKA_ERROR_TOPIC`) with `--if-not-exists`, then describes each and fails if one is missing or has fewer partitions than `PARTITIONS` (default 3, `REPLICATION_FACTOR` default 3) | a missing bootstrap list, a missing properties file; an existing topic is never altered |
+
+**Verified** (throwaway containers on a Docker network, 2026-10-25). Database: PostgreSQL 17, `smartkin_roles.sql`, then `db-migrate.sh migrate`: six migrations applied, 14 tables and 4 enums (decision D-2), all owned by `smartkin_owner`; a second run says "up to date"; `validate` passes; the application role reads and cannot create tables; the service jar then starts with `FLYWAY_ENABLED=true`, validates the six migrations from the CLI-created history, finds nothing pending and answers 404 (no profile) from the real tables. Kafka: Apache Kafka 4.2.0 single node: the four topics are created with 3 partitions, a second run changes nothing, a replication factor of 3 on one broker fails with exit code 1, expecting more partitions than exist fails, and a message round-trips on `smartkin.activity.assigned.v1`. **Not verified:** Supabase (TLS parameters, pooler user suffix, platform limits on role management) and the real broker (SASL/SSL client properties, ACLs for the service principal: read on the three event topics, write on all four).
 
 ## Database
 
@@ -43,12 +98,31 @@ entity change needs a new `V<n>__*.sql`.
 | `SMARTKIN_DB_POOL_SIZE` | 5 | Hikari maximum pool size |
 | `FLYWAY_ENABLED` | `true` | `false` in production when the pipeline applies migrations |
 
+**Database roles (`docs/db/smartkin_roles.sql`).** Two login roles, created by one idempotent psql script (run it as `postgres` against `umdevc`, once per environment and again to rotate a password):
+
+| Role | Used by | Can | Cannot |
+| --- | --- | --- | --- |
+| `smartkin_owner` | Flyway (`SMARTKIN_FLYWAY_USERNAME` / `_PASSWORD`) | own the `smartkin` schema, run DDL and migrations; not subject to RLS as owner | be superuser, create roles or databases, bypass RLS |
+| `smartkin_app` | the service (`SMARTKIN_DB_USERNAME` / `_PASSWORD`) | `SELECT`/`INSERT`/`UPDATE`/`DELETE` on the tables, `USAGE`/`SELECT` on sequences, through the `smartkin_app_all` policy | DDL, `TRUNCATE`, create roles, bypass RLS |
+
+```mermaid
+flowchart LR
+    S[psql as postgres<br/>smartkin_roles.sql] -->|creates, rotates passwords| O[smartkin_owner]
+    S -->|creates, rotates passwords| A[smartkin_app]
+    S -->|schema smartkin owned by| O
+    F[Flyway V1..V6] -->|runs as| O
+    O -->|default privileges: DML on tables, USAGE+SELECT on sequences| A
+    SVC[smartkin-backend] -->|connects as| A
+```
+
+Passwords are psql variables (`-v owner_password=... -v app_password=...`, from Vault), never in the file. `-v expected_database=umdevc` aborts when the connection is to another database. If the tables were created by another role (the schema was provisioned as `postgres`), the script moves the tables, sequences and enum types to `smartkin_owner`. `DatabaseRolesScriptContainerTest` runs the script with real psql: attributes of both roles, every migration as the owner, DML yes and DDL/`TRUNCATE`/`CREATE ROLE` no for the application role, re-run and password rotation, the ownership hand-over, the missing-password and wrong-database failures.
+
 **Access model (D-3).** Only the backend touches the schema. RLS is on for all tables, `anon`/`authenticated`/`service_role` have no privileges, and the application should connect as `smartkin_app`
 (DML only). Flyway runs as the schema owner through `SMARTKIN_FLYWAY_USERNAME`/`SMARTKIN_FLYWAY_PASSWORD` (default: the application credentials, fine for local use as the owner). New tables need
 `enable row level security` plus a `smartkin_app` policy in their migration. Keep `smartkin` out of Supabase's exposed API schemas.
 
 Create the empty schema with `docs/db/smartkin_schema_bootstrap.sql` (or let Flyway do it through `create-schemas`). Use a dedicated database role for SmartKin.
-The config-server file `stage-folder-config/smartkin-backend-*.yml` still carries its own datasource block; the variables above take effect through `bootstrap.yml`,
+The config-server file `stage-folder-config/smartkin-backend-*.yml` still carries its own datasource block; the variables above take effect through `application.yml`,
 so remove or align that block when the environment is switched to Supabase.
 
 ## MongoDB
@@ -159,13 +233,26 @@ Same scheme as mercury, backbone-rest and zerobound-rest; the choices that diffe
 | `config/local.env`, `secrets/local.env` | Versioned bootstrap identity vs. git-ignored `VAULT_TOKEN`. Do not add Vault-provided variables here: an environment variable shadows Vault. |
 | `docker-compose.yml` | One service, IP `172.22.0.12` (9 = backbone, 10 = mercury, 11 = zerobound), `extra_hosts` for the `*.umdc-qa.tst` names, `read_only` + `tmpfs /tmp`, `no-new-privileges`, `stop_grace_period: 30s`. |
 
-**TLS material.** `certs/smartkin/` is git-ignored and is copied onto the classpath by `pom.xml`, because the TLS bundle and the security library read `classpath:` names. `umdc.security.keystore` and `truststore` take the same files and must have no `classpath:` prefix (the library loads them with `getResourceAsStream` and a missing file silently becomes an empty store: "trustAnchors parameter must be non-empty"). The truststore must hold a trusted certificate entry; a keystore with only a private key is not a truststore. In security-oauth 0.0.3 the keystore/truststore arguments are not swapped (mercury documents a swap in 0.0.1).
+**TLS material.** `certs/smartkin/` is git-ignored and is copied onto the classpath by `pom.xml`, because the TLS bundle and the security library read `classpath:` names. The truststore must hold a trusted certificate entry; a keystore with only a private key is not a truststore. The `umdc.security.keystore`/`truststore` properties are gone: only the library's `SecurityConfig` read them (see Authentication), and it is no longer scanned. `SSL_KEYSTORE_URL` and `SSL_TRUSTSTORE_URL` (optional, with a scheme, e.g. `file:/usr/local/runme/certs/smartkin/smartkin.jks`) override the classpath names for the TLS bundle, Vault, the Config Server and Eureka; the JVM jar keeps using the classpath, the native binary (which does not embed the `.jks`) reads them from a mounted path.
 
-**Health.** `management.endpoints.web.exposure.include: health` with probes enabled; the image and compose probe `/actuator/health/liveness`, which does not depend on Postgres, MongoDB, Redis or Kafka. The library's filter chain answers 401 to everything but Swagger, so `HealthProbeSecurityConfig` adds a first-order chain for `/actuator/health/**` only (`HealthProbeSecurityConfigTest`).
+**Health.** `management.endpoints.web.exposure.include: health` with probes enabled; the image and compose probe `/actuator/health/liveness`, which does not depend on Postgres, MongoDB, Redis or Kafka. `SessionTokenSecurityConfig` opens `/actuator/health/**` (see Authentication).
 
 **What was verified.** The JVM image was built and run with `config/native.env` plus overrides (profile empty, bootstrap on, Eureka off, Mongo index creation off, Kafka consumers off, no Hikari fail-fast): non-root `jvapps`, read-only root with `/tmp` tmpfs and `no-new-privileges`, health `healthy`, `/api/v1/**` and `/actuator/env` still 401, `docker stop` completes in well under a second with a graceful Tomcat shutdown. Against real Vault, Supabase, Atlas, Redis and Kafka it was **not** run.
 
-**Native image: builds, does not start yet.** `docker build -f Dockerfile.native` succeeds (Spring AOT and `native-image` pass; about 3.5 minutes with `NATIVE_QUICK_BUILD=true`, 596 MB image) but the binary stops at start with `no ServletWebServerFactory bean defined in the context`: the AOT-generated context is empty. Probable cause, not confirmed: the application relies on the legacy Spring Cloud bootstrap context (`bootstrap.yml`, `spring-cloud-starter-bootstrap`), which Spring AOT does not support; mercury, backbone-rest and zerobound-rest configure Vault and the Config Server through `spring.config.import` instead. Enabling the bootstrap context at build time (`SPRING_CLOUD_BOOTSTRAP_ENABLED=true` in `config/native.env`) did not change the result. Making the native image work means moving that configuration to `application.yml` + `spring.config.import`, a change of its own. Until then `Dockerfile.native` is experimental and the JVM image is the one to deploy.
+**Native image: builds and starts (verified 2026-10-25, not yet against the real environment).** The original failure (`no ServletWebServerFactory bean`) came from the legacy Spring Cloud bootstrap context, which Spring AOT captured instead of the real application; it was fixed by loading Vault and the Config Server through `spring.config.import` (see Configuration loading). Two more gaps appeared behind it and were fixed: Hibernate's `UUID[]`/`Long[]`/`Integer[]`/`String[]` reflection hints, and the security library's `SecurityConfig`, which reads its keystore from the classpath only (it is no longer scanned, see Authentication). The `*.jks` keystores are **not embedded** in the binary although `NativeRuntimeHints` registers `*.jks` (the generated `reachability-metadata.json` contains the glob, `application.yml` is embedded and the `.jks` are not, compared byte by byte; the reason was not found), so the TLS bundle, Vault, the Config Server and Eureka read them from a mounted path through `SSL_KEYSTORE_URL` and `SSL_TRUSTSTORE_URL`. This also keeps the private key out of the image.
+
+Run it like this (what was tested):
+
+```bash
+docker build --secret id=maven_settings,src=$HOME/.m2/settings.xml \
+  --secret id=prx_internal_ca,src=certs/smartkin/prx-internal-ca.crt -f Dockerfile.native -t smartkin-native .
+docker run --env-file config/native.env -v "$PWD/certs/smartkin:/usr/local/runme/certs/smartkin:ro" \
+  -e SSL_KEYSTORE_URL=file:/usr/local/runme/certs/smartkin/smartkin.jks \
+  -e SSL_TRUSTSTORE_URL=file:/usr/local/runme/certs/smartkin/umdc-truststore.jks \
+  -e SMARTKIN_DB_URI=... -p 8166:8166 smartkin-native      # plus the real Vault/Config Server settings
+```
+
+Result with `NATIVE_QUICK_BUILD=true`, a throwaway PostgreSQL and no Vault or Config Server: `Started SmartKinBackendApplication in 0.457 seconds`, 144 MiB of memory, 462 MB image, liveness `UP`, `/actuator/env` 403, and the same answers as the JVM jar for the session token (forged, unsigned, expired and missing: 401; a valid one reaches the repository). Not verified: Vault and the Config Server as deployed, Redis revocation, Kafka, and a build without `NATIVE_QUICK_BUILD`. The JVM image stays the one to deploy until that is done. Original diagnosis (before the change) follows.
 
 **Findings from the smoke test** (all fixed except the last): the `prx.*` library properties (see Library property names), the missing `umdc.security.keystore`/`truststore`, the base64 requirement of `APP_TOKEN_SECRET`, and the 401 on health. Not fixed: with `spring.data.mongodb.auto-index-creation: true` the application does not start if Atlas is unreachable (a 30 s server-selection timeout); and Eureka registration still fails with `No qualifying bean ... TransportClientFactories` when `eureka.client.enabled` is true (adding `eureka.client.tls` and `eureka-client-jersey3`/Jersey did not fix it), so the smoke test and AOT run with `EUREKA_CLIENT_ENABLED=false`. Check what the Config Server sets for Eureka in QA before deploying.
 
@@ -284,7 +371,7 @@ The contract was amended in this ticket: errors are status plus `message-error` 
 
 ## Child invitations and accounts (S-2)
 
-`POST /children` linked any user id the parent typed, so a parent could capture an unrelated account (finding S-2 of `docs/SECURITY_REVIEW_MVP.md`). It is gone. `ChildLinker.create` is now the only code that inserts a `child` row and has two callers: accepting an invitation (the future child consents by presenting the code) and creating the account (the user did not exist before).
+`POST /children` linked any user id the parent typed, so a parent could capture an unrelated account (finding S-2 of `docs/SECURITY_REVIEW_MVP.md`). It is gone. `ChildLinker.create` is now the only code that inserts a `child` row and has two callers: accepting an invitation (the future child consents by presenting the code) and creating the account (the user did not exist before). `ChildEntity` implements `Persistable<UUID>` (new until loaded or persisted) because its id is assigned by backbone: without it Spring Data calls `merge`, and a second concurrent link of the same user would silently update the row and move the child to another parent. With it the call is an insert and a duplicate key becomes `DataIntegrityViolationException`, answered 409.
 
 | Operation | Class | Rule | Answers |
 | --- | --- | --- | --- |

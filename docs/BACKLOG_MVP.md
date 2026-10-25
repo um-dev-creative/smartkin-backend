@@ -35,7 +35,7 @@ Actualizado: 2026-10-23. Backend: todo lo que no necesita QA está en `developme
 | FE-15 | Hecho de forma continua | Cada ticket trajo sus specs (de 18 a 218). |
 | FE-2 | Bloqueado: acción manual | El token de Vault está en el commit `2eb6965` (2025-08-01, `run-local.sh`). Debe rotarse en Vault; no se puede hacer desde el repo. |
 | BE-2 | Bloqueado: requiere QA | Necesita Vault, Config Server y Supabase reales. Pasos en `docs/QA_RUNBOOK_MVP.md`. |
-| BE-3 | Bloqueado: requiere QA | Crear topics de Kafka y fijar la contraseña de `smartkin_app` en el entorno real. Comandos en `docs/QA_RUNBOOK_MVP.md`. |
+| BE-3 | Scripts listos; ejecutarlos requiere QA | `scripts/kafka-create-topics.sh` (los 4 topics), `docs/db/smartkin_roles.sql` (usuarios `smartkin_owner` y `smartkin_app`) y `scripts/db-migrate.sh` (tablas, Flyway V1 a V6) están probados en contenedores desechables. Falta correrlos contra el entorno real con las credenciales de Vault. Pasos en `docs/QA_RUNBOOK_MVP.md`. |
 | X-1 | Bloqueado | Depende de BE-2. |
 | X-4 | Bloqueado: requiere QA | El script `scripts/qa-smoke.sh` automatiza S-1, la invitación y la rebanada; falta ejecutarlo contra QA y la prueba con el frontend. |
 | X-2 | Hecho | Rama `sak-21-mvp-openapi-contract`: `docs/api/openapi-v1.yaml` (25 operaciones al inicio, 29 con S-2), decisión D-6 y `OpenApiContractTest`. 200 pruebas en verde. |

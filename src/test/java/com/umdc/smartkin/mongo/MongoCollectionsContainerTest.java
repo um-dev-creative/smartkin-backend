@@ -43,7 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ContextConfiguration(classes = MongoCollectionsContainerTest.MongoTestApplication.class)
 @TestPropertySource(properties = {
         "spring.data.mongodb.auto-index-creation=true",
-        // bootstrap.yml builds the Atlas URI from SMARTKIN_MONGO_* placeholders; the container connection details take precedence.
+        // application.yml builds the Atlas URI from SMARTKIN_MONGO_* placeholders; the container connection details take precedence.
         "spring.mongodb.uri=mongodb://localhost/ignored"
 })
 class MongoCollectionsContainerTest {
