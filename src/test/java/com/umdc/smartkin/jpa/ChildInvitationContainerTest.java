@@ -23,6 +23,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ContextConfiguration;
@@ -43,6 +44,7 @@ import java.util.concurrent.Executors;
 
 import static com.umdc.smartkin.support.TestData.tokenFor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /// S-2 on a real PostgreSQL (migration V6 included): an invitation works once, only while it is pending and unexpired, and a failed accept leaves it usable.
@@ -81,6 +83,8 @@ class ChildInvitationContainerTest {
     private ParentRepository parentRepository;
     @Autowired
     private ChildRepository childRepository;
+    @Autowired
+    private ChildLinker childLinker;
 
     private UUID newParent() {
         var parent = new ParentEntity();
@@ -182,6 +186,24 @@ class ChildInvitationContainerTest {
             statuses.add(invitationRepository.findByCodeHash(InvitationCode.hash(InvitationCode.normalize(code).orElseThrow())).orElseThrow().getStatus());
         }
         assertTrue(statuses.contains(InvitationStatus.ACCEPTED) && statuses.contains(InvitationStatus.PENDING), statuses.toString());
+    }
+
+    @Test
+    void linkingAnExistingChildNeverMovesItToAnotherParent() {
+        var parentA = newParent();
+        var parentB = newParent();
+        var childId = UUID.randomUUID();
+        childLinker.create(parentRepository.findById(parentA).orElseThrow(), childId, "3", "a.png");
+
+        // What a lost race looks like once the first accept has committed: with an assigned id Spring Data would `merge` and silently
+        // overwrite the row, handing the child to the second parent. It must fail instead.
+        assertThrows(DataIntegrityViolationException.class,
+                () -> childLinker.create(parentRepository.findById(parentB).orElseThrow(), childId, "9", "b.png"));
+
+        var stored = childRepository.findById(childId).orElseThrow();
+        assertEquals(parentA, stored.getParent().getId());
+        assertEquals("3", stored.getGradeLevel());
+        assertEquals("a.png", stored.getAvatar());
     }
 
     @Test
