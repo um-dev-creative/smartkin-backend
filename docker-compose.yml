@@ -9,7 +9,7 @@
 #
 # The image this file runs is built beforehand:
 #   JVM (default)   mvn -B clean package && docker compose build
-#   GraalVM native  (experimental: builds, does not finish starting yet, see Dockerfile.native) docker build -f Dockerfile.native -t lamata/smartkin-backend:0.0.1-native ...   (secrets and flags: see Dockerfile.native;
+#   GraalVM native  (experimental, see Dockerfile.native: mount certs/smartkin and set SSL_KEYSTORE_URL / SSL_TRUSTSTORE_URL) docker build -f Dockerfile.native -t lamata/smartkin-backend:0.0.1-native ...   (secrets and flags: see Dockerfile.native;
 #                   10-15 min, ~8 GB RAM) and then run it with SMARTKIN_TAG=0.0.1-native docker compose up -d
 # The internal CA of the *.tst services is an optional BuildKit secret of both Dockerfiles:
 #   docker build --secret id=prx_internal_ca,src=certs/smartkin/prx-internal-ca.crt -t lamata/smartkin-backend:0.0.1 .
