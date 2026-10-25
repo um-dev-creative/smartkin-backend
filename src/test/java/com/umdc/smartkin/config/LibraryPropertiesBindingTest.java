@@ -20,12 +20,12 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-/// bootstrap.yml must use the property names the com.umdc libraries bind (`umdc.*`). With the old `prx.*` names nothing binds, the
+/// application.yml must use the property names the com.umdc libraries bind (`umdc.*`). With the old `prx.*` names nothing binds, the
 /// security library's `AuthProperties.getClients()` is null and the context dies at start; no other test starts the whole context.
 class LibraryPropertiesBindingTest {
 
-    private StandardEnvironment environmentOverBootstrapYml() throws IOException {
-        List<PropertySource<?>> sources = new YamlPropertySourceLoader().load("bootstrap", new ClassPathResource("bootstrap.yml"));
+    private StandardEnvironment environmentOverApplicationYml() throws IOException {
+        List<PropertySource<?>> sources = new YamlPropertySourceLoader().load("application", new ClassPathResource("application.yml"));
         var environment = new StandardEnvironment();
         MutablePropertySources all = environment.getPropertySources();
         // the values Vault / the environment supply at run time
@@ -52,14 +52,14 @@ class LibraryPropertiesBindingTest {
         return environment;
     }
 
-    private Binder binderOverBootstrapYml() throws IOException {
-        var environment = environmentOverBootstrapYml();
+    private Binder binderOverApplicationYml() throws IOException {
+        var environment = environmentOverApplicationYml();
         return new Binder(ConfigurationPropertySources.get(environment), new PropertySourcesPlaceholdersResolver(environment));
     }
 
     @Test
     void theOutboundClientsBindToTheSecurityLibrary() throws IOException {
-        AuthProperties auth = binderOverBootstrapYml().bind("umdc.security.auth", AuthProperties.class).orElse(null);
+        AuthProperties auth = binderOverApplicationYml().bind("umdc.security.auth", AuthProperties.class).orElse(null);
 
         assertNotNull(auth);
         assertNotNull(auth.getClients());
@@ -72,7 +72,7 @@ class LibraryPropertiesBindingTest {
 
     @Test
     void theJwtSettingsBindToTheSecurityLibrary() throws IOException {
-        JwtConfigProperties jwt = binderOverBootstrapYml().bind("umdc.security.jwt", JwtConfigProperties.class).orElse(null);
+        JwtConfigProperties jwt = binderOverApplicationYml().bind("umdc.security.jwt", JwtConfigProperties.class).orElse(null);
 
         assertNotNull(jwt);
         assertEquals("secret-0123456789-0123456789-0123456789", jwt.getSecret());
@@ -82,7 +82,7 @@ class LibraryPropertiesBindingTest {
     @Test
     void theLibrariesFindTheirPlaceholders() throws IOException {
         // the libraries read these with @Value("${...}"), which keeps the camelCase of the YAML key
-        var environment = environmentOverBootstrapYml();
+        var environment = environmentOverApplicationYml();
 
         assertEquals("/api/v1", environment.getProperty("umdc.api.endpoint"));
         assertEquals("https://prx-qa.backbone.tst/backbone", environment.getProperty("umdc.backbone.base-url"));

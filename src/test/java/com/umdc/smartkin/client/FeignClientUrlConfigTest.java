@@ -24,7 +24,7 @@ class FeignClientUrlConfigTest {
     private static PropertySourcesPropertyResolver resolver(Map<String, Object> overrides) throws IOException {
         var sources = new MutablePropertySources();
         sources.addFirst(new MapPropertySource("overrides", overrides));
-        for (PropertySource<?> source : new YamlPropertySourceLoader().load("bootstrap", new ClassPathResource("bootstrap.yml"))) {
+        for (PropertySource<?> source : new YamlPropertySourceLoader().load("application", new ClassPathResource("application.yml"))) {
             sources.addLast(source);
         }
         return new PropertySourcesPropertyResolver(sources);

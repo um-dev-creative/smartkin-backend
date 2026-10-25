@@ -68,7 +68,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "spring.flyway.default-schema=smartkin",
         "spring.flyway.schemas=smartkin",
         "spring.flyway.create-schemas=true",
-        // bootstrap.yml points Flyway at the Supabase direct connection; here it must use the container's datasource.
+        // application.yml points Flyway at the Supabase direct connection; here it must use the container's datasource.
         "spring.flyway.url=",
         "spring.flyway.user=",
         "spring.flyway.password="

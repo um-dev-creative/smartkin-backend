@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 
-# EXPERIMENTAL: this image builds, but the binary does not start yet (the application relies on the Spring Cloud bootstrap context,
-# which Spring AOT does not support; see docs/TECHNICAL_GUIDE.md, "Container images"). Deploy the JVM image from ./Dockerfile.
+# EXPERIMENTAL: this image builds and the binary now gets through the configuration import, Hibernate and Tomcat, but it still stops
+# at start: the *.jks keystores are not embedded in the binary (the `*.jks` resource hint does not take effect) and the security
+# library reads its keystore from the classpath (see docs/TECHNICAL_GUIDE.md, "Container images"). Deploy the JVM image from ./Dockerfile.
 #
 # GraalVM Native Image build of smartkin-backend. Two stages: compile the executable inside a Linux builder (native-image targets
 # the container's own architecture, whatever the host is), then copy only the binary into a small runtime image. It starts in well

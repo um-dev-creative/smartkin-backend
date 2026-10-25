@@ -202,7 +202,7 @@ The container stops gracefully on `docker stop` (up to 30 s). A new Vault token 
 ## Running locally
 
 1. Install JDK 25 and Maven 3.9.
-2. Export the variables listed in `src/main/resources/bootstrap.yml` (profile, Vault, Config Server, SSL, OAuth clients).
+2. Export the variables listed in `src/main/resources/application.yml` (profile, Vault, Config Server, SSL, OAuth clients).
 3. Run `mvn spring-boot:run`.
 
 Without those variables the service stops at startup with a message such as
