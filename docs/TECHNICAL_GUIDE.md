@@ -80,6 +80,25 @@ entity change needs a new `V<n>__*.sql`.
 | `SMARTKIN_DB_POOL_SIZE` | 5 | Hikari maximum pool size |
 | `FLYWAY_ENABLED` | `true` | `false` in production when the pipeline applies migrations |
 
+**Database roles (`docs/db/smartkin_roles.sql`).** Two login roles, created by one idempotent psql script (run it as `postgres` against `umdevc`, once per environment and again to rotate a password):
+
+| Role | Used by | Can | Cannot |
+| --- | --- | --- | --- |
+| `smartkin_owner` | Flyway (`SMARTKIN_FLYWAY_USERNAME` / `_PASSWORD`) | own the `smartkin` schema, run DDL and migrations; not subject to RLS as owner | be superuser, create roles or databases, bypass RLS |
+| `smartkin_app` | the service (`SMARTKIN_DB_USERNAME` / `_PASSWORD`) | `SELECT`/`INSERT`/`UPDATE`/`DELETE` on the tables, `USAGE`/`SELECT` on sequences, through the `smartkin_app_all` policy | DDL, `TRUNCATE`, create roles, bypass RLS |
+
+```mermaid
+flowchart LR
+    S[psql as postgres<br/>smartkin_roles.sql] -->|creates, rotates passwords| O[smartkin_owner]
+    S -->|creates, rotates passwords| A[smartkin_app]
+    S -->|schema smartkin owned by| O
+    F[Flyway V1..V6] -->|runs as| O
+    O -->|default privileges: DML on tables, USAGE+SELECT on sequences| A
+    SVC[smartkin-backend] -->|connects as| A
+```
+
+Passwords are psql variables (`-v owner_password=... -v app_password=...`, from Vault), never in the file. `-v expected_database=umdevc` aborts when the connection is to another database. If the tables were created by another role (the schema was provisioned as `postgres`), the script moves the tables, sequences and enum types to `smartkin_owner`. `DatabaseRolesScriptContainerTest` runs the script with real psql: attributes of both roles, every migration as the owner, DML yes and DDL/`TRUNCATE`/`CREATE ROLE` no for the application role, re-run and password rotation, the ownership hand-over, the missing-password and wrong-database failures.
+
 **Access model (D-3).** Only the backend touches the schema. RLS is on for all tables, `anon`/`authenticated`/`service_role` have no privileges, and the application should connect as `smartkin_app`
 (DML only). Flyway runs as the schema owner through `SMARTKIN_FLYWAY_USERNAME`/`SMARTKIN_FLYWAY_PASSWORD` (default: the application credentials, fine for local use as the owner). New tables need
 `enable row level security` plus a `smartkin_app` policy in their migration. Keep `smartkin` out of Supabase's exposed API schemas.

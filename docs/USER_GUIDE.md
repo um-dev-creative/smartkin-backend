@@ -189,6 +189,15 @@ The security review of the MVP is in `docs/SECURITY_REVIEW_MVP.md`. Before openi
 
 The three achievements that ship today are examples. `docs/ACHIEVEMENTS_CATALOG.md` explains what a rule can express and proposes a catalog of eight; once the team edits `docs/db/achievements_catalog_proposal.sql`, running it once replaces the examples. Nothing changes for families until it is run.
 
+## Database users (for operators)
+
+Before the first deployment of an environment, create the two database users once with `docs/db/smartkin_roles.sql` (the QA runbook, step 1, has the exact command):
+
+- `smartkin_owner` runs the migrations (put it in `SMARTKIN_FLYWAY_USERNAME` / `SMARTKIN_FLYWAY_PASSWORD`).
+- `smartkin_app` is what the service connects as (`SMARTKIN_DB_USERNAME` / `SMARTKIN_DB_PASSWORD`). It can read and write data but cannot change the structure.
+
+Take both passwords from Vault and pass them to the script as `-v owner_password=...` and `-v app_password=...`; they never go in a file. Run the same script again to change a password. Do not use `postgres` for the service.
+
 ## Running in a container
 
 1. Put the TLS keystores in `certs/smartkin/` (`smartkin.jks`, `umdc-truststore.jks`; git-ignored) **before** `mvn clean package`: they are copied into the jar.
