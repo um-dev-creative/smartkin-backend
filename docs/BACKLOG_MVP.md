@@ -184,10 +184,12 @@ El backend no tiene endpoints de producto y el frontend no tiene pantallas conec
 
 ### Camino crítico
 
-```
-BE-1/FE-1 → FE-3 → BE-2 → X-1 → X-2
-  → BE-4 → BE-5 → BE-7 → BE-9 → BE-11 → BE-13 ┐
-  → FE-4/FE-5 → FE-6 → FE-7 → FE-8 → FE-10 → FE-11 → FE-12 ┴→ X-4 → X-5/X-6
+```mermaid
+flowchart LR
+    BE1["BE-1 / FE-1"] --> FE3["FE-3"] --> BE2["BE-2"] --> X1["X-1"] --> X2["X-2"]
+    X2 --> BE4["BE-4"] --> BE5["BE-5"] --> BE7["BE-7"] --> BE9["BE-9"] --> BE11["BE-11"] --> BE13["BE-13"] --> X4["X-4"]
+    X2 --> FE45["FE-4 / FE-5"] --> FE6["FE-6"] --> FE7["FE-7"] --> FE8["FE-8"] --> FE10["FE-10"] --> FE11["FE-11"] --> FE12["FE-12"] --> X4
+    X4 --> X56["X-5 / X-6"]
 ```
 
 Los tickets del frontend pueden avanzar en paralelo con el backend contra un mock del contrato (X-2). Las dependencias de backend (BE-x) aplican a la integración real, no a empezar a construir las pantallas.
