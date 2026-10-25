@@ -10,6 +10,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.MountableFile;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -24,7 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/// `docs/db/smartkin_roles.sql` run with real psql on PostgreSQL: it creates the owner and the application role, the owner can run all
+/// `docs/db/smartkin_roles.sql` run with real psql on PostgreSQL, and `docs/db/smartkin_roles_sql_editor.sql` run over JDBC the way a SQL
+/// editor (DataGrip, DBeaver, the Supabase editor) runs it: it creates the owner and the application role, the owner can run all
 /// the Flyway migrations, the application role can use the data and nothing else, and the script can be run again.
 @Testcontainers
 class DatabaseRolesScriptContainerTest {
@@ -68,6 +70,19 @@ class DatabaseRolesScriptContainerTest {
         }
         command.addAll(List.of("-f", SCRIPT));
         return postgres.execInContainer(command.toArray(new String[0]));
+    }
+
+    private static final Path EDITOR_SCRIPT = Path.of("docs/db/smartkin_roles_sql_editor.sql");
+
+    /// Runs the SQL-editor variant as one statement over JDBC, after editing its three constants the way the operator does.
+    private static void runEditorScript(String ownerPassword, String appPassword, String expectedDatabase) throws Exception {
+        String sql = Files.readString(EDITOR_SCRIPT)
+                .replace("'CHANGE_ME_OWNER_PASSWORD'", "'" + ownerPassword + "'")
+                .replace("'CHANGE_ME_APP_PASSWORD'", "'" + appPassword + "'")
+                .replace("expected_database constant text := 'umdevc'", "expected_database constant text := '" + expectedDatabase + "'");
+        try (var admin = admin(); var statement = admin.createStatement()) {
+            statement.execute(sql);
+        }
     }
 
     private static void migrateAs(String user, String password) {
@@ -173,6 +188,94 @@ class DatabaseRolesScriptContainerTest {
         try (var owner = as("smartkin_owner", "new-owner")) {
             assertNotEquals("", scalar(owner, "select current_user"));
         }
+    }
+
+    @Test
+    void theSqlEditorVariantCreatesTheSameRolesAndTheOwnerMigrates() throws Exception {
+        runEditorScript("owner-secret", "app-secret", postgres.getDatabaseName());
+
+        try (var admin = admin(); var statement = admin.createStatement(); var rows = statement.executeQuery(
+                "select rolname, rolcanlogin, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolreplication from pg_roles "
+                        + "where rolname in ('smartkin_owner', 'smartkin_app') order by rolname")) {
+            int seen = 0;
+            while (rows.next()) {
+                seen++;
+                assertTrue(rows.getBoolean("rolcanlogin"), rows.getString("rolname"));
+                assertFalse(rows.getBoolean("rolsuper"), rows.getString("rolname"));
+                assertFalse(rows.getBoolean("rolcreaterole"), rows.getString("rolname"));
+                assertFalse(rows.getBoolean("rolcreatedb"), rows.getString("rolname"));
+                assertFalse(rows.getBoolean("rolbypassrls"), rows.getString("rolname"));
+                assertFalse(rows.getBoolean("rolreplication"), rows.getString("rolname"));
+            }
+            assertEquals(2, seen);
+        }
+        migrateAs("smartkin_owner", "owner-secret");
+        try (var app = as("smartkin_app", "app-secret"); var statement = app.createStatement()) {
+            statement.execute("insert into smartkin.topics(name) values ('editor-" + UUID.randomUUID() + "')");
+            assertThrows(SQLException.class, () -> statement.execute("create table smartkin.intruder(id int)"));
+            assertThrows(SQLException.class, () -> statement.execute("truncate smartkin.topics"));
+            assertThrows(SQLException.class, () -> statement.execute("create role intruder"));
+        }
+    }
+
+    @Test
+    void theSqlEditorVariantHandsOverObjectsAndRotatesPasswords() throws Exception {
+        migrateAs(postgres.getUsername(), postgres.getPassword());
+        runEditorScript("owner-secret", "app-secret", postgres.getDatabaseName());
+        try (var admin = admin()) {
+            assertEquals("smartkin_owner", scalar(admin,
+                    "select pg_get_userbyid(relowner) from pg_class c join pg_namespace n on n.oid = c.relnamespace "
+                            + "where n.nspname = 'smartkin' and c.relname = 'child_invitation'"));
+        }
+
+        runEditorScript("new-owner", "new-app", postgres.getDatabaseName());
+
+        assertThrows(SQLException.class, () -> as("smartkin_app", "app-secret"));
+        try (var app = as("smartkin_app", "new-app")) {
+            assertEquals("0", scalar(app, "select count(*) from smartkin.child_invitation"));
+        }
+        migrateAs("smartkin_owner", "new-owner");
+    }
+
+    @Test
+    void theSqlEditorVariantStopsWhileThePasswordsAreStillPlaceholders() throws Exception {
+        String untouched = Files.readString(EDITOR_SCRIPT);
+        try (var admin = admin(); var statement = admin.createStatement()) {
+            var error = assertThrows(SQLException.class, () -> statement.execute(untouched));
+            assertTrue(error.getMessage().contains("Edit owner_password and app_password"), error.getMessage());
+        }
+        try (var admin = admin()) {
+            assertEquals("0", scalar(admin, "select count(*) from pg_roles where rolname in ('smartkin_owner', 'smartkin_app')"));
+        }
+    }
+
+    @Test
+    void theSqlEditorVariantRefusesTheWrongDatabase() throws Exception {
+        var error = assertThrows(SQLException.class, () -> runEditorScript("owner-secret", "app-secret", "umdevc"));
+
+        assertTrue(error.getMessage().contains("Wrong database"), error.getMessage());
+        assertEquals("0", scalarAsAdmin("select count(*) from pg_roles where rolname in ('smartkin_owner', 'smartkin_app')"));
+    }
+
+    private static String scalarAsAdmin(String query) throws SQLException {
+        try (var admin = admin()) {
+            return scalar(admin, query);
+        }
+    }
+
+    @Test
+    void thePsqlVersionSaysWhereToGoWhenAClientIgnoresItsMetaCommands() throws Exception {
+        // A SQL editor splits the file into statements and cannot act on \if, so the first plain statement it reaches is the guard
+        // `do $$ ... raise exception ... $$` (exactly what an operator saw in DataGrip).
+        String psqlOnly = Files.readString(Path.of("docs/db/smartkin_roles.sql"));
+        var guard = java.util.regex.Pattern.compile("do \\$\\$.*?\\$\\$;", java.util.regex.Pattern.DOTALL).matcher(psqlOnly);
+        assertTrue(guard.find());
+        try (var admin = admin(); var statement = admin.createStatement()) {
+            var error = assertThrows(SQLException.class, () -> statement.execute(guard.group()));
+            assertTrue(error.getMessage().contains("owner_password is required"), error.getMessage());
+            assertTrue(error.getMessage().contains("smartkin_roles_sql_editor.sql"), error.getMessage());
+        }
+        assertTrue(psqlOnly.contains("THIS FILE NEEDS psql"));
     }
 
     @Test
