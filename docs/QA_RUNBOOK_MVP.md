@@ -19,13 +19,12 @@ flowchart TD
 
 ## 1. Database (BE-2)
 
-1. Bootstrap the schema once, with a role that can create schemas, against the `umdevc` database (not `postgres`):
-   `psql "host=<host> port=5432 dbname=umdevc user=postgres" -f docs/db/smartkin_schema_bootstrap.sql`
-2. Start the service (step 4). Flyway runs on startup with `SMARTKIN_FLYWAY_USERNAME` (the schema owner) and applies **V1 to V6**. Check:
+1. Create the two database roles and the schema once, with a role that can create roles, against the `umdevc` database (not `postgres`). The script is idempotent and refuses to run in another database:
+   `psql "host=<host> port=5432 dbname=umdevc user=postgres" -v ON_ERROR_STOP=1 -v expected_database=umdevc -v owner_password="$(vault kv get -field=flyway_password <path>)" -v app_password="$(vault kv get -field=app_password <path>)" -f docs/db/smartkin_roles.sql`
+   It creates `smartkin_owner` (owns the schema, runs Flyway) and `smartkin_app` (data only, what the service uses), both without superuser, `CREATEROLE`, `CREATEDB` or `BYPASSRLS`. Put the owner in `SMARTKIN_FLYWAY_USERNAME` / `SMARTKIN_FLYWAY_PASSWORD` and the application role in `SMARTKIN_DB_USERNAME` / `SMARTKIN_DB_PASSWORD` (Vault).
+2. Start the service (step 4). Flyway runs on startup with `SMARTKIN_FLYWAY_USERNAME` (`smartkin_owner`) and applies **V1 to V6**. Check:
    `select version, description, success from smartkin.flyway_schema_history order by installed_rank;` → six rows, all `t`.
-3. Enable the application role V2 created without login, with a password kept in Vault:
-   `psql ... -v app_password="$(vault kv get -field=password <path>)" -c "alter role smartkin_app with login password :'app_password'"`
-   Then put that role and password in `SMARTKIN_DB_USERNAME` / `SMARTKIN_DB_PASSWORD` (Vault). The pooler port is `SMARTKIN_DB_PORT` (default 6543); Flyway uses the direct port `SMARTKIN_DB_DIRECT_PORT` (default 5432).
+3. Check the application role (the script of step 1 already gave it login): as `smartkin_app`, `select count(*) from smartkin.parent` works and `create table smartkin.x(id int)` fails with `permission denied`. On Supabase's pooler the user name has the project suffix (`smartkin_app.<project-ref>`). The pooler port is `SMARTKIN_DB_PORT` (default 6543); Flyway uses the direct port `SMARTKIN_DB_DIRECT_PORT` (default 5432).
 4. Confirm D-2: the 14 tables and 4 enum types of the `smartkin` schema match `docs/decisions/D-2-baseline-schema-and-enum-labels.md`:
    `select count(*) from information_schema.tables where table_schema='smartkin' and table_type='BASE TABLE' and table_name <> 'flyway_schema_history';` → 14.
 5. Confirm the API roles are locked out (D-3): as `anon` or `authenticated`, `select * from smartkin.parent` must fail or return no rows.

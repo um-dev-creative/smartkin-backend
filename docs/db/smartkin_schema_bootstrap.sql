@@ -25,9 +25,7 @@ create schema if not exists smartkin;
 
 commit;
 
--- After the first deployment has applied V2 (which creates the NOLOGIN role smartkin_app), enable it for the application with a password kept in Vault:
---
---   psql ... -v app_password="$(vault kv get -field=password ...)" -c "alter role smartkin_app with login password :'app_password'"
---
--- Then point SMARTKIN_DB_USERNAME / SMARTKIN_DB_PASSWORD at smartkin_app. Keep SMARTKIN_FLYWAY_USERNAME / SMARTKIN_FLYWAY_PASSWORD (or the pipeline) on the schema owner.
+-- Next, create the database roles with docs/db/smartkin_roles.sql (smartkin_owner for Flyway, smartkin_app for the service; passwords from Vault).
+-- That script also creates this schema if it is missing, so running this file first is optional.
+-- Then point SMARTKIN_DB_USERNAME / SMARTKIN_DB_PASSWORD at smartkin_app and SMARTKIN_FLYWAY_USERNAME / SMARTKIN_FLYWAY_PASSWORD at smartkin_owner.
 -- On Supabase's pooler the user name has the project suffix, e.g. smartkin_app.<project-ref>.
