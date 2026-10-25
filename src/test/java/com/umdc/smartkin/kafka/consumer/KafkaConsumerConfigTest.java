@@ -61,6 +61,24 @@ class KafkaConsumerConfigTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void theConsumerStaysPlaintextByDefaultAndTakesTheSecuritySettingsWhenSet() {
+        runner.run(context -> assertFalse(
+                context.getBean(ConsumerFactory.class).getConfigurationProperties().containsKey("security.protocol")));
+
+        runner.withPropertyValues(
+                "prx.kafka.security.protocol=SASL_SSL",
+                "prx.kafka.security.sasl.jaas-config=login",
+                "prx.kafka.security.ssl.truststore-location=/k/ca.pem").run(context -> {
+            var configuration = context.getBean(ConsumerFactory.class).getConfigurationProperties();
+            assertEquals("SASL_SSL", configuration.get("security.protocol"));
+            assertEquals("login", configuration.get("sasl.jaas.config"));
+            assertEquals("/k/ca.pem", configuration.get("ssl.truststore.location"));
+            assertEquals("broker", configuration.get("bootstrap.servers"));
+        });
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void usesTheBareUrlWhenThereIsNoPort() {
         runner.run(context -> assertEquals("broker",
                 context.getBean(ConsumerFactory.class).getConfigurationProperties().get("bootstrap.servers")));

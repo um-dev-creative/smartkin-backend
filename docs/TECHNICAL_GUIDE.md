@@ -220,6 +220,31 @@ partition (ordering per child is preserved) for at most the sum of the delays, a
 
 Open points: events are not published by any service yet, so the consumers are exercised only by tests; emails for these events (which need the recipient's address from backbone) are not sent.
 
+### Connecting to a secured cluster (Aiven)
+
+The producer and the consumer share `KafkaSecurityProperties` (`prx.kafka.security.*`). Until it existed they set only `bootstrap.servers`, so a cluster that requires TLS, such as Aiven, could not be reached. With the default (`PLAINTEXT`) it adds nothing to the client configuration, so local brokers and the Testcontainers tests behave as before. The environment variables are the ones mercury uses, so the Vault values can be shared.
+
+```mermaid
+flowchart LR
+    V["Vault / Config Server<br/>KAFKA_SECURITY_PROTOCOL, KAFKA_SSL_*, KAFKA_SASL_*"] --> P["KafkaSecurityProperties<br/>prx.kafka.security.*"]
+    F["Mounted files<br/>ca.pem, service.cert, service.key"] -->|read when the factory is built| P
+    P -->|clientProperties| PF[Producer factory]
+    P -->|clientProperties| CF[Consumer factory]
+    PF --> B[(Aiven brokers)]
+    CF --> B
+```
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `KAFKA_SECURITY_PROTOCOL` | `PLAINTEXT` | `PLAINTEXT`, `SSL` (client certificate), `SASL_PLAINTEXT` or `SASL_SSL` (user and password); anything else stops the start with the valid values |
+| `KAFKA_SSL_TRUSTSTORE_LOCATION`, `_TYPE`, `_PASSWORD` | empty, `PEM` | the CA that signed the brokers (Aiven's `ca.pem`); `_PASSWORD` only for `PKCS12`/`JKS` |
+| `KAFKA_SSL_KEYSTORE_CERT_LOCATION`, `KAFKA_SSL_KEYSTORE_KEY_LOCATION` | empty | the client certificate and key **as two files**, the way Aiven delivers them; both are read and handed to the client as PEM text |
+| `KAFKA_SSL_KEYSTORE_LOCATION`, `_TYPE`, `_PASSWORD`, `KAFKA_SSL_KEY_PASSWORD` | empty, `PEM` | alternative: one file with key and certificate, or a `PKCS12`/`JKS` store; it wins over the two-file form |
+| `KAFKA_SSL_ENDPOINT_ID_ALGO` | `https` | host name check of the brokers; an empty value turns it off |
+| `KAFKA_SASL_MECHANISM`, `KAFKA_SASL_JAAS_CONFIG` | `SCRAM-SHA-256`, empty | for `SASL_*`; the JAAS line carries the user and password, so it belongs in Vault |
+
+Files are read from the file system (`file:` is optional) and never from the classpath: a GraalVM binary does not embed them and a private key does not belong in an image. A file that cannot be read stops the start with its path, never its content, and `toString()` of the properties hides every password and the JAAS line. Verified against a real Aiven service (read-only): an `AdminClient` built from these properties connected over TLS with the CA and the certificate and key in two files and listed the four SmartKin topics. Unit tests: `KafkaSecurityPropertiesTest` (12), `KafkaProducerConfigTest` and the consumer cases of `KafkaConsumerConfigTest`.
+
 ## Container images
 
 Same scheme as mercury, backbone-rest and zerobound-rest; the choices that differ are explained here.

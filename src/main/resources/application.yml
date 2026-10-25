@@ -62,6 +62,26 @@ prx:
       ttl: ${CACHE_LESSON_CATALOG_TTL:10m}
       command-timeout: ${CACHE_REDIS_TIMEOUT:500ms}
   kafka:
+    # How both the producer and the consumer authenticate to the brokers. PLAINTEXT (the default) adds nothing. Aiven needs SSL (a client
+    # certificate) or SASL_SSL (user and password). Files are read from the file system, never from the classpath: a GraalVM binary does
+    # not embed them and a private key does not belong in an image. Same names as mercury, so the Vault values can be shared.
+    security:
+      protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+      sasl:
+        mechanism: ${KAFKA_SASL_MECHANISM:SCRAM-SHA-256}
+        jaas-config: ${KAFKA_SASL_JAAS_CONFIG:}
+      ssl:
+        truststore-type: ${KAFKA_SSL_TRUSTSTORE_TYPE:PEM}
+        truststore-location: ${KAFKA_SSL_TRUSTSTORE_LOCATION:}
+        truststore-password: ${KAFKA_SSL_TRUSTSTORE_PASSWORD:}
+        keystore-type: ${KAFKA_SSL_KEYSTORE_TYPE:PEM}
+        keystore-location: ${KAFKA_SSL_KEYSTORE_LOCATION:}
+        keystore-password: ${KAFKA_SSL_KEYSTORE_PASSWORD:}
+        key-password: ${KAFKA_SSL_KEY_PASSWORD:}
+        # Aiven delivers the client certificate and the key as two files; set these two instead of keystore-location
+        keystore-certificate-location: ${KAFKA_SSL_KEYSTORE_CERT_LOCATION:}
+        keystore-key-location: ${KAFKA_SSL_KEYSTORE_KEY_LOCATION:}
+        endpoint-identification-algorithm: ${KAFKA_SSL_ENDPOINT_ID_ALGO:https}
     consumer:
       # Set KAFKA_CONSUMER_ENABLED=false on a deployment that must not process events
       enabled: ${KAFKA_CONSUMER_ENABLED:true}

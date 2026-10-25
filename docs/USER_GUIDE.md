@@ -209,6 +209,8 @@ Three steps, in this order, before the first start of the service in QA or produ
 
 Both scripts are safe to run again, and both stop with a clear message when something is wrong.
 
+The service itself also needs the Kafka connection settings, in Vault: for Aiven, `KAFKA_SECURITY_PROTOCOL=SSL`, the path of the CA (`KAFKA_SSL_TRUSTSTORE_LOCATION`) and of the client certificate and key (`KAFKA_SSL_KEYSTORE_CERT_LOCATION`, `KAFKA_SSL_KEYSTORE_KEY_LOCATION`), as seen inside the container (mount the files read-only). Without them the service connects without TLS and Aiven refuses it.
+
 ## Running in a container
 
 1. Put the TLS keystores in `certs/smartkin/` (`smartkin.jks`, `umdc-truststore.jks`; git-ignored) **before** `mvn clean package`: they are copied into the jar.
