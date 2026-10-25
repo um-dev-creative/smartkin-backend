@@ -1,8 +1,11 @@
 # syntax=docker/dockerfile:1
 
-# EXPERIMENTAL: this image builds and the binary now gets through the configuration import, Hibernate and Tomcat, but it still stops
-# at start: the *.jks keystores are not embedded in the binary (the `*.jks` resource hint does not take effect) and the security
-# library reads its keystore from the classpath (see docs/TECHNICAL_GUIDE.md, "Container images"). Deploy the JVM image from ./Dockerfile.
+# Status: builds and starts (see docs/TECHNICAL_GUIDE.md, "Container images"), verified without Vault, the Config Server, Redis or Kafka.
+# Until it is checked against the real environment, deploy the JVM image from ./Dockerfile.
+#
+# Keystores: the binary does not embed the *.jks files (the `*.jks` resource hint does not take effect), so mount them at run time and
+# point SSL_KEYSTORE_URL / SSL_TRUSTSTORE_URL at them, e.g. -v ./certs/smartkin:/usr/local/runme/certs/smartkin:ro and
+#   SSL_KEYSTORE_URL=file:/usr/local/runme/certs/smartkin/smartkin.jks SSL_TRUSTSTORE_URL=file:/usr/local/runme/certs/smartkin/umdc-truststore.jks
 #
 # GraalVM Native Image build of smartkin-backend. Two stages: compile the executable inside a Linux builder (native-image targets
 # the container's own architecture, whatever the host is), then copy only the binary into a small runtime image. It starts in well

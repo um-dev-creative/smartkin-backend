@@ -195,7 +195,9 @@ The three achievements that ship today are examples. `docs/ACHIEVEMENTS_CATALOG.
 2. Copy `secrets/local.env.example` to `secrets/local.env` and set `VAULT_TOKEN`. `config/local.env` already points at the QA Vault and Config Server; everything else (Supabase, Atlas, Redis, Kafka, the backbone and mercury clients) comes from Vault.
 3. Once per Docker host, create the shared network: `docker network create --driver bridge --subnet 172.22.0.0/16 --gateway 172.22.0.1 nginx_umdc-net`.
 4. `mvn -B clean package && docker compose build && docker compose up -d`. The service listens on HTTPS 8166, has the fixed IP `172.22.0.12`, and `docker compose ps` shows its health. Put `api.umdc-qa.tst/smartkin-backend/` in nginx in front of it.
-5. Native image: **experimental, do not deploy yet**. `Dockerfile.native` builds, but the binary does not start (see the technical guide). Use the JVM image from step 4.
+5. Native image: **starts, but not yet checked against the real environment, so keep deploying the JVM image** (see the technical guide). The binary does not embed the keystores: mount `certs/smartkin/` into the container and set `SSL_KEYSTORE_URL=file:/usr/local/runme/certs/smartkin/smartkin.jks` and `SSL_TRUSTSTORE_URL=file:/usr/local/runme/certs/smartkin/umdc-truststore.jks`. Use the JVM image from step 4.
+
+How requests are authenticated changed: the API now accepts the `session-token` header (what the BFF sends) and answers 401 to a forged, unsigned, expired or missing token. The Keycloak-style bearer-token chain of the security library is no longer used.
 
 The container stops gracefully on `docker stop` (up to 30 s). A new Vault token or Config Server change needs a restart.
 

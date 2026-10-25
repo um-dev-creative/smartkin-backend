@@ -44,6 +44,25 @@ Precedence, from lowest to highest: `application.yml`, Vault, Config Server; an 
 
 `NativeRuntimeHints` registers the properties types bound during the import (`VaultProperties`, `VaultKeyValueBackendProperties`, `ConfigClientProperties`, `RetryProperties`, `TlsProperties` and their nested classes), which AOT cannot see because they are bound before the context exists (`NativeRuntimeHintsTest`).
 
+## Authentication (`SessionTokenSecurityConfig`)
+
+Same model as mercury and zerobound-rest. The Spring Security chain (`SessionTokenSecurityConfig`) lets `umdc.api.endpoint` + `/**` (`/api/v1/**`), the health probes, `/error` and Swagger through and denies everything else; the authentication itself happens at the MVC layer in security-oauth's `SessionJwtInterceptor`, which reads the `session-token` header and asks `SessionJwtServiceImpl.isValid` (HMAC signature with `APP_TOKEN_SECRET`, expiry, token type `session-token`, and the `jti` revocation list in Redis; it fails closed with 503 when the list is down). Anything else answers 401.
+
+`SmartKinBackendApplication` excludes the library's `com.umdc.security.config.SecurityConfig` from the component scan (`SmartKinBackendApplicationScanTest`). That class is a decommissioned Keycloak-style JWT resource server: it needs a `jwk-set-uri`, builds a `RestTemplate` whose keystore it reads with `ClassLoader.getResourceAsStream` (classpath only, which the GraalVM binary does not embed), and answers 401 to a request that carries a `session-token` and no bearer token, which is what every client sends. The `spring.security.oauth2.*` and `umdc.security.keystore/truststore` properties and the OAuth2 resource-server autoconfiguration were removed with it; `HealthProbeSecurityConfig` was folded into the new class.
+
+```mermaid
+flowchart LR
+    R[Request] --> F{SessionTokenSecurityConfig}
+    F -->|/api/v1/**| I[SessionJwtInterceptor<br/>session-token header]
+    F -->|/actuator/health/**, Swagger, /error| C[Controller / probe]
+    F -->|anything else| D[403]
+    I -->|isValid: signature, expiry, type, jti not revoked| C
+    I -->|invalid, missing or forged| U[401]
+    I -->|revocation list down| S[503]
+```
+
+**Verified on the JVM jar** (a throwaway PostgreSQL, a token signed with the configured secret): a valid `session-token` reaches the repository (before the change the same token answered 401 from the library's chain); a token signed with another key, an unsigned one (`alg: none`), an expired one and a request with no token answer 401; `/actuator/health/liveness` is `UP` and `/actuator/env` is 403. This is the local half of finding S-1 in `docs/SECURITY_REVIEW_MVP.md`; the check against the real environment (Redis revocation list, the PRX library as deployed) still belongs to `scripts/qa-smoke.sh` in QA.
+
 ## Database
 
 PostgreSQL on Supabase, schema `smartkin`, database `umdevc` (shared project with zerobound). User ids come from backbone and are stored as plain UUIDs
@@ -177,15 +196,26 @@ Same scheme as mercury, backbone-rest and zerobound-rest; the choices that diffe
 | `config/local.env`, `secrets/local.env` | Versioned bootstrap identity vs. git-ignored `VAULT_TOKEN`. Do not add Vault-provided variables here: an environment variable shadows Vault. |
 | `docker-compose.yml` | One service, IP `172.22.0.12` (9 = backbone, 10 = mercury, 11 = zerobound), `extra_hosts` for the `*.umdc-qa.tst` names, `read_only` + `tmpfs /tmp`, `no-new-privileges`, `stop_grace_period: 30s`. |
 
-**TLS material.** `certs/smartkin/` is git-ignored and is copied onto the classpath by `pom.xml`, because the TLS bundle and the security library read `classpath:` names. `umdc.security.keystore` and `truststore` take the same files and must have no `classpath:` prefix (the library loads them with `getResourceAsStream` and a missing file silently becomes an empty store: "trustAnchors parameter must be non-empty"). The truststore must hold a trusted certificate entry; a keystore with only a private key is not a truststore. In security-oauth 0.0.3 the keystore/truststore arguments are not swapped (mercury documents a swap in 0.0.1).
+**TLS material.** `certs/smartkin/` is git-ignored and is copied onto the classpath by `pom.xml`, because the TLS bundle and the security library read `classpath:` names. The truststore must hold a trusted certificate entry; a keystore with only a private key is not a truststore. The `umdc.security.keystore`/`truststore` properties are gone: only the library's `SecurityConfig` read them (see Authentication), and it is no longer scanned. `SSL_KEYSTORE_URL` and `SSL_TRUSTSTORE_URL` (optional, with a scheme, e.g. `file:/usr/local/runme/certs/smartkin/smartkin.jks`) override the classpath names for the TLS bundle, Vault, the Config Server and Eureka; the JVM jar keeps using the classpath, the native binary (which does not embed the `.jks`) reads them from a mounted path.
 
-**Health.** `management.endpoints.web.exposure.include: health` with probes enabled; the image and compose probe `/actuator/health/liveness`, which does not depend on Postgres, MongoDB, Redis or Kafka. The library's filter chain answers 401 to everything but Swagger, so `HealthProbeSecurityConfig` adds a first-order chain for `/actuator/health/**` only (`HealthProbeSecurityConfigTest`).
+**Health.** `management.endpoints.web.exposure.include: health` with probes enabled; the image and compose probe `/actuator/health/liveness`, which does not depend on Postgres, MongoDB, Redis or Kafka. `SessionTokenSecurityConfig` opens `/actuator/health/**` (see Authentication).
 
 **What was verified.** The JVM image was built and run with `config/native.env` plus overrides (profile empty, bootstrap on, Eureka off, Mongo index creation off, Kafka consumers off, no Hikari fail-fast): non-root `jvapps`, read-only root with `/tmp` tmpfs and `no-new-privileges`, health `healthy`, `/api/v1/**` and `/actuator/env` still 401, `docker stop` completes in well under a second with a graceful Tomcat shutdown. Against real Vault, Supabase, Atlas, Redis and Kafka it was **not** run.
 
-**Native image: builds, still does not finish starting.** Update 2026-10-25: the cause below was confirmed and fixed (Vault and the Config Server are now loaded through `spring.config.import`, see Configuration loading). With that, the binary no longer stops at `no ServletWebServerFactory bean`; against a throwaway PostgreSQL it gets through the configuration import, Hibernate (the `UUID[]` reflection hint was missing and is added) and Tomcat, and stops creating `getRestTemplate`/`jwtDecoder` in the security library with a `NullPointerException`. Cause found by comparing the binary with the files: the `*.jks` keystores are **not embedded** in the binary although `NativeRuntimeHints` registers `*.jks` (the generated `reachability-metadata.json` does contain the glob; `application.yml` is embedded, the `.jks` are not), so every `classpath:` keystore lookup fails, and the security library (`umdc.security.keystore`) can only read the classpath. Open decision for the next step: mount the keystores at run time and use `file:` locations, as zerobound-rest does (keeps private keys out of the image, but the library's keystore property has no `file:` form), or find why the glob does not embed them. Original diagnosis follows.
+**Native image: builds and starts (verified 2026-10-25, not yet against the real environment).** The original failure (`no ServletWebServerFactory bean`) came from the legacy Spring Cloud bootstrap context, which Spring AOT captured instead of the real application; it was fixed by loading Vault and the Config Server through `spring.config.import` (see Configuration loading). Two more gaps appeared behind it and were fixed: Hibernate's `UUID[]`/`Long[]`/`Integer[]`/`String[]` reflection hints, and the security library's `SecurityConfig`, which reads its keystore from the classpath only (it is no longer scanned, see Authentication). The `*.jks` keystores are **not embedded** in the binary although `NativeRuntimeHints` registers `*.jks` (the generated `reachability-metadata.json` contains the glob, `application.yml` is embedded and the `.jks` are not, compared byte by byte; the reason was not found), so the TLS bundle, Vault, the Config Server and Eureka read them from a mounted path through `SSL_KEYSTORE_URL` and `SSL_TRUSTSTORE_URL`. This also keeps the private key out of the image.
 
-**Original diagnosis (before the change).** `docker build -f Dockerfile.native` succeeds (Spring AOT and `native-image` pass; about 3.5 minutes with `NATIVE_QUICK_BUILD=true`, 596 MB image) but the binary stops at start with `no ServletWebServerFactory bean defined in the context`: the AOT-generated context is empty. Probable cause, not confirmed: the application relies on the legacy Spring Cloud bootstrap context (`bootstrap.yml`, `spring-cloud-starter-bootstrap`), which Spring AOT does not support; mercury, backbone-rest and zerobound-rest configure Vault and the Config Server through `spring.config.import` instead. Enabling the bootstrap context at build time (`SPRING_CLOUD_BOOTSTRAP_ENABLED=true` in `config/native.env`) did not change the result. Making the native image work means moving that configuration to `application.yml` + `spring.config.import`, a change of its own. Until then `Dockerfile.native` is experimental and the JVM image is the one to deploy.
+Run it like this (what was tested):
+
+```bash
+docker build --secret id=maven_settings,src=$HOME/.m2/settings.xml \
+  --secret id=prx_internal_ca,src=certs/smartkin/prx-internal-ca.crt -f Dockerfile.native -t smartkin-native .
+docker run --env-file config/native.env -v "$PWD/certs/smartkin:/usr/local/runme/certs/smartkin:ro" \
+  -e SSL_KEYSTORE_URL=file:/usr/local/runme/certs/smartkin/smartkin.jks \
+  -e SSL_TRUSTSTORE_URL=file:/usr/local/runme/certs/smartkin/umdc-truststore.jks \
+  -e SMARTKIN_DB_URI=... -p 8166:8166 smartkin-native      # plus the real Vault/Config Server settings
+```
+
+Result with `NATIVE_QUICK_BUILD=true`, a throwaway PostgreSQL and no Vault or Config Server: `Started SmartKinBackendApplication in 0.457 seconds`, 144 MiB of memory, 462 MB image, liveness `UP`, `/actuator/env` 403, and the same answers as the JVM jar for the session token (forged, unsigned, expired and missing: 401; a valid one reaches the repository). Not verified: Vault and the Config Server as deployed, Redis revocation, Kafka, and a build without `NATIVE_QUICK_BUILD`. The JVM image stays the one to deploy until that is done. Original diagnosis (before the change) follows.
 
 **Findings from the smoke test** (all fixed except the last): the `prx.*` library properties (see Library property names), the missing `umdc.security.keystore`/`truststore`, the base64 requirement of `APP_TOKEN_SECRET`, and the 401 on health. Not fixed: with `spring.data.mongodb.auto-index-creation: true` the application does not start if Atlas is unreachable (a 30 s server-selection timeout); and Eureka registration still fails with `No qualifying bean ... TransportClientFactories` when `eureka.client.enabled` is true (adding `eureka.client.tls` and `eureka-client-jersey3`/Jersey did not fix it), so the smoke test and AOT run with `EUREKA_CLIENT_ENABLED=false`. Check what the Config Server sets for Eureka in QA before deploying.
 

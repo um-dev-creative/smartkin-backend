@@ -23,17 +23,6 @@ umdc:
     jwt:
       secret: ${APP_TOKEN_SECRET}
       expirationMs: ${APP_TOKEN_EXPIRATION}
-    # Key and trust material of the RestTemplate the library builds for the resource server's JWK fetch (KeystoreUtil, security-oauth
-    # 0.0.3). Classpath-relative names, no `classpath:` prefix: the library loads them with ClassLoader.getResourceAsStream, which does
-    # not parse a scheme, and a missing file silently becomes an empty store. They are the same files as the TLS bundle below.
-    keystore:
-      location: ${SSL_KEYSTORE_LOCATION}
-      type: ${SSL_KEYSTORE_TYPE}
-      password: ${SSL_KEYSTORE_PASSWORD}
-    truststore:
-      location: ${SSL_TRUSTSTORE_LOCATION}
-      type: ${SSL_TRUSTSTORE_TYPE}
-      password: ${SSL_TRUSTSTORE_PASSWORD}
     auth:
       clients:
         - id: backbone
@@ -106,7 +95,7 @@ eureka:
   client:
     tls:
       enabled: true
-      trust-store: classpath:${SSL_TRUSTSTORE_LOCATION}
+      trust-store: ${SSL_TRUSTSTORE_URL:classpath:${SSL_TRUSTSTORE_LOCATION}}
       trust-store-password: ${SSL_TRUSTSTORE_PASSWORD}
       trust-store-type: ${SSL_TRUSTSTORE_TYPE}
 # Health probes for the container HEALTHCHECK and Kubernetes: /actuator/health/liveness only says the process is up and never
@@ -136,21 +125,26 @@ server:
 
 spring:
   ssl:
+    # SSL_KEYSTORE_URL / SSL_TRUSTSTORE_URL (optional, with a scheme, e.g. file:/usr/local/runme/certs/smartkin/smartkin.jks) override the
+    # classpath names above: the JVM jar carries the keystores, the GraalVM binary does not embed them and reads them from a mounted path.
     bundle:
       jks:
         smartkin-security:
           keystore:
-            location: classpath:${SSL_KEYSTORE_LOCATION}
+            location: ${SSL_KEYSTORE_URL:classpath:${SSL_KEYSTORE_LOCATION}}
             password: ${SSL_KEYSTORE_PASSWORD}
             type: ${SSL_KEYSTORE_TYPE}
           truststore:
-            location: classpath:${SSL_TRUSTSTORE_LOCATION}
+            location: ${SSL_TRUSTSTORE_URL:classpath:${SSL_TRUSTSTORE_LOCATION}}
             password: ${SSL_TRUSTSTORE_PASSWORD}
             type: ${SSL_TRUSTSTORE_TYPE}
   mvc:
     throw-exception-if-no-handler-found: true
   autoconfigure:
-    exclude: org.springframework.boot.autoconfigure.security.SecurityAutoConfiguration
+    # Authentication is the library's SessionJwtInterceptor (see SessionTokenSecurityConfig), not a Keycloak-style resource server
+    exclude:
+      - org.springframework.boot.security.oauth2.server.resource.autoconfigure.OAuth2ResourceServerAutoConfiguration
+      - org.springframework.boot.security.oauth2.server.resource.autoconfigure.web.OAuth2ResourceServerWebSecurityAutoConfiguration
   mustache:
     check-template-location: false
   test:
@@ -166,26 +160,6 @@ spring:
   application:
     # The name of the Spring Boot application, taken from the app.name property
     name: ${app.name}
-  security:
-    # Disables the security for the Spring Boot application
-    oauth2:
-      clientRegistrationId: smartkin-backend-client
-      client:
-        registration:
-          external:
-            provider: external
-            client-id: ${AUTH_CLIENT_ID}
-            client-secret: ${AUTH_CLIENT_SECRET}
-            scope: profile smartkin-backend-app-scope openid
-            authorization-grant-type: password
-        provider:
-          external:
-            issuer-uri: ${AUTH_SERVER_URI}
-            jwk-set-uri: ${spring.security.oauth2.client.provider.external.issuer-uri}/protocol/openid-connect/certs
-      resourceserver:
-        jwt:
-          issuer-uri: ${AUTH_SERVER_URI}
-          jwk-set-uri: ${spring.security.oauth2.resourceserver.jwt.issuer-uri}${AUTH_CERT_URI}
   config:
     # Property sources read before the application context exists, in this order: Vault, then the Config Server. A later import wins
     # over an earlier one and both win over this file. `optional:` lets the service start (and tests run) when one is not reachable
@@ -210,7 +184,7 @@ spring:
       # Resolved before the TLS bundle exists, so it names the keystore directly. The truststore holds the PRX internal CA that signs
       # every *.tst certificate; the native image has no JVM cacerts import of it (the JVM image gets it from the Dockerfile).
       ssl:
-        trust-store: classpath:${SSL_TRUSTSTORE_LOCATION}
+        trust-store: ${SSL_TRUSTSTORE_URL:classpath:${SSL_TRUSTSTORE_LOCATION}}
         trust-store-password: ${SSL_TRUSTSTORE_PASSWORD}
         trust-store-type: ${SSL_TRUSTSTORE_TYPE}
     config:
@@ -225,7 +199,7 @@ spring:
       # Same internal CA for the Config Server's HTTPS channel
       tls:
         enabled: true
-        trust-store: classpath:${SSL_TRUSTSTORE_LOCATION}
+        trust-store: ${SSL_TRUSTSTORE_URL:classpath:${SSL_TRUSTSTORE_LOCATION}}
         trust-store-password: ${SSL_TRUSTSTORE_PASSWORD}
         trust-store-type: ${SSL_TRUSTSTORE_TYPE}
   # Database (Supabase PostgreSQL). Host, credentials and port come from Vault or the environment, as ZEROBOUND_DB_* do in zerobound.
