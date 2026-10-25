@@ -1,5 +1,11 @@
-# This is the main configuration file for the application.
-# It uses the YAML format for easier readability and nested configuration.
+# Main configuration file of the application. Almost every value is a ${ENV_VAR} placeholder that the environment, Vault or the Config
+# Server supplies at run time.
+#
+# This file used to be bootstrap.yml, read by the legacy Spring Cloud bootstrap context (spring-cloud-starter-bootstrap). That context
+# starts a second, nested SpringApplication before the real one, and Spring AOT captured it instead of the real application: the
+# GraalVM binary stopped with "no ServletWebServerFactory bean defined in the context". Vault and the Config Server are now read
+# through `spring.config.import` (below), the way mercury, backbone-rest and zerobound-rest do it. The spring.cloud.vault.* and
+# spring.cloud.config.* properties are the same ones; only the mechanism that loads them changed.
 
 # Properties of the com.umdc libraries (security-oauth, commons-services). They moved from the old `prx.*` names when the libraries
 # moved from com.prx to com.umdc; with the old names nothing binds and the context fails at start (AuthProperties.getClients() is null).
@@ -155,7 +161,8 @@ spring:
     # Allows overriding of bean definitions
     allow-bean-definition-overriding: true
   profiles:
-    active: ${SPRING_BOOT_PROFILE_ACTIVE}
+    # Spring Cloud Vault reads <backend>/<context> AND <backend>/<context>/<active profile>; empty = no profile (tests, plain run)
+    active: ${SPRING_BOOT_PROFILE_ACTIVE:}
   application:
     # The name of the Spring Boot application, taken from the app.name property
     name: ${app.name}
@@ -179,31 +186,48 @@ spring:
         jwt:
           issuer-uri: ${AUTH_SERVER_URI}
           jwk-set-uri: ${spring.security.oauth2.resourceserver.jwt.issuer-uri}${AUTH_CERT_URI}
+  config:
+    # Property sources read before the application context exists, in this order: Vault, then the Config Server. A later import wins
+    # over an earlier one and both win over this file. `optional:` lets the service start (and tests run) when one is not reachable
+    # or is switched off (VAULT_ENABLED=false, SPRING_CLOUD_CONFIG_ENABLED=false).
+    import: "optional:vault://,optional:configserver:"
   cloud:
-    # The Spring Cloud Config specific configurations
+    # The active profile for the Spring Boot application
+    profile: ${SPRING_BOOT_PROFILE_ACTIVE:}
     #<><><><><><><><><><><><><><> VAULT <><><><><><><><><><><><><><>
     vault:
-      token: ${VAULT_TOKEN}
-      uri: ${VAULT_SERVER_URL}
+      enabled: ${VAULT_ENABLED:false}
+      uri: ${VAULT_SERVER_URL:https://vault.umdc-qa.tst}
+      authentication: TOKEN
+      token: ${VAULT_TOKEN:}
       kv:
-        backend: UMDC
-        default-context: ${app.name}
+        enabled: true
+        backend: ${VAULT_KV_BACKEND:UMDC}
+        default-context: ${VAULT_KV_CONTEXT:${app.name}}
+        # <backend>/<context> and <backend>/<context>/<active profile>
+        profile-separator: /
       application-name: ${app.name}
-    bootstrap:
-      # Enables the Spring Cloud Bootstrap application context
-      enabled: ${SPRING_BOOT_CLOUD_BOOTSTRAP_ENABLED}
-    # The active profile for the Spring Boot application
-    profile: ${SPRING_BOOT_PROFILE_ACTIVE}
+      # Resolved before the TLS bundle exists, so it names the keystore directly. The truststore holds the PRX internal CA that signs
+      # every *.tst certificate; the native image has no JVM cacerts import of it (the JVM image gets it from the Dockerfile).
+      ssl:
+        trust-store: classpath:${SSL_TRUSTSTORE_LOCATION}
+        trust-store-password: ${SSL_TRUSTSTORE_PASSWORD}
+        trust-store-type: ${SSL_TRUSTSTORE_TYPE}
     config:
       # The active profile for the Spring Cloud Config
-      profile: ${SPRING_BOOT_PROFILE_ACTIVE}
+      profile: ${SPRING_BOOT_PROFILE_ACTIVE:}
       # The label for the Spring Cloud Config
-      label: ${SPRING_CLOUD_CONFIG_LABEL}
-      # The URI for the Spring Cloud Config server
-      uri: ${CNFS_URI}
-      port: ${CNFS_PORT}
+      label: ${SPRING_CLOUD_CONFIG_LABEL:}
+      # Full URL (scheme, host, port) of the Config Server; ConfigClientProperties has no `port` field
+      uri: ${CNFS_URI:http://localhost:8888}
       # Enables sending of state for the Spring Cloud Config
       send-state: true
+      # Same internal CA for the Config Server's HTTPS channel
+      tls:
+        enabled: true
+        trust-store: classpath:${SSL_TRUSTSTORE_LOCATION}
+        trust-store-password: ${SSL_TRUSTSTORE_PASSWORD}
+        trust-store-type: ${SSL_TRUSTSTORE_TYPE}
   # Database (Supabase PostgreSQL). Host, credentials and port come from Vault or the environment, as ZEROBOUND_DB_* do in zerobound.
   # SMARTKIN_DB_URI is the host only (the transaction pooler, e.g. aws-1-us-east-2.pooler.supabase.com); 6543 is the pooler in transaction mode,
   # where server-side prepared statements are not allowed, hence prepareThreshold=0.

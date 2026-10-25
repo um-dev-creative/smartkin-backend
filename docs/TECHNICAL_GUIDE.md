@@ -6,10 +6,10 @@
 | --- | --- |
 | Java | 25 |
 | Spring Boot | 4.1.1 |
-| Spring Cloud | 2025.1.3 (Config, Bootstrap, OpenFeign, Vault, Eureka client) |
-| springdoc | 3.1.0 (`springdoc-openapi-starter-webmvc-ui`) |
+| Spring Cloud | 2025.1.3 (Config, OpenFeign, Vault, Eureka client; no bootstrap context) |
+| springdoc | 3.2.0 (`springdoc-openapi-starter-webmvc-ui`) |
 | MapStruct | 1.6.3 |
-| PostgreSQL JDBC | 42.7.13 |
+| PostgreSQL JDBC | 42.7.14 |
 | Shared libraries | `com.umdc:commons`, `commons-services`, `security-oauth` 0.0.3 (Repsy) |
 | Docker base image | `amazoncorretto:25.0.4-alpine3.24` |
 
@@ -25,6 +25,24 @@ mvn test -Dtest=Class#method # single test
 
 The private Repsy repository needs `REPSY_ACCOUNT_USER` and `REPSY_ACCOUNT_PASSWORD`; the `com.umdc` libraries can also come
 from the local Maven cache.
+
+## Configuration loading (`spring.config.import`)
+
+All configuration is in `src/main/resources/application.yml` (it used to be `bootstrap.yml`). Vault and the Config Server are not read by the legacy Spring Cloud bootstrap context any more: `spring-cloud-starter-bootstrap` is gone and `spring.config.import: "optional:vault://,optional:configserver:"` loads both before the application context exists, the way mercury, backbone-rest and zerobound-rest do. The reason is GraalVM: the bootstrap context starts a second, nested `SpringApplication`, Spring AOT captured that one instead of the real application, and the native binary stopped with `no ServletWebServerFactory bean defined in the context`. The `spring.cloud.vault.*` and `spring.cloud.config.*` properties are the same as before; only the loading mechanism changed.
+
+```mermaid
+flowchart LR
+    ENV[Environment variables<br/>config/local.env + secrets/local.env] --> YML[application.yml<br/>placeholders]
+    YML -->|spring.config.import| V[optional:vault://<br/>kv UMDC / smartkin-backend]
+    YML -->|spring.config.import| C[optional:configserver:<br/>CNFS_URI + label + profile]
+    V --> CTX[Application context]
+    C --> CTX
+    YML --> CTX
+```
+
+Precedence, from lowest to highest: `application.yml`, Vault, Config Server; an environment variable beats all of them, which is why Vault-owned values must never appear in `config/local.env`. New variables: `VAULT_KV_BACKEND` (default `UMDC`) and `VAULT_KV_CONTEXT` (default the application name) choose the Vault path `<backend>/<context>[/<profile>]`; `VAULT_ENABLED` (default `false`) switches Vault on; `CNFS_URI` defaults to `http://localhost:8888` and `SPRING_CLOUD_CONFIG_LABEL`/`SPRING_BOOT_PROFILE_ACTIVE` default to empty. `SPRING_BOOT_CLOUD_BOOTSTRAP_ENABLED` and `SPRING_CLOUD_BOOTSTRAP_ENABLED` no longer exist. `spring.cloud.config.port` was removed (the client has no such field; `CNFS_PORT` is ignored). Both clients now trust the PRX internal CA from `classpath:${SSL_TRUSTSTORE_LOCATION}` (`spring.cloud.vault.ssl` and `spring.cloud.config.tls`), because the native image has no JVM `cacerts` import of it.
+
+`NativeRuntimeHints` registers the properties types bound during the import (`VaultProperties`, `VaultKeyValueBackendProperties`, `ConfigClientProperties`, `RetryProperties`, `TlsProperties` and their nested classes), which AOT cannot see because they are bound before the context exists (`NativeRuntimeHintsTest`).
 
 ## Database
 
@@ -48,7 +66,7 @@ entity change needs a new `V<n>__*.sql`.
 `enable row level security` plus a `smartkin_app` policy in their migration. Keep `smartkin` out of Supabase's exposed API schemas.
 
 Create the empty schema with `docs/db/smartkin_schema_bootstrap.sql` (or let Flyway do it through `create-schemas`). Use a dedicated database role for SmartKin.
-The config-server file `stage-folder-config/smartkin-backend-*.yml` still carries its own datasource block; the variables above take effect through `bootstrap.yml`,
+The config-server file `stage-folder-config/smartkin-backend-*.yml` still carries its own datasource block; the variables above take effect through `application.yml`,
 so remove or align that block when the environment is switched to Supabase.
 
 ## MongoDB
@@ -165,7 +183,9 @@ Same scheme as mercury, backbone-rest and zerobound-rest; the choices that diffe
 
 **What was verified.** The JVM image was built and run with `config/native.env` plus overrides (profile empty, bootstrap on, Eureka off, Mongo index creation off, Kafka consumers off, no Hikari fail-fast): non-root `jvapps`, read-only root with `/tmp` tmpfs and `no-new-privileges`, health `healthy`, `/api/v1/**` and `/actuator/env` still 401, `docker stop` completes in well under a second with a graceful Tomcat shutdown. Against real Vault, Supabase, Atlas, Redis and Kafka it was **not** run.
 
-**Native image: builds, does not start yet.** `docker build -f Dockerfile.native` succeeds (Spring AOT and `native-image` pass; about 3.5 minutes with `NATIVE_QUICK_BUILD=true`, 596 MB image) but the binary stops at start with `no ServletWebServerFactory bean defined in the context`: the AOT-generated context is empty. Probable cause, not confirmed: the application relies on the legacy Spring Cloud bootstrap context (`bootstrap.yml`, `spring-cloud-starter-bootstrap`), which Spring AOT does not support; mercury, backbone-rest and zerobound-rest configure Vault and the Config Server through `spring.config.import` instead. Enabling the bootstrap context at build time (`SPRING_CLOUD_BOOTSTRAP_ENABLED=true` in `config/native.env`) did not change the result. Making the native image work means moving that configuration to `application.yml` + `spring.config.import`, a change of its own. Until then `Dockerfile.native` is experimental and the JVM image is the one to deploy.
+**Native image: builds, still does not finish starting.** Update 2026-10-25: the cause below was confirmed and fixed (Vault and the Config Server are now loaded through `spring.config.import`, see Configuration loading). With that, the binary no longer stops at `no ServletWebServerFactory bean`; against a throwaway PostgreSQL it gets through the configuration import, Hibernate (the `UUID[]` reflection hint was missing and is added) and Tomcat, and stops creating `getRestTemplate`/`jwtDecoder` in the security library with a `NullPointerException`. Cause found by comparing the binary with the files: the `*.jks` keystores are **not embedded** in the binary although `NativeRuntimeHints` registers `*.jks` (the generated `reachability-metadata.json` does contain the glob; `application.yml` is embedded, the `.jks` are not), so every `classpath:` keystore lookup fails, and the security library (`umdc.security.keystore`) can only read the classpath. Open decision for the next step: mount the keystores at run time and use `file:` locations, as zerobound-rest does (keeps private keys out of the image, but the library's keystore property has no `file:` form), or find why the glob does not embed them. Original diagnosis follows.
+
+**Original diagnosis (before the change).** `docker build -f Dockerfile.native` succeeds (Spring AOT and `native-image` pass; about 3.5 minutes with `NATIVE_QUICK_BUILD=true`, 596 MB image) but the binary stops at start with `no ServletWebServerFactory bean defined in the context`: the AOT-generated context is empty. Probable cause, not confirmed: the application relies on the legacy Spring Cloud bootstrap context (`bootstrap.yml`, `spring-cloud-starter-bootstrap`), which Spring AOT does not support; mercury, backbone-rest and zerobound-rest configure Vault and the Config Server through `spring.config.import` instead. Enabling the bootstrap context at build time (`SPRING_CLOUD_BOOTSTRAP_ENABLED=true` in `config/native.env`) did not change the result. Making the native image work means moving that configuration to `application.yml` + `spring.config.import`, a change of its own. Until then `Dockerfile.native` is experimental and the JVM image is the one to deploy.
 
 **Findings from the smoke test** (all fixed except the last): the `prx.*` library properties (see Library property names), the missing `umdc.security.keystore`/`truststore`, the base64 requirement of `APP_TOKEN_SECRET`, and the 401 on health. Not fixed: with `spring.data.mongodb.auto-index-creation: true` the application does not start if Atlas is unreachable (a 30 s server-selection timeout); and Eureka registration still fails with `No qualifying bean ... TransportClientFactories` when `eureka.client.enabled` is true (adding `eureka.client.tls` and `eureka-client-jersey3`/Jersey did not fix it), so the smoke test and AOT run with `EUREKA_CLIENT_ENABLED=false`. Check what the Config Server sets for Eureka in QA before deploying.
 
