@@ -1,5 +1,6 @@
 package com.umdc.smartkin.kafka.consumer;
 
+import com.umdc.smartkin.kafka.config.KafkaSecurityProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -26,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /// exponential back-off and then moves the record to the error topic.
 @Configuration
 @EnableKafka
-@EnableConfigurationProperties(KafkaConsumerProperties.class)
+@EnableConfigurationProperties({KafkaConsumerProperties.class, KafkaSecurityProperties.class})
 @ConditionalOnProperty(prefix = "prx.kafka.consumer", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class KafkaConsumerConfig {
 
@@ -38,13 +39,14 @@ public class KafkaConsumerConfig {
     }
 
     @Bean
-    public ConsumerFactory<String, String> smartKinConsumerFactory(KafkaConsumerProperties properties) {
+    public ConsumerFactory<String, String> smartKinConsumerFactory(KafkaConsumerProperties properties, KafkaSecurityProperties security) {
         Map<String, Object> config = new ConcurrentHashMap<>();
         config.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers);
         config.put(ConsumerConfig.GROUP_ID_CONFIG, properties.groupId());
         config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        config.putAll(security.clientProperties());
         return new DefaultKafkaConsumerFactory<>(config);
     }
 

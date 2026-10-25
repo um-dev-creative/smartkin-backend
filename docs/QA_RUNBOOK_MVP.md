@@ -66,7 +66,7 @@ Nothing below goes in `config/local.env`: an environment variable shadows the Va
 | PostgreSQL | `SMARTKIN_DB_URI`, `SMARTKIN_DB_USERNAME`, `SMARTKIN_DB_PASSWORD`, optionally `SMARTKIN_FLYWAY_USERNAME` / `_PASSWORD` |
 | MongoDB | `SMARTKIN_MONGO_HOST`, `_USERNAME`, `_PASSWORD`, `_DATABASE` |
 | Redis | `REVOCATION_REDIS_URL` (token revocation), `CACHE_REDIS_URL` (lesson cache; empty = no cache) |
-| Kafka | the Spring Kafka bootstrap servers and the producer settings, plus `KAFKA_CONSUMER_*` (optional) |
+| Kafka | `prx.bootstrap.server.url` / `.port`, plus, for a secured cluster such as Aiven: `KAFKA_SECURITY_PROTOCOL` (`SSL`), `KAFKA_SSL_TRUSTSTORE_LOCATION` (the CA), `KAFKA_SSL_KEYSTORE_CERT_LOCATION` and `KAFKA_SSL_KEYSTORE_KEY_LOCATION` (the client certificate and key; paths inside the container, mount the files read-only). Optional: `KAFKA_CONSUMER_*` |
 | Platform | `VAULT_TOKEN`, `VAULT_SERVER_URL`, `CNFS_URI`, `CNFS_PORT`, `SPRING_BOOT_PROFILE_ACTIVE`, `APP_PORT` |
 
 ## 4. Start the service
