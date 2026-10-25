@@ -1,0 +1,49 @@
+# Prometheus alert rules for the Kafka consumers of smartkin-backend (BE-14).
+#
+# The service counts delivery problems with Micrometer (smartkin.events.*, see ErrorTopicMonitor). Prometheus renames them:
+# dots become underscores and counters get the _total suffix. These rules need a Micrometer Prometheus registry exposed to the scraper;
+# that wiring is the platform team's (see docs/QA_RUNBOOK_MVP.md, "Metrics"). Without it, alert on the log lines instead:
+#   DEAD_LETTERED      a record went to the error topic            -> same as SmartKinEventDeadLettered
+#   DEAD_LETTER_FAILED the error topic itself could not be written -> same as SmartKinDeadLetterFailed
+# AlertRulesTest checks that every metric named here is still emitted by the code.
+
+groups:
+  - name: smartkin-events
+    rules:
+      - alert: SmartKinEventDeadLettered
+        expr: increase(smartkin_events_dead_lettered_total[15m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: smartkin-backend
+        annotations:
+          summary: "smartkin-backend sent {{ $value | printf \"%.0f\" }} event(s) to the error topic in 15 minutes"
+          description: >-
+            A consumer gave up on a record from {{ $labels.topic }} ({{ $labels.exception }}) after all its retries. The record is in
+            smartkin.events.error.v1 with the exception in its headers. Read it, fix the cause, and replay it: until then a child
+            may be missing points, an achievement or a notification.
+
+      - alert: SmartKinDeadLetterFailed
+        expr: increase(smartkin_events_dead_letter_failed_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: smartkin-backend
+        annotations:
+          summary: "smartkin-backend could not write to the error topic"
+          description: >-
+            A record from {{ $labels.topic }} failed every retry and the error topic could not be written either (does
+            smartkin.events.error.v1 exist? is Kafka reachable?). The offset is not committed, so the same record is retried until
+            this is fixed and the consumer is stuck behind it.
+
+      - alert: SmartKinEventRetriesHigh
+        expr: sum by (topic) (rate(smartkin_events_delivery_failed_total[10m])) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+          service: smartkin-backend
+        annotations:
+          summary: "Consumers of {{ $labels.topic }} keep retrying"
+          description: >-
+            More than one failed delivery every five seconds for ten minutes. Usually a dependency (PostgreSQL, MongoDB) is slow or down;
+            if it persists, records will start reaching the error topic.
