@@ -27,11 +27,11 @@ Actualizado: 2026-10-23. Backend: todo lo que no necesita QA está en `developme
 | BE-12 | Hecho (en `development`) | Bandeja, contador, marcar una/todas como leídas. |
 | BE-13 | Hecho (en `development`) | Flujo completo sobre PostgreSQL, MongoDB y Kafka reales. No arranca la app completa (Vault/TLS/seguridad): eso es BE-2. |
 | BE-14 | Hecho en código; falta plataforma | Contadores y logs `DEAD_LETTERED` (en `development`). Reglas de alerta listas en `docs/ops/smartkin-events.rules.yml`; falta el registro Prometheus expuesto al scraper y cargar las reglas (ver `docs/QA_RUNBOOK_MVP.md`). |
-| S-2 | Hecho (PR #32 y frontend #23) | Invitación con código de un solo uso y alta de la cuenta del hijo por el padre; `POST /children` eliminado. Migración V6. |
-| S-5 | Hecho en código (frontend #24, sin fusionar) | `pnpm audit`: de 33 avisos (2 críticos) a 0. Backend: 0. |
+| S-2 | Hecho (backend #32 y frontend #23, fusionados) | Invitación con código de un solo uso y alta de la cuenta del hijo por el padre; `POST /children` eliminado. Migración V6. |
+| S-5 | Hecho (frontend #24, fusionado) | `pnpm audit`: de 33 avisos (2 críticos) a 0. Dependabot, revisado el 2026-10-25: 0 alertas abiertas en frontend (23 `fixed`) y en backend. |
 | X-5 | Hecho (revisión); hallazgos abiertos | `docs/SECURITY_REVIEW_MVP.md`. Corregidos: S-2, S-3 (secretos en logs), S-9. Abiertos: S-1 (verificar en QA que la librería PRX rechaza tokens falsos; el script `scripts/qa-smoke.sh` lo comprueba), S-4 (rotar token de Vault). |
 | X-6 | Hecho (frontend #21) | README del frontend alineado con el producto real. |
-| FE-4 a FE-14 | Hechos (frontend #10 a #20 y #23, sin fusionar) | Limpieza de pantallas heredadas, proxy del BFF, capa de datos, panel del padre, vista del hijo, quiz, puntos, notificaciones, roles y alta de hijos. Specs de Angular: 218 en verde. |
+| FE-4 a FE-14 | Hechos (frontend #10 a #20 y #23, fusionados) | Limpieza de pantallas heredadas, proxy del BFF, capa de datos, panel del padre, vista del hijo, quiz, puntos, notificaciones, roles y alta de hijos. Specs de Angular: 218 en verde. |
 | FE-15 | Hecho de forma continua | Cada ticket trajo sus specs (de 18 a 218). |
 | FE-2 | Bloqueado: acción manual | El token de Vault está en el commit `2eb6965` (2025-08-01, `run-local.sh`). Debe rotarse en Vault; no se puede hacer desde el repo. |
 | BE-2 | Bloqueado: requiere QA | Necesita Vault, Config Server y Supabase reales. Pasos en `docs/QA_RUNBOOK_MVP.md`. |

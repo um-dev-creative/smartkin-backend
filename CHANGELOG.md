@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- S-5 closed: after the smartkin-frontend upgrade chain (PRs #7 to #24) was merged, Dependabot reports 0 open alerts in smartkin-frontend (23 `fixed`, none dismissed) and in smartkin-backend. `docs/SECURITY_REVIEW_MVP.md` and `docs/BACKLOG_MVP.md` updated; the frontend merge state of S-2, X-6 and FE-4 to FE-14 in the backlog is now "merged".
 - S-2 (security): a parent can no longer link an arbitrary user as a child. `POST /api/v1/children` (`linkChild`) and `ChildRequest` are removed from the API and the contract (now 29 operations); a user joins a family only by accepting an invitation, or because the parent created that user's account. `ChildServiceImpl` loses `link` and its `BackboneClient` and `ParentRepository` dependencies. This also removes the "does not exist" / "already linked" difference that let a parent probe user ids (S-9).
 
 ### Added
