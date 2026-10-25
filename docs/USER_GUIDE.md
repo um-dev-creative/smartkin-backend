@@ -205,7 +205,7 @@ Three steps, in this order, before the first start of the service in QA or produ
 
 1. **Database users:** `docs/db/smartkin_roles.sql` creates `smartkin_owner` and `smartkin_app`.
 2. **Tables:** `scripts/db-migrate.sh` creates the tables as `smartkin_owner`. Without arguments it only shows what is pending; add `migrate` to apply it. It needs Docker, the direct database host (not the pooler) and the owner's password from Vault.
-3. **Kafka topics:** `scripts/kafka-create-topics.sh` creates the four topics the service uses and checks them. Give it the brokers and, if they need a login, a `client.properties` file.
+3. **Kafka topics:** `scripts/kafka-create-topics.sh` creates the four topics the service uses and checks them. Give it the brokers and, if they need a login, a `client.properties` file (for Aiven, `docs/ops/kafka-client.aiven.example.properties` is the starting point). Keep the certificates it names in the same folder as that file and write their paths as they are on your machine. Run the scripts as `./scripts/...`, not with `sh`.
 
 Both scripts are safe to run again, and both stop with a clear message when something is wrong.
 

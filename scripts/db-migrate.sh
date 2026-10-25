@@ -26,6 +26,9 @@
 #
 # Needs Docker. Exit code 0 only when the command succeeded.
 
+# The script uses bash arrays: `sh script` works on macOS (where sh is bash) and breaks on dash (Debian, Ubuntu)
+[ -n "${BASH_VERSION:-}" ] || { echo "Run it with bash: ./scripts/db-migrate.sh (not 'sh ...')" >&2; exit 2; }
+
 set -euo pipefail
 
 command_name="${1:-info}"

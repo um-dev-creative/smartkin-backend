@@ -34,7 +34,7 @@ flowchart TD
 
 The application does not create topics. Create them before the first request with `scripts/kafka-create-topics.sh` (Docker, or a local `kafka-topics.sh` through `KAFKA_TOPICS_BIN`; idempotent; verifies that the four topics exist with the expected partitions):
 
-`KAFKA_BOOTSTRAP_SERVERS=<brokers> KAFKA_CLIENT_PROPERTIES=<client.properties with the SASL/SSL settings> ./scripts/kafka-create-topics.sh` (`--dry-run` only prints the plan; `PARTITIONS` and `REPLICATION_FACTOR` default to 3, and the replication factor cannot exceed the number of brokers).
+`KAFKA_BOOTSTRAP_SERVERS=<brokers> KAFKA_CLIENT_PROPERTIES=<client.properties with the SASL/SSL settings> ./scripts/kafka-create-topics.sh` (for Aiven, start from `docs/ops/kafka-client.aiven.example.properties`; keep the files it names, `ca.pem`, the keystore, in the same folder as the properties file and write their paths as they are on your machine: the script rewrites them for the container; run it with bash, not `sh`) (`--dry-run` only prints the plan; `PARTITIONS` and `REPLICATION_FACTOR` default to 3, and the replication factor cannot exceed the number of brokers).
 
 Partitions and replication are a platform choice; the numbers below are a starting point, and the table lists what the script creates:
 
