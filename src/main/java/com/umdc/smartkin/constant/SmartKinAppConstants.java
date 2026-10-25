@@ -42,9 +42,16 @@ public final class SmartKinAppConstants {
     public static final String CHILD_CANNOT_BE_PARENT_MESSAGE = "A child cannot have a parent profile.";
     public static final String PARENT_PROFILE_NOT_FOUND_MESSAGE = "Parent profile not found.";
     public static final String CHILD_NOT_FOUND_MESSAGE = "Child not found.";
-    public static final String CHILD_USER_NOT_FOUND_MESSAGE = "The child user does not exist.";
-    public static final String CHILD_IS_CALLER_MESSAGE = "A parent cannot be their own child.";
     public static final String CHILD_ALREADY_LINKED_MESSAGE = "The user already has a parent or a child profile.";
+    public static final String INVITATION_NOT_FOUND_MESSAGE = "The invitation does not exist or is no longer valid.";
+    public static final String INVITATION_LIMIT_MESSAGE = "Too many pending invitations; revoke one or wait for them to expire.";
+    public static final String INVITATION_ALREADY_ACCEPTED_MESSAGE = "The invitation was already accepted.";
+    public static final String INVITATION_CODE_ATTEMPTS_MESSAGE = "Could not generate an invitation code, try again.";
+    public static final int INVITATION_VALID_DAYS = 7;
+    public static final int MAX_PENDING_INVITATIONS = 10;
+    public static final String CHILD_MUST_BE_MINOR_MESSAGE = "The child must be under 18 and born in the past.";
+    public static final String CHILD_ACCOUNT_FAILED_MESSAGE = "The child account could not be completed.";
+    public static final int ADULT_AGE_YEARS = 18;
     public static final String DEFAULT_GENDER = "N";
     public static final UUID PHONE_CONTACT_TYPE_ID = UUID.fromString("61ed9501-bee2-4391-8376-91307ae02a48");
 

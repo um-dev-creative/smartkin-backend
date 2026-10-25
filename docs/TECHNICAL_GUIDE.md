@@ -199,7 +199,7 @@ as environment variables for the private Repsy repository. The workflow does not
 | `LessonCatalogServiceTest`, `RedisLessonCatalogCacheTest` | Cache-aside flow, JSON round trip, TTL, eviction, fail-open and bean selection (Redis 7 in Testcontainers) |
 | `DirectAccessRestrictionContainerTest` | V2 on PostgreSQL 17 with Supabase-like roles: RLS on every table, application role DML only, API roles locked out |
 | `SmartKinEventTest`, `SmartKinEventPublisherTest`, `KafkaEventsContainerTest` | Envelope and payload JSON, topic names and overrides, send/failed-send behaviour and a real round trip through Kafka 4.0 (the Testcontainers `KafkaContainer` does not start `apache/kafka:3.9.0`) |
-| `JpaMappingContainerTest` | Flyway baseline on a PostgreSQL 17 Testcontainer, CRUD round trips of the 13 entities, the 4 enums and the cascade |
+| `JpaMappingContainerTest` | Flyway baseline on a PostgreSQL 17 Testcontainer, CRUD round trips of the 14 entities, the 4 enums and the cascade |
 
 | `OpenApiContractTest` | `docs/api/openapi-v1.yaml` is well formed and keeps its invariants |
 | `EndToEndFlowContainerTest` | The whole MVP slice on real PostgreSQL, MongoDB and Kafka, through Kafka consumers |
@@ -211,12 +211,12 @@ Shared builders live in `src/test/java/com/umdc/smartkin/support/TestData.java`.
 
 ## MVP API contract (X-2)
 
-The API of the MVP slice is defined in `docs/api/openapi-v1.yaml` (OpenAPI 3.0.3, 25 operations) before it is implemented; the design choices are in `docs/decisions/D-6-mvp-api-contract.md`.
+The API of the MVP slice is defined in `docs/api/openapi-v1.yaml` (OpenAPI 3.0.3, 29 operations) before it is implemented; the design choices are in `docs/decisions/D-6-mvp-api-contract.md`.
 Nothing in the running service changes with this ticket: the contract adds no controller, so the existing `/api/v1/users` and `/api/v1/user-register` behavior is untouched.
 
 | Tag | Operations | Implemented by |
 | --- | --- | --- |
-| parents, children | `GET/PUT /parents/me`, `GET/POST /children`, `GET/PUT /children/{childId}` | BE-4, BE-5 |
+| parents, children | `GET/PUT /parents/me`, `GET /children`, `GET/PUT /children/{childId}`, children invitations and accounts | BE-4, BE-5, S-2 |
 | catalog | `GET /topics`, `/topics/{topicId}/lessons`, `/lessons/{lessonId}`, `/activities`, `/activities/{activityId}` | BE-6 |
 | assignments | `GET/POST /assignments`, `GET /assignments/{id}`, `GET/PUT .../progress`, `PUT .../feedback` | BE-7, BE-8 |
 | quiz | `GET/POST /assignments/{id}/quiz-attempts` | BE-9 |
@@ -231,7 +231,8 @@ sequenceDiagram
     actor C as Child
     participant API as smartkin-backend
     participant K as Kafka
-    P->>API: POST /children (link child)
+    P->>API: POST /children/invitations (code)
+    C->>API: POST /children/invitations/accept
     P->>API: POST /assignments (child, activity)
     API->>K: ACTIVITY_ASSIGNED
     K-->>API: consumer creates the inbox notification
@@ -248,7 +249,7 @@ The frontend generates its types from this file (X-3).
 
 ## Parent and child profiles (BE-4)
 
-`ParentApi`/`ParentController` (`/api/v1/parents`) and `ChildApi`/`ChildController` (`/api/v1/children`) implement `getMyParentProfile`, `putMyParentProfile`, `listMyChildren`, `linkChild`, `getChild` and `updateChild` of the contract.
+`ParentApi`/`ParentController` (`/api/v1/parents`) and `ChildApi`/`ChildController` (`/api/v1/children`) implement `getMyParentProfile`, `putMyParentProfile`, `listMyChildren`, `getChild` and `updateChild` of the contract (`linkChild` was removed by S-2, see "Child invitations and accounts").
 `ParentServiceImpl` and `ChildServiceImpl` hold the rules; `ParentMapper` and `ChildMapper` (MapStruct) convert the entities. `ChildRepository.findAllByParentId` is the only new query.
 
 **Who is calling.** The caller is the `uid` claim of the session token (`JwtUtil.getUidFromToken`; the security library has already verified the token). There is no role claim: a user is a *parent* when a `smartkin.parent` row has their id and a *child* when a `smartkin.child` row does.
@@ -259,13 +260,10 @@ A token without `uid` (verification code not completed) gets 403 on every operat
 | `PUT /parents/me` | Creates or replaces the caller's profile (all three fields are replaced, `null` clears). Not for a child. | 200, 403 |
 | `GET /parents/me` | Caller's profile. | 200, 403 (child or no `uid`), 404 (no profile yet) |
 | `GET /children` | Children of the calling parent. | 200, 403 (not a parent) |
-| `POST /children` | Links an existing backbone user (`childUserId`) to the calling parent with 0 points. The user must exist in backbone, must not be the caller, and must not already be a child or a parent. | 201, 400, 403, 409 |
 | `GET /children/{id}` | The owning parent, or the child themselves. A child of another family answers 404, never 403, so its id is not revealed. | 200, 403, 404 |
 | `PUT /children/{id}` | Owning parent only; replaces `gradeLevel` and `avatar` (points are never editable here). | 200, 403, 404 |
 
-Errors are the status plus the `message-error` header with an empty body, like the existing endpoints. A race between two parents linking the same user is closed by the primary key: the second insert fails with `DataIntegrityViolationException` and answers 409.
-Backbone failures other than 404 while checking the user are relayed with their own status.
-
+Errors are the status plus the `message-error` header with an empty body, like the existing endpoints. 
 ```mermaid
 flowchart TD
     A[Request with session-token] --> B{uid claim present?}
@@ -281,8 +279,60 @@ flowchart TD
     G -- yes --> H[200 / 201]
 ```
 
-Tests: `ParentServiceImplTest`, `ChildServiceImplTest` (every branch, including the cross-family cases), `ParentChildControllersTest` (delegation, paths, headers and bean validation), `ParentChildMappersTest`, a repository case in `JpaMappingContainerTest`, and `ControllerContractConformanceTest`, which compares the operation id, HTTP method and path of each implemented controller with `docs/api/openapi-v1.yaml`; every later controller ticket adds its controller to that test.
+Tests: `ParentServiceImplTest`, `ChildServiceImplTest` (list, get and update, every branch, including the cross-family cases), `ParentChildControllersTest` (delegation, paths, headers and bean validation), `ParentChildMappersTest`, a repository case in `JpaMappingContainerTest`, and `ControllerContractConformanceTest`, which compares the operation id, HTTP method and path of each implemented controller with `docs/api/openapi-v1.yaml`; every later controller ticket adds its controller to that test.
 The contract was amended in this ticket: errors are status plus `message-error` header, not a JSON `ErrorResponse` (see D-6).
+
+## Child invitations and accounts (S-2)
+
+`POST /children` linked any user id the parent typed, so a parent could capture an unrelated account (finding S-2 of `docs/SECURITY_REVIEW_MVP.md`). It is gone. `ChildLinker.create` is now the only code that inserts a `child` row and has two callers: accepting an invitation (the future child consents by presenting the code) and creating the account (the user did not exist before).
+
+| Operation | Class | Rule | Answers |
+| --- | --- | --- | --- |
+| `POST /children/invitations` | `ChildInvitationServiceImpl.create` | Parent only. At most `MAX_PENDING_INVITATIONS` (10) pending and unexpired. Draws a code with `SecureRandom`, stores `SHA-256(code)`, expires after `INVITATION_VALID_DAYS` (7). The code is in the response only. | 201, 403, 409 |
+| `GET /children/invitations` | `list` | Parent's own, newest first, no code. A `PENDING` row past its expiry is reported as `EXPIRED` (the row is not rewritten). | 200, 403 |
+| `DELETE /children/invitations/{id}` | `revoke` | Parent's own only (another parent's id answers 404). Idempotent for `REVOKED`; `ACCEPTED` answers 409. | 204, 403, 404, 409 |
+| `POST /children/invitations/accept` | `accept` | Any authenticated user with no `parent` and no `child` row. | 201, 404, 409 |
+| `POST /children/accounts` | `ChildAccountServiceImpl.create` | Parent only; child under 18; calls `UserService.create`, then `ChildLinker.create`. | 201, 400, 403, 409, 500 |
+
+**The code.** `InvitationCode`: 8 characters from `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (31 symbols, no 0/O/1/I/L), 31^8 (about 8.5e11) combinations, displayed `ABCD-EFGH`. `normalize` upper-cases and drops spaces and hyphens; anything that is not 8 symbols of the alphabet is rejected before reaching the database. Only the hash is stored (`child_invitation.code_hash`, unique), so reading the table never yields a usable code.
+
+**Accepting is atomic.** `accept` runs inside a `TransactionTemplate`: it looks the hash up, claims the row with one conditional statement and creates the child. Two users with one code, or one user with two codes, cannot both win.
+
+```mermaid
+sequenceDiagram
+    participant U as Future child
+    participant S as ChildInvitationServiceImpl
+    participant DB as PostgreSQL
+    U->>S: accept(code)
+    S->>DB: exists parent/child row for the caller?
+    alt already in a family
+        S-->>U: 409
+    else free
+        S->>S: normalize + SHA-256
+        S->>DB: BEGIN
+        S->>DB: select by code_hash
+        S->>DB: update ... set ACCEPTED where id=? and PENDING and expires_at > now
+        alt 0 rows (unknown, used, revoked, expired)
+            S->>DB: COMMIT
+            S-->>U: 404 (same answer for every cause)
+        else 1 row
+            S->>DB: insert child (saveAndFlush)
+            alt duplicate key (caller joined elsewhere meanwhile)
+                S->>DB: ROLLBACK (the code stays PENDING)
+                S-->>U: 409
+            else ok
+                S->>DB: COMMIT
+                S-->>U: 201 child
+            end
+        end
+    end
+```
+
+**Creating the account.** `ChildAccountServiceImpl` does not call backbone itself: it builds a `UserCreateRequest` and reuses `UserService.create`, so aliases, the backbone user, the verification e-mail and the e-mail conflict (409) behave as for every account. The parent's phone number is used because backbone requires one (`""` when the parent has none). The age rule is `birthDate > today - 18 years` and `birthDate < today`, against the injected `Clock`. If `ChildLinker.create` throws, the user just created is deleted with `UserService.deleteUserByUserAndApplication` and the answer is 500, so no account without a profile is left behind; if that deletion also fails the user remains and must be cleaned by hand (it is logged).
+
+**Not covered here.** There is no rate limit on `accept` beyond the size of the code space and the 7-day life; a limit per caller belongs to the gateway. No e-mail is sent for an invitation (the parent shares the code); the notification of the parent when a child accepts is not implemented yet and the parent sees it in the invitation list (`ACCEPTED`).
+
+Migration `V6__child_invitations.sql` creates `smartkin.child_invitation` (`ON DELETE CASCADE` from `parent`, check constraint on `status`, index on `(parent_id, created_at desc)`, RLS and the `smartkin_app` policy). Tests: `InvitationCodeTest`, `ChildLinkerTest`, `ChildInvitationServiceImplTest`, `ChildAccountServiceImplTest`, `ChildInvitationControllersTest` and `ChildInvitationContainerTest` (PostgreSQL: single use, 8 racing users, a user accepting two codes at once, expired and revoked codes, the limit).
 
 ## Ownership rules: `AccessPolicy` (BE-5)
 
