@@ -41,14 +41,11 @@ class DatabaseRolesScriptContainerTest {
     void cleanDatabase() throws SQLException {
         try (var admin = admin(); var sql = admin.createStatement()) {
             sql.execute("drop schema if exists smartkin cascade");
-            sql.execute("drop owned by smartkin_app");
-            sql.execute("drop role if exists smartkin_app");
-            sql.execute("drop owned by smartkin_owner");
-            sql.execute("drop role if exists smartkin_owner");
-        } catch (SQLException e) {
-            // first run: the roles do not exist yet
-            try (var admin = admin(); var sql = admin.createStatement()) {
-                sql.execute("drop schema if exists smartkin cascade");
+            sql.execute("alter database " + postgres.getDatabaseName() + " owner to " + postgres.getUsername());
+            for (String role : List.of("smartkin_app", "smartkin_owner", "ops_admin")) {
+                // each role on its own: one that does not exist must not stop the others from being dropped
+                sql.execute("do $$ begin if exists (select 1 from pg_roles where rolname = '" + role + "') then drop owned by " + role
+                        + "; drop role " + role + "; end if; end $$");
             }
         }
     }
@@ -83,6 +80,104 @@ class DatabaseRolesScriptContainerTest {
         try (var admin = admin(); var statement = admin.createStatement()) {
             statement.execute(sql);
         }
+    }
+
+    /// What Supabase's `postgres` is: not a superuser, but it can create roles and databases, has REPLICATION and BYPASSRLS and owns the
+    /// database. A non-superuser may not name SUPERUSER, REPLICATION or BYPASSRLS in ALTER ROLE, which the first version of the scripts did.
+    private static void createSupabaseLikeAdmin() throws SQLException {
+        try (var admin = admin(); var sql = admin.createStatement()) {
+            sql.execute("create role ops_admin login createrole createdb replication bypassrls password 'ops-secret'");
+            sql.execute("alter database " + postgres.getDatabaseName() + " owner to ops_admin");
+        }
+    }
+
+    private static ExecResult runScriptAs(String user, String... variables) throws IOException, InterruptedException {
+        List<String> command = new ArrayList<>(List.of("psql", "-U", user, "-d", postgres.getDatabaseName(), "-v", "ON_ERROR_STOP=1", "-q"));
+        for (String variable : variables) {
+            command.add("-v");
+            command.add(variable);
+        }
+        command.addAll(List.of("-f", SCRIPT));
+        return postgres.execInContainer(command.toArray(new String[0]));
+    }
+
+    private static void runEditorScriptAs(String user, String password, String ownerPassword, String appPassword) throws Exception {
+        String sql = Files.readString(EDITOR_SCRIPT)
+                .replace("'CHANGE_ME_OWNER_PASSWORD'", "'" + ownerPassword + "'")
+                .replace("'CHANGE_ME_APP_PASSWORD'", "'" + appPassword + "'")
+                .replace("expected_database constant text := 'umdevc'", "expected_database constant text := '" + postgres.getDatabaseName() + "'");
+        try (var connection = as(user, password); var statement = connection.createStatement()) {
+            statement.execute(sql);
+        }
+    }
+
+    private void assertRolesWorkEndToEnd(String ownerPassword, String appPassword) throws Exception {
+        try (var admin = admin(); var statement = admin.createStatement(); var rows = statement.executeQuery(
+                "select rolname, rolcanlogin, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolreplication from pg_roles "
+                        + "where rolname in ('smartkin_owner', 'smartkin_app') order by rolname")) {
+            int seen = 0;
+            while (rows.next()) {
+                seen++;
+                assertTrue(rows.getBoolean("rolcanlogin"), rows.getString("rolname"));
+                assertFalse(rows.getBoolean("rolsuper"), rows.getString("rolname"));
+                assertFalse(rows.getBoolean("rolcreaterole"), rows.getString("rolname"));
+                assertFalse(rows.getBoolean("rolcreatedb"), rows.getString("rolname"));
+                assertFalse(rows.getBoolean("rolbypassrls"), rows.getString("rolname"));
+                assertFalse(rows.getBoolean("rolreplication"), rows.getString("rolname"));
+            }
+            assertEquals(2, seen);
+        }
+        migrateAs("smartkin_owner", ownerPassword);
+        try (var app = as("smartkin_app", appPassword); var statement = app.createStatement()) {
+            statement.execute("insert into smartkin.topics(name) values ('nosu-" + UUID.randomUUID() + "')");
+            assertThrows(SQLException.class, () -> statement.execute("create table smartkin.intruder(id int)"));
+            assertThrows(SQLException.class, () -> statement.execute("create role intruder"));
+        }
+    }
+
+    @Test
+    void thePsqlVersionWorksForAnAdminThatIsNotASuperuser() throws Exception {
+        createSupabaseLikeAdmin();
+
+        ExecResult result = runScriptAs("ops_admin", "owner_password=owner-secret", "app_password=app-secret");
+
+        assertEquals(0, result.getExitCode(), result.getStderr());
+        assertRolesWorkEndToEnd("owner-secret", "app-secret");
+    }
+
+    @Test
+    void theSqlEditorVersionWorksForAnAdminThatIsNotASuperuser() throws Exception {
+        createSupabaseLikeAdmin();
+
+        runEditorScriptAs("ops_admin", "ops-secret", "owner-secret", "app-secret");
+
+        assertRolesWorkEndToEnd("owner-secret", "app-secret");
+    }
+
+    @Test
+    void anAdminThatIsNotASuperuserCanHandOverTablesItCreatedAndRotateTheRoles() throws Exception {
+        createSupabaseLikeAdmin();
+        migrateAs("ops_admin", "ops-secret");   // an environment provisioned by the platform's postgres role
+
+        runEditorScriptAs("ops_admin", "ops-secret", "owner-secret", "app-secret");
+        runEditorScriptAs("ops_admin", "ops-secret", "owner-two", "app-two");
+
+        try (var app = as("smartkin_app", "app-two")) {
+            assertEquals("0", scalar(app, "select count(*) from smartkin.child_invitation"));
+        }
+        migrateAs("smartkin_owner", "owner-two");
+    }
+
+    @Test
+    void aRoleThatAlreadyHasSuperuserPrivilegesIsReportedNotSilentlyAccepted() throws Exception {
+        createSupabaseLikeAdmin();
+        try (var admin = admin(); var sql = admin.createStatement()) {
+            sql.execute("create role smartkin_owner login superuser password 'x'");
+        }
+
+        var error = assertThrows(SQLException.class, () -> runEditorScriptAs("ops_admin", "ops-secret", "owner-secret", "app-secret"));
+
+        assertTrue(error.getMessage().contains("smartkin_owner") && error.getMessage().contains("privileges"), error.getMessage());
     }
 
     private static void migrateAs(String user, String password) {

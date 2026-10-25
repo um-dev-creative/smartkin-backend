@@ -32,23 +32,45 @@ begin
         raise exception 'Wrong database: connected to "%" but expected "%"', current_database(), expected_database;
     end if;
 
-    -- 1. Roles. Created if missing (V2 may have created smartkin_app as NOLOGIN), then always aligned, which also rotates the passwords.
+    -- 1. Roles. Created if missing (V2 may have created smartkin_app as NOLOGIN) with the defaults, which are already NOSUPERUSER,
+    -- NOCREATEDB, NOCREATEROLE, NOREPLICATION and NOBYPASSRLS. ALTER ROLE must not NAME those attributes: a role that is not a
+    -- superuser (Supabase's postgres) may not even write NOSUPERUSER, NOREPLICATION or NOBYPASSRLS ("Only roles with the SUPERUSER
+    -- attribute may change the SUPERUSER attribute"). So they are checked, not set.
     if not exists (select 1 from pg_roles where rolname = 'smartkin_owner') then
         create role smartkin_owner;
     end if;
     if not exists (select 1 from pg_roles where rolname = 'smartkin_app') then
         create role smartkin_app;
     end if;
-    execute format('alter role smartkin_owner with login password %L nosuperuser nocreatedb nocreaterole noreplication nobypassrls',
-                   owner_password);
-    execute format('alter role smartkin_app with login password %L nosuperuser nocreatedb nocreaterole noreplication nobypassrls',
-                   app_password);
+    for object in
+        select rolname from pg_roles
+        where rolname in ('smartkin_owner', 'smartkin_app')
+          and (rolsuper or rolcreaterole or rolcreatedb or rolreplication or rolbypassrls)
+        loop
+            raise exception 'The role % already has privileges it must not have (superuser, createrole, createdb, replication or bypassrls). Remove them as a superuser: alter role % nosuperuser nocreaterole nocreatedb noreplication nobypassrls',
+                object.rolname, object.rolname;
+        end loop;
+    -- LOGIN and the password are the only things changed (this also rotates the passwords)
+    execute format('alter role smartkin_owner with login password %L', owner_password);
+    execute format('alter role smartkin_app with login password %L', app_password);
 
-    -- The role running this block must be able to act as the owner to hand objects over.
-    if not pg_has_role(current_user, 'smartkin_owner', 'member') then
-        execute format('grant smartkin_owner to %I', current_user);
+    -- The role running this block must be able to act as the owner to hand objects over. PostgreSQL 16+ gives the creator of a role only
+    -- ADMIN OPTION on it, not the right to SET ROLE to it, so that is granted explicitly.
+    if not coalesce(case when current_setting('server_version_num')::int >= 160000
+                         then pg_has_role(current_user, 'smartkin_owner', 'set')
+                         else pg_has_role(current_user, 'smartkin_owner', 'member') end, false) then
+        if current_setting('server_version_num')::int >= 160000 then
+            execute format('grant smartkin_owner to %I with set true', current_user);
+        else
+            execute format('grant smartkin_owner to %I', current_user);
+        end if;
     end if;
-    execute format('grant connect on database %I to smartkin_owner, smartkin_app', current_database());
+    -- Needs to own the database; PUBLIC can connect by default, so a refusal is not fatal.
+    begin
+        execute format('grant connect on database %I to smartkin_owner, smartkin_app', current_database());
+    exception when insufficient_privilege then
+        raise notice 'Skipped GRANT CONNECT on %: you do not own it, and PUBLIC can connect by default', current_database();
+    end;
 
     -- 2. The schema belongs to the owner; nobody else may use it by default.
     create schema if not exists smartkin authorization smartkin_owner;
