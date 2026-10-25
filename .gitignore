@@ -36,6 +36,9 @@ build/
 ### Container build and run (same split as mercury, backbone-rest and zerobound-rest) ###
 # TLS material of the image: certs/smartkin/ holds smartkin.jks, umdc-truststore.jks and prx-internal-ca.crt. Never commit.
 certs/
+# Local copies of scripts that you fill in with passwords (docs/db/smartkin_roles_sql_editor.sql): never versioned
+*.local.sql
+
 # Bootstrap secrets (VAULT_TOKEN): copy secrets/local.env.example. config/*.env carries no credentials and is versioned.
 secrets/*.env
 !config/*.env
