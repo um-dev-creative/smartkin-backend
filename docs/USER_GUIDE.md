@@ -197,7 +197,7 @@ Before the first deployment of an environment, create the two database users onc
 - `smartkin_owner` runs the migrations (put it in `SMARTKIN_FLYWAY_USERNAME` / `SMARTKIN_FLYWAY_PASSWORD`).
 - `smartkin_app` is what the service connects as (`SMARTKIN_DB_USERNAME` / `SMARTKIN_DB_PASSWORD`). It can read and write data but cannot change the structure.
 
-Take both passwords from Vault and pass them to the script as `-v owner_password=...` and `-v app_password=...`; they never go in a file. Run the same script again to change a password. Do not use `postgres` for the service.
+Take both passwords from Vault. With **psql**, pass them as `-v owner_password=...` and `-v app_password=...`; they never go in a file. If you work from **DataGrip, DBeaver, pgAdmin or the Supabase SQL editor**, use `docs/db/smartkin_roles_sql_editor.sql` instead: edit the two passwords at its top, run the whole file as one statement, and do not commit it with the passwords (clear the client's query history too). Running `smartkin_roles.sql` in one of those editors fails with "owner_password is required", because they do not understand psql's commands. Run the script again to change a password. Do not use `postgres` for the service.
 
 ## Preparing an environment (for operators)
 

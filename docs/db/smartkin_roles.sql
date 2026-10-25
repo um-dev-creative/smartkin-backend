@@ -1,6 +1,10 @@
 -- =====================================================================================
 -- SmartKin: database roles (decision D-3)
 --
+-- THIS FILE NEEDS psql. It uses psql's \if, \set, \gexec and -v variables, which DataGrip, DBeaver, pgAdmin and the Supabase SQL editor
+-- do not understand (they run it as plain SQL and stop at the first guard below). From one of those clients use
+-- docs/db/smartkin_roles_sql_editor.sql instead.
+--
 -- Creates the two login roles the service needs and hands the schema to the right one. Run it ONCE per database, before the first
 -- deployment, and again to rotate a password or to repair an environment whose tables belong to another role. It is idempotent.
 --
@@ -28,11 +32,11 @@
 
 \if :{?owner_password}
 \else
-    do $$ begin raise exception 'owner_password is required: psql -v owner_password=... (see the header of this file)'; end $$;
+    do $$ begin raise exception 'owner_password is required: psql -v owner_password=... (see the header of this file). Not using psql? Run docs/db/smartkin_roles_sql_editor.sql instead'; end $$;
 \endif
 \if :{?app_password}
 \else
-    do $$ begin raise exception 'app_password is required: psql -v app_password=... (see the header of this file)'; end $$;
+    do $$ begin raise exception 'app_password is required: psql -v app_password=... (see the header of this file). Not using psql? Run docs/db/smartkin_roles_sql_editor.sql instead'; end $$;
 \endif
 
 -- Optional guard against running in the wrong database (the Supabase SQL editor connects to `postgres`, not to `umdevc`)

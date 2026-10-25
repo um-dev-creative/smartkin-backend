@@ -19,7 +19,7 @@ flowchart TD
 
 ## 1. Database (BE-2)
 
-1. Create the two database roles and the schema once, with a role that can create roles, against the `umdevc` database (not `postgres`). The script is idempotent and refuses to run in another database:
+1. Create the two database roles and the schema once (with **psql**; from DataGrip, DBeaver, pgAdmin or the Supabase editor use `docs/db/smartkin_roles_sql_editor.sql` instead: edit its two passwords, run it as one statement, and never commit it with them), with a role that can create roles, against the `umdevc` database (not `postgres`). The script is idempotent and refuses to run in another database:
    `psql "host=<host> port=5432 dbname=umdevc user=postgres" -v ON_ERROR_STOP=1 -v expected_database=umdevc -v owner_password="$(vault kv get -field=flyway_password <path>)" -v app_password="$(vault kv get -field=app_password <path>)" -f docs/db/smartkin_roles.sql`
    It creates `smartkin_owner` (owns the schema, runs Flyway) and `smartkin_app` (data only, what the service uses), both without superuser, `CREATEROLE`, `CREATEDB` or `BYPASSRLS`. Put the owner in `SMARTKIN_FLYWAY_USERNAME` / `SMARTKIN_FLYWAY_PASSWORD` and the application role in `SMARTKIN_DB_USERNAME` / `SMARTKIN_DB_PASSWORD` (Vault).
 2. Create the tables. Either start the service (step 4), whose Flyway applies **V1 to V6** at start with `SMARTKIN_FLYWAY_USERNAME` (`smartkin_owner`), or do it first and on its own with `scripts/db-migrate.sh` (Docker; the same Flyway version, schema and history table, so the service then finds nothing pending):
