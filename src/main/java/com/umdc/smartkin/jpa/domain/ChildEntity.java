@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Size;
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
+import org.springframework.data.domain.Persistable;
 
 import java.util.UUID;
 
@@ -21,7 +22,7 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "child", schema = "smartkin")
-public class ChildEntity {
+public class ChildEntity implements Persistable<UUID> {
     /// Backbone user id of the child; identity lives in backbone, so there is no foreign key to its tables.
     @Id
     @Column(name = "child_id", nullable = false)
@@ -46,12 +47,30 @@ public class ChildEntity {
     @Column(name = "total_points", nullable = false)
     private Integer totalPoints;
 
+    /// The id is assigned by backbone, not generated, so Spring Data cannot tell a new row from an existing one by looking at it and would
+    /// `merge` (select, then insert or UPDATE). For a profile that is a silent takeover: a lost race between two accepted invitations would
+    /// overwrite the first parent. A new entity is therefore persisted (a duplicate key fails) and only a loaded or saved one is merged.
+    @Transient
+    private boolean fresh = true;
+
     public ChildEntity() {
         // Default constructor
     }
 
+    @Override
     public UUID getId() {
         return id;
+    }
+
+    @Override
+    public boolean isNew() {
+        return fresh;
+    }
+
+    @PostLoad
+    @PostPersist
+    void markPersisted() {
+        this.fresh = false;
     }
 
     public void setId(UUID id) {

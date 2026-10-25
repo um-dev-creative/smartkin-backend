@@ -71,7 +71,8 @@ A child joins a family in one of two ways. In both, nobody is added without an e
 
 1. The parent calls `POST /api/v1/children/invitations` (optional `gradeLevel` and `avatar`). The answer carries a code such as `K7M2-QX9P`. **It is shown only once**; write it down or send it to the child.
 2. The child signs in with their own account and calls `POST /api/v1/children/invitations/accept` with `{"code": "K7M2-QX9P"}` (upper or lower case, with or without the hyphen). They become the parent's child, with the grade and avatar the parent chose.
-3. The parent can follow the invitations with `GET /api/v1/children/invitations` (`PENDING`, `ACCEPTED`, `REVOKED` or `EXPIRED`) and cancel one that was not used with `DELETE /api/v1/children/invitations/{invitationId}`.
+3. A user belongs to one family only: if two invitations are accepted at the same moment, one is accepted and the other answers 409 and stays usable.
+4. The parent can follow the invitations with `GET /api/v1/children/invitations` (`PENDING`, `ACCEPTED`, `REVOKED` or `EXPIRED`) and cancel one that was not used with `DELETE /api/v1/children/invitations/{invitationId}`.
 
 Rules: a code works **once** and for **7 days**; a parent can have at most **10 pending** invitations (409 after that); a user who is already a parent or a child cannot accept (409); a wrong, used, revoked or expired code always answers the same **404**.
 

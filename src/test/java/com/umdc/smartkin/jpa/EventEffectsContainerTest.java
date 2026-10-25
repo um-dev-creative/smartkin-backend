@@ -83,10 +83,10 @@ class EventEffectsContainerTest {
         var parent = new ParentEntity();
         parent.setId(UUID.randomUUID());
         parent.setPhoneNumber("+15550100");
-        parents.save(parent);
+        var savedParent = parents.save(parent);
         var child = new ChildEntity();
         child.setId(UUID.randomUUID());
-        child.setParent(parent);
+        child.setParent(savedParent);
         child.setTotalPoints(0);
         child.setGradeLevel("5");
         return children.saveAndFlush(child);

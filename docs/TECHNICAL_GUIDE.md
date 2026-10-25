@@ -371,7 +371,7 @@ The contract was amended in this ticket: errors are status plus `message-error` 
 
 ## Child invitations and accounts (S-2)
 
-`POST /children` linked any user id the parent typed, so a parent could capture an unrelated account (finding S-2 of `docs/SECURITY_REVIEW_MVP.md`). It is gone. `ChildLinker.create` is now the only code that inserts a `child` row and has two callers: accepting an invitation (the future child consents by presenting the code) and creating the account (the user did not exist before).
+`POST /children` linked any user id the parent typed, so a parent could capture an unrelated account (finding S-2 of `docs/SECURITY_REVIEW_MVP.md`). It is gone. `ChildLinker.create` is now the only code that inserts a `child` row and has two callers: accepting an invitation (the future child consents by presenting the code) and creating the account (the user did not exist before). `ChildEntity` implements `Persistable<UUID>` (new until loaded or persisted) because its id is assigned by backbone: without it Spring Data calls `merge`, and a second concurrent link of the same user would silently update the row and move the child to another parent. With it the call is an insert and a duplicate key becomes `DataIntegrityViolationException`, answered 409.
 
 | Operation | Class | Rule | Answers |
 | --- | --- | --- | --- |
