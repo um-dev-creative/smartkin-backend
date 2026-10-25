@@ -63,6 +63,24 @@ flowchart LR
 
 **Verified on the JVM jar** (a throwaway PostgreSQL, a token signed with the configured secret): a valid `session-token` reaches the repository (before the change the same token answered 401 from the library's chain); a token signed with another key, an unsigned one (`alg: none`), an expired one and a request with no token answer 401; `/actuator/health/liveness` is `UP` and `/actuator/env` is 403. This is the local half of finding S-1 in `docs/SECURITY_REVIEW_MVP.md`; the check against the real environment (Redis revocation list, the PRX library as deployed) still belongs to `scripts/qa-smoke.sh` in QA.
 
+## Environment setup scripts
+
+Three scripts bring an empty environment to the point where the service can start. Run them in this order; each is idempotent and takes its secrets from the environment (Vault), never from a file in the repository.
+
+```mermaid
+flowchart LR
+    R["docs/db/smartkin_roles.sql<br/>psql as postgres"] -->|smartkin_owner, smartkin_app| M["scripts/db-migrate.sh<br/>Flyway CLI as smartkin_owner"]
+    M -->|14 tables, 4 enums, V1..V6| K["scripts/kafka-create-topics.sh<br/>kafka-topics.sh"]
+    K -->|4 topics| S[smartkin-backend starts<br/>nothing pending]
+```
+
+| Script | Needs | Does | Refuses |
+| --- | --- | --- | --- |
+| `scripts/db-migrate.sh [info\|validate\|migrate]` | Docker, `SMARTKIN_DB_URI`, `SMARTKIN_FLYWAY_USERNAME`, `SMARTKIN_FLYWAY_PASSWORD` | runs the files of `src/main/resources/db/migration` with the Flyway CLI image `flyway/flyway:12.4.0` (the version Spring Boot 4.1.1 brings), schema `smartkin`, `validateOnMigrate`; the password reaches the container through the environment, not a command line; `info` (default) changes nothing | the pooler port 6543 (migrations need session locks), the `postgres` user (the tables would belong to it) unless `ALLOW_ADMIN_USER=1`, any other command |
+| `scripts/kafka-create-topics.sh [--dry-run]` | Docker (or `KAFKA_TOPICS_BIN`), `KAFKA_BOOTSTRAP_SERVERS`, optionally `KAFKA_CLIENT_PROPERTIES` | creates `smartkin.activity.assigned.v1`, `smartkin.quiz.completed.v1`, `smartkin.achievement.earned.v1` and `smartkin.events.error.v1` (same names and overrides as the service: `TOPIC_*`, `KAFKA_ERROR_TOPIC`) with `--if-not-exists`, then describes each and fails if one is missing or has fewer partitions than `PARTITIONS` (default 3, `REPLICATION_FACTOR` default 3) | a missing bootstrap list, a missing properties file; an existing topic is never altered |
+
+**Verified** (throwaway containers on a Docker network, 2026-10-25). Database: PostgreSQL 17, `smartkin_roles.sql`, then `db-migrate.sh migrate`: six migrations applied, 14 tables and 4 enums (decision D-2), all owned by `smartkin_owner`; a second run says "up to date"; `validate` passes; the application role reads and cannot create tables; the service jar then starts with `FLYWAY_ENABLED=true`, validates the six migrations from the CLI-created history, finds nothing pending and answers 404 (no profile) from the real tables. Kafka: Apache Kafka 4.2.0 single node: the four topics are created with 3 partitions, a second run changes nothing, a replication factor of 3 on one broker fails with exit code 1, expecting more partitions than exist fails, and a message round-trips on `smartkin.activity.assigned.v1`. **Not verified:** Supabase (TLS parameters, pooler user suffix, platform limits on role management) and the real broker (SASL/SSL client properties, ACLs for the service principal: read on the three event topics, write on all four).
+
 ## Database
 
 PostgreSQL on Supabase, schema `smartkin`, database `umdevc` (shared project with zerobound). User ids come from backbone and are stored as plain UUIDs
