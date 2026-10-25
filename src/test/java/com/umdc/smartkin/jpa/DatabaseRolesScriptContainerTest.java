@@ -71,9 +71,18 @@ class DatabaseRolesScriptContainerTest {
 
     private static final Path EDITOR_SCRIPT = Path.of("docs/db/smartkin_roles_sql_editor.sql");
 
+    /// The repository file with its placeholders; a file an operator edited in place would make every test below fail in a confusing way.
+    private static String editorTemplate() throws IOException {
+        String template = Files.readString(EDITOR_SCRIPT);
+        assertTrue(template.contains("'CHANGE_ME_OWNER_PASSWORD'") && template.contains("'CHANGE_ME_APP_PASSWORD'"),
+                EDITOR_SCRIPT + " has no CHANGE_ME placeholders (someone wrote real passwords in it). Copy your edited version outside the "
+                        + "repository and restore this one: git checkout -- " + EDITOR_SCRIPT);
+        return template;
+    }
+
     /// Runs the SQL-editor variant as one statement over JDBC, after editing its three constants the way the operator does.
     private static void runEditorScript(String ownerPassword, String appPassword, String expectedDatabase) throws Exception {
-        String sql = Files.readString(EDITOR_SCRIPT)
+        String sql = editorTemplate()
                 .replace("'CHANGE_ME_OWNER_PASSWORD'", "'" + ownerPassword + "'")
                 .replace("'CHANGE_ME_APP_PASSWORD'", "'" + appPassword + "'")
                 .replace("expected_database constant text := 'umdevc'", "expected_database constant text := '" + expectedDatabase + "'");
@@ -102,7 +111,7 @@ class DatabaseRolesScriptContainerTest {
     }
 
     private static void runEditorScriptAs(String user, String password, String ownerPassword, String appPassword) throws Exception {
-        String sql = Files.readString(EDITOR_SCRIPT)
+        String sql = editorTemplate()
                 .replace("'CHANGE_ME_OWNER_PASSWORD'", "'" + ownerPassword + "'")
                 .replace("'CHANGE_ME_APP_PASSWORD'", "'" + appPassword + "'")
                 .replace("expected_database constant text := 'umdevc'", "expected_database constant text := '" + postgres.getDatabaseName() + "'");
