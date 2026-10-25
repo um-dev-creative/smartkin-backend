@@ -198,6 +198,16 @@ Before the first deployment of an environment, create the two database users onc
 
 Take both passwords from Vault and pass them to the script as `-v owner_password=...` and `-v app_password=...`; they never go in a file. Run the same script again to change a password. Do not use `postgres` for the service.
 
+## Preparing an environment (for operators)
+
+Three steps, in this order, before the first start of the service in QA or production. The technical guide has the details and the QA runbook (steps 1 and 2) the exact commands.
+
+1. **Database users:** `docs/db/smartkin_roles.sql` creates `smartkin_owner` and `smartkin_app`.
+2. **Tables:** `scripts/db-migrate.sh` creates the tables as `smartkin_owner`. Without arguments it only shows what is pending; add `migrate` to apply it. It needs Docker, the direct database host (not the pooler) and the owner's password from Vault.
+3. **Kafka topics:** `scripts/kafka-create-topics.sh` creates the four topics the service uses and checks them. Give it the brokers and, if they need a login, a `client.properties` file.
+
+Both scripts are safe to run again, and both stop with a clear message when something is wrong.
+
 ## Running in a container
 
 1. Put the TLS keystores in `certs/smartkin/` (`smartkin.jks`, `umdc-truststore.jks`; git-ignored) **before** `mvn clean package`: they are copied into the jar.
