@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `docker-compose.yml` did not parse (`mapping key "smartkin-frontend" already defined`): commit `287d4fc` added back the old `smartkin-frontend` block, the one with inline settings and a required `SMARTKIN_FRONTEND_VAULT_PATH`. Only the block that reads `../smartkin-frontend/local.env` stays. That commit also published the backend on host port 443, the port the frontend and nginx already use. As a result, on a machine running nginx, `host-gateway:443` (Vault, Config Server) never reached it. The backend is published on `8166:8166` again.
+- `docker-compose.yml`: the backend failed on a second machine with `class path resource [umdc-truststore.jks] does not exist` and then with "Network is unreachable" towards Vault. Fixed in two ways:
+  - The service now mounts `./certs/smartkin` read-only. In its own `environment` it sets `SSL_KEYSTORE_URL`/`SSL_TRUSTSTORE_URL` (`file:/usr/local/runme/certs/smartkin/...`) and the bare `SSL_*_LOCATION` names. These values take precedence over `env_file`, so an old `config/local.env` with `file:certs/...` no longer breaks the start, and no local override is needed.
+  - `UMDC_GATEWAY_IP` now defaults to `192.168.50.49`, the LAN nginx (Vault, Config Server), instead of `host-gateway`. On a machine without nginx, `host-gateway` led nowhere. Set `UMDC_GATEWAY_IP=host-gateway` when nginx runs on the Docker host.
+
+  Verified with `docker compose up`: Config Server and Vault load, `Started SmartKinBackendApplication in 7.6 s`, liveness `UP`.
 
 ### Changed
 - The Feign base URLs are now overridden with `BACKBONE_BASE_URL` and `MERCURY_BASE_URL` (they were `BACKBONE_URL` and `MERCURY_URL`); the QA defaults stay. Fixes after commit `287d4fc`, which left 4 tests failing: `umdc.backbone.base-url` points again at `umdc.clients.backbone.url` (it read `${BACKBONE_BASE_URL}` with no default, so it did not resolve without that variable), and `BOOTSTRAP_SERVER_PORT` is optional again (`${BOOTSTRAP_SERVER_PORT:}`; without it the literal placeholder ended up in `bootstrap.servers` and the Kafka consumer did not start). `FeignClientUrlConfigTest`, the user guide, the technical guide and the QA runbook use the new names.
