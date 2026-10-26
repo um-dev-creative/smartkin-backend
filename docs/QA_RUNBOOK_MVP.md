@@ -61,7 +61,7 @@ Nothing below goes in `config/local.env`: an environment variable shadows the Va
 | Group | Keys |
 | --- | --- |
 | Identity and tokens | `APP_TOKEN_SECRET`, `APP_TOKEN_EXPIRATION`, `AUTH_ROLE_ID`, `AUTH_SERVER_URI`, `AUTH_TOKEN_URI`, `AUTH_CERT_URI`, `AUTH_CLIENT_ID`, `AUTH_CLIENT_SECRET` |
-| Backbone and mercury clients | `BACKBONE_*` and `MERCURY_*` (`GRANT_TYPE`, `SCOPE`, `CLIENT_ID`, `CLIENT_SECRET`, `USERNAME`, `PASSWORD`), `BACKBONE_URL`, `MERCURY_URL` |
+| Backbone and mercury clients | `BACKBONE_*` and `MERCURY_*` (`GRANT_TYPE`, `SCOPE`, `CLIENT_ID`, `CLIENT_SECRET`, `USERNAME`, `PASSWORD`), `BACKBONE_BASE_URL`, `MERCURY_BASE_URL` |
 | TLS | `SSL_KEYSTORE_*`, `SSL_TRUSTSTORE_*` |
 | PostgreSQL | `SMARTKIN_DB_URI`, `SMARTKIN_DB_USERNAME`, `SMARTKIN_DB_PASSWORD`, optionally `SMARTKIN_FLYWAY_USERNAME` / `_PASSWORD` |
 | MongoDB | `SMARTKIN_MONGO_HOST`, `_USERNAME`, `_PASSWORD`, `_DATABASE` |

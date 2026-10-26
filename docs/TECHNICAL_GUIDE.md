@@ -868,7 +868,7 @@ The first box is the assumption of S-1: everything after it is covered by tests.
 ## Feign client URLs
 
 `@FeignClient(url = "${umdc.clients.backbone.url}")` and `${umdc.clients.mercury.url}` are resolved from `bootstrap.yml`, where
-`BACKBONE_URL` and `MERCURY_URL` override the QA defaults. `FeignClientUrlConfigTest` checks the placeholders, the defaults and the override.
+`BACKBONE_BASE_URL` and `MERCURY_BASE_URL` override the QA defaults. `FeignClientUrlConfigTest` checks the placeholders, the defaults and the override.
 
 ## Library property names
 
