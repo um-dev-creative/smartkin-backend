@@ -10,10 +10,17 @@
 # Properties of the com.umdc libraries (security-oauth, commons-services). They moved from the old `prx.*` names when the libraries
 # moved from com.prx to com.umdc; with the old names nothing binds and the context fails at start (AuthProperties.getClients() is null).
 umdc:
+  producer:
+    mercury:
+      topic: ${MERCURY_EMAIL_TOPIC}  # the e-mail messages mercury consumes (mercury's topic, not a smartkin.* one)
+  bootstrap:
+    server:
+      port: ${BOOTSTRAP_SERVER_PORT}
+      url: ${BOOTSTRAP_SERVER_URI}
   api:
     endpoint: /api/v1
   backbone:
-    base-url: ${umdc.clients.backbone.url}
+    base-url: ${BACKBONE_BASE_URL}
   management:
     clientRoles: ${AUTH_ROLE_ID}
   logging:
@@ -90,11 +97,11 @@ umdc:
     # How long raw interaction events are kept before MongoDB expires them (a TTL index on expiresAt)
     retention: ${SMARTKIN_INTERACTION_EVENTS_RETENTION:90d}
   clients:
-    # Base URLs of the services reached through Feign; override per environment with BACKBONE_URL and MERCURY_URL
+    # Base URLs of the services reached through Feign; override per environment with BACKBONE_BASE_URL and MERCURY_BASE_URL
     backbone:
-      url: ${BACKBONE_URL:https://prx-qa.backbone.tst/backbone}
+      url: ${BACKBONE_BASE_URL:https://prx-qa.backbone.tst/backbone}
     mercury:
-      url: ${MERCURY_URL:https://prx-qa.backbone.tst/mercury}
+      url: ${MERCURY_BASE_URL:https://prx-qa.backbone.tst/mercury}
 app:
   # The name of the application
   name: smartkin-backend

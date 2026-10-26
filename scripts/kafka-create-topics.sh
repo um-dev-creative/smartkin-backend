@@ -32,7 +32,7 @@ dry_run=0
 [ "${1:-}" = "--dry-run" ] && dry_run=1
 
 : "${KAFKA_BOOTSTRAP_SERVERS:?set KAFKA_BOOTSTRAP_SERVERS}"
-partitions="${PARTITIONS:-3}"
+partitions="${PARTITIONS:-2}"
 replication="${REPLICATION_FACTOR:-3}"
 image="${KAFKA_IMAGE:-apache/kafka:4.2.0}"
 topics=(
