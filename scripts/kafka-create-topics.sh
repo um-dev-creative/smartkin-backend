@@ -6,11 +6,11 @@
 #   ./scripts/kafka-create-topics.sh              # creates and verifies
 #   ./scripts/kafka-create-topics.sh --dry-run    # prints what it would do
 #
-# Topics (same names and overrides as the service: prx.kafka.topics.* and KAFKA_ERROR_TOPIC)
+# Topics (same names and overrides as the service: umdc.kafka.topics.* and BOOTSTRAP_ERROR_TOPIC)
 #   smartkin.activity.assigned.v1    TOPIC_ACTIVITY_ASSIGNED     a parent assigned an activity
 #   smartkin.quiz.completed.v1       TOPIC_QUIZ_COMPLETED        a child finished a quiz
 #   smartkin.achievement.earned.v1   TOPIC_ACHIEVEMENT_EARNED    an achievement was awarded
-#   smartkin.events.error.v1         KAFKA_ERROR_TOPIC           records that failed every retry (dead letters)
+#   smartkin.events.error.v1         BOOTSTRAP_ERROR_TOPIC           records that failed every retry (dead letters)
 #
 # Required
 #   KAFKA_BOOTSTRAP_SERVERS   host:port list of the brokers
@@ -39,7 +39,7 @@ topics=(
   "${TOPIC_ACTIVITY_ASSIGNED:-smartkin.activity.assigned.v1}"
   "${TOPIC_QUIZ_COMPLETED:-smartkin.quiz.completed.v1}"
   "${TOPIC_ACHIEVEMENT_EARNED:-smartkin.achievement.earned.v1}"
-  "${KAFKA_ERROR_TOPIC:-smartkin.events.error.v1}"
+  "${BOOTSTRAP_ERROR_TOPIC:-smartkin.events.error.v1}"
 )
 
 cli() {

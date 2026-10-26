@@ -22,7 +22,7 @@ import java.util.UUID;
 /// catalog keeps working from MongoDB.
 @Component
 @EnableConfigurationProperties(LessonCatalogProperties.class)
-@ConditionalOnExpression("!'${prx.cache.lesson-catalog.redis-url:}'.isBlank()")
+@ConditionalOnExpression("!'${umdc.cache.lesson-catalog.redis-url:}'.isBlank()")
 public class RedisLessonCatalogCache implements LessonCatalogCache {
 
     static final String KEY_PREFIX = "smartkin:catalog:topic:";

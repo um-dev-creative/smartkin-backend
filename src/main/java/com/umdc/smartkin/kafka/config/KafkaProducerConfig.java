@@ -22,10 +22,10 @@ public class KafkaProducerConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(KafkaProducerConfig.class);
 
-    @Value("${prx.bootstrap.server.url}")
+    @Value("${umdc.bootstrap.server.url}")
     private String bootstrapServers;
 
-    @Value("${prx.bootstrap.server.port}")
+    @Value("${umdc.bootstrap.server.port}")
     private String bootstrapServerPort;
 
     @Bean

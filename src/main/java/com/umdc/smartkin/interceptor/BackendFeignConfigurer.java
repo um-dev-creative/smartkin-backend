@@ -45,7 +45,7 @@ public abstract class BackendFeignConfigurer {
     protected static final String BACKBONE_ID = "backbone";
     protected static final String MERCURY_ID = "mercury";
 
-    @Value("${prx.logging.trace.enabled}")
+    @Value("${umdc.logging.trace.enabled}")
     private boolean isTraceEnabled;
 
     /**

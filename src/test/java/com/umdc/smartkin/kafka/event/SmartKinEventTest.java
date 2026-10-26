@@ -67,7 +67,7 @@ class SmartKinEventTest {
 
     @Test
     void topicsDefaultToTheVersionedNames() {
-        var topics = new Binder(new MapConfigurationPropertySource(Map.of())).bindOrCreate("prx.kafka.topics", KafkaTopicsProperties.class);
+        var topics = new Binder(new MapConfigurationPropertySource(Map.of())).bindOrCreate("umdc.kafka.topics", KafkaTopicsProperties.class);
 
         assertEquals("smartkin.activity.assigned.v1", topics.topicFor(EventType.ACTIVITY_ASSIGNED));
         assertEquals("smartkin.quiz.completed.v1", topics.topicFor(EventType.QUIZ_COMPLETED));
@@ -76,9 +76,9 @@ class SmartKinEventTest {
 
     @Test
     void topicNamesCanBeOverriddenByConfiguration() {
-        var source = new MapConfigurationPropertySource(Map.of("prx.kafka.topics.quiz-completed", "custom.quiz"));
+        var source = new MapConfigurationPropertySource(Map.of("umdc.kafka.topics.quiz-completed", "custom.quiz"));
 
-        var topics = new Binder(source).bindOrCreate("prx.kafka.topics", KafkaTopicsProperties.class);
+        var topics = new Binder(source).bindOrCreate("umdc.kafka.topics", KafkaTopicsProperties.class);
 
         assertEquals("custom.quiz", topics.topicFor(EventType.QUIZ_COMPLETED));
         assertEquals("smartkin.activity.assigned.v1", topics.topicFor(EventType.ACTIVITY_ASSIGNED));

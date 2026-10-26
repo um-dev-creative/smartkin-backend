@@ -13,7 +13,7 @@ class KafkaProducerConfigTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withUserConfiguration(KafkaProducerConfig.class)
-            .withPropertyValues("prx.bootstrap.server.url=broker", "prx.bootstrap.server.port=9093");
+            .withPropertyValues("umdc.bootstrap.server.url=broker", "umdc.bootstrap.server.port=9093");
 
     @Test
     void theProducerKeepsItsPlaintextConfigurationByDefault() {
@@ -28,9 +28,9 @@ class KafkaProducerConfigTest {
     @Test
     void theSecuritySettingsReachTheProducer() {
         runner.withPropertyValues(
-                "prx.kafka.security.protocol=SSL",
-                "prx.kafka.security.ssl.truststore-location=file:/k/ca.pem",
-                "prx.kafka.security.ssl.keystore-location=/k/client.pem").run(context -> {
+                "umdc.kafka.security.protocol=SSL",
+                "umdc.kafka.security.ssl.truststore-location=file:/k/ca.pem",
+                "umdc.kafka.security.ssl.keystore-location=/k/client.pem").run(context -> {
             var configuration = context.getBean(ProducerFactory.class).getConfigurationProperties();
             assertEquals("SSL", configuration.get("security.protocol"));
             assertEquals("/k/ca.pem", configuration.get("ssl.truststore.location"));

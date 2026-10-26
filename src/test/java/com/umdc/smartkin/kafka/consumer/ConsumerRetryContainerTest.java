@@ -105,12 +105,12 @@ class ConsumerRetryContainerTest {
 
         try (var context = new AnnotationConfigApplicationContext()) {
             context.getEnvironment().getPropertySources().addFirst(new MapPropertySource("it", Map.of(
-                    "prx.bootstrap.server.url", kafka.getBootstrapServers(),
-                    "prx.kafka.consumer.group-id", "it-" + run,
-                    "prx.kafka.consumer.error-topic", errorTopic,
-                    "prx.kafka.consumer.max-attempts", "3",
-                    "prx.kafka.consumer.initial-interval", "100ms",
-                    "prx.kafka.consumer.max-interval", "200ms")));
+                    "umdc.bootstrap.server.url", kafka.getBootstrapServers(),
+                    "umdc.kafka.consumer.group-id", "it-" + run,
+                    "umdc.kafka.consumer.error-topic", errorTopic,
+                    "umdc.kafka.consumer.max-attempts", "3",
+                    "umdc.kafka.consumer.initial-interval", "100ms",
+                    "umdc.kafka.consumer.max-interval", "200ms")));
             context.register(Wiring.class);
             context.refresh();
             var template = context.getBean(KafkaOperations.class);

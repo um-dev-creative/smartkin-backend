@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentMap;
 /// Answers are cached for `cacheTtl` to spare Redis one query per request.
 @Component
 @EnableConfigurationProperties(RevocationProperties.class)
-@ConditionalOnProperty(prefix = "prx.security.revocation", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "umdc.security.revocation", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class RedisRevocationChecker implements RevocationChecker {
 
     static final String KEY_PREFIX = "jti:";
@@ -43,9 +43,9 @@ public class RedisRevocationChecker implements RevocationChecker {
 
     RedisRevocationChecker(RevocationProperties properties, Clock clock) {
         if (!StringUtils.hasText(properties.redisUrl())) {
-            throw new IllegalStateException("prx.security.revocation.redis-url (REVOCATION_REDIS_URL) is required while token revocation "
+            throw new IllegalStateException("umdc.security.revocation.redis-url (REVOCATION_REDIS_URL) is required while token revocation "
                     + "checks are enabled. It must point at the Redis backbone-rest uses for its jti deny-list. "
-                    + "Set prx.security.revocation.enabled=false (REVOCATION_ENABLED) only for local development.");
+                    + "Set umdc.security.revocation.enabled=false (REVOCATION_ENABLED) only for local development.");
         }
         this.redis = new RedisConnector(properties.redisUrl(), properties.commandTimeout());
         this.clock = clock;

@@ -24,7 +24,7 @@ import static com.umdc.smartkin.constant.SmartKinAppConstants.MESSAGE_HEADER;
 @Service
 public class UserRegisterServiceImpl implements UserRegisterService {
 
-    @Value("${prx.smartkin.application-id}")
+    @Value("${umdc.smartkin.application-id}")
     private UUID applicationId;
 
     private final MercuryClient mercuryClient;

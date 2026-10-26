@@ -20,7 +20,7 @@ public class EmailMessageProducerServiceImpl implements EmailMessageProducerServ
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
 
-    @Value("${prx.producer.mercury.topic}")
+    @Value("${umdc.producer.mercury.topic}")
     private String topic;
 
     private static final Logger logger = LoggerFactory.getLogger(EmailMessageProducerServiceImpl.class);

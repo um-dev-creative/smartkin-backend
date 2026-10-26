@@ -169,12 +169,12 @@ class KafkaSecurityPropertiesTest {
     @Test
     void bindsFromTheEnvironmentNamesTheYamlMaps() {
         runner.withPropertyValues(
-                "prx.kafka.security.protocol=SASL_SSL",
-                "prx.kafka.security.sasl.jaas-config=login",
-                "prx.kafka.security.ssl.truststore-location=file:/k/ca.pem",
-                "prx.kafka.security.ssl.keystore-certificate-location=/k/service.cert",
-                "prx.kafka.security.ssl.keystore-key-location=/k/service.key",
-                "prx.kafka.security.ssl.endpoint-identification-algorithm=").run(context -> {
+                "umdc.kafka.security.protocol=SASL_SSL",
+                "umdc.kafka.security.sasl.jaas-config=login",
+                "umdc.kafka.security.ssl.truststore-location=file:/k/ca.pem",
+                "umdc.kafka.security.ssl.keystore-certificate-location=/k/service.cert",
+                "umdc.kafka.security.ssl.keystore-key-location=/k/service.key",
+                "umdc.kafka.security.ssl.endpoint-identification-algorithm=").run(context -> {
             var properties = context.getBean(KafkaSecurityProperties.class);
             assertEquals("SASL_SSL", properties.protocol());
             assertEquals("login", properties.sasl().jaasConfig());

@@ -9,7 +9,7 @@ import java.util.UUID;
 
 /// Used when no cache Redis is configured: every read is a miss.
 @Component
-@ConditionalOnExpression("'${prx.cache.lesson-catalog.redis-url:}'.isBlank()")
+@ConditionalOnExpression("'${umdc.cache.lesson-catalog.redis-url:}'.isBlank()")
 public class NoLessonCatalogCache implements LessonCatalogCache {
 
     public NoLessonCatalogCache() {

@@ -12,17 +12,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
-/// How the producer and the consumer authenticate to the brokers (`prx.kafka.security.*`).
+/// How the producer and the consumer authenticate to the brokers (`umdc.kafka.security.*`).
 ///
 /// The default is `PLAINTEXT`, which adds nothing to the client configuration (a local broker, the Testcontainers tests). A managed
 /// cluster such as Aiven needs `SSL` (client certificate) or `SASL_SSL` (user and password): the settings below become the Kafka client
-/// properties of both factories through [#clientProperties()]. The names and the environment variables are the ones mercury uses
-/// (`KAFKA_SECURITY_PROTOCOL`, `KAFKA_SSL_*`, `KAFKA_SASL_*`), so the Vault values can be shared.
+/// properties of both factories through [#clientProperties()]. They sit under `umdc.kafka.security` like the rest of the service's
+/// settings, and application.yml reads them from `BOOTSTRAP_SECURITY_PROTOCOL`, `BOOTSTRAP_SSL_*` and `BOOTSTRAP_SASL_*`.
 ///
 /// @param protocol `PLAINTEXT`, `SSL`, `SASL_PLAINTEXT` or `SASL_SSL`
 /// @param sasl     SASL settings, used when the protocol starts with `SASL`
 /// @param ssl      TLS settings, used when the protocol ends with `SSL`
-@ConfigurationProperties("prx.kafka.security")
+@ConfigurationProperties("umdc.kafka.security")
 public record KafkaSecurityProperties(
         @DefaultValue("PLAINTEXT") String protocol,
         @DefaultValue Sasl sasl,
@@ -84,7 +84,7 @@ public record KafkaSecurityProperties(
     public Map<String, Object> clientProperties() {
         String selected = protocol == null || protocol.isBlank() ? "PLAINTEXT" : protocol.trim().toUpperCase(Locale.ROOT);
         if (!PROTOCOLS.contains(selected)) {
-            throw new IllegalArgumentException("Unsupported prx.kafka.security.protocol '" + protocol + "' (use one of " + new TreeSet<>(PROTOCOLS) + ")");
+            throw new IllegalArgumentException("Unsupported umdc.kafka.security.protocol '" + protocol + "' (use one of " + new TreeSet<>(PROTOCOLS) + ")");
         }
         Map<String, Object> client = new HashMap<>();
         if ("PLAINTEXT".equals(selected)) {
@@ -133,12 +133,12 @@ public record KafkaSecurityProperties(
 
     private static String read(String property, String location) {
         if (location.isBlank()) {
-            throw new IllegalStateException("prx.kafka.security.ssl." + property + " is empty: the certificate and the key files are both needed");
+            throw new IllegalStateException("umdc.kafka.security.ssl." + property + " is empty: the certificate and the key files are both needed");
         }
         try {
             return Files.readString(Path.of(path(location)));
         } catch (IOException | RuntimeException e) {
-            throw new IllegalStateException("Cannot read the Kafka TLS file of prx.kafka.security.ssl." + property + ": " + location
+            throw new IllegalStateException("Cannot read the Kafka TLS file of umdc.kafka.security.ssl." + property + ": " + location
                     + " (" + e.getClass().getSimpleName() + ")", e);
         }
     }

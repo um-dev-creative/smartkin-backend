@@ -16,7 +16,7 @@ class RevocationWiringTest {
 
     @Test
     void usesTheNoopCheckerWhenRevocationIsDisabled() {
-        runner.withPropertyValues("prx.security.revocation.enabled=false").run(context -> {
+        runner.withPropertyValues("umdc.security.revocation.enabled=false").run(context -> {
             assertTrue(context.getBean(RevocationChecker.class) instanceof NoRevocationChecker);
             assertFalse(context.getBean(RevocationChecker.class).isRevoked("any"));
         });
@@ -24,7 +24,7 @@ class RevocationWiringTest {
 
     @Test
     void usesTheRedisCheckerByDefault() {
-        runner.withPropertyValues("prx.security.revocation.redis-url=redis://127.0.0.1:6379").run(context ->
+        runner.withPropertyValues("umdc.security.revocation.redis-url=redis://127.0.0.1:6379").run(context ->
                 assertTrue(context.getBean(RevocationChecker.class) instanceof RedisRevocationChecker));
     }
 

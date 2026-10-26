@@ -40,11 +40,11 @@ public class UserServiceImpl implements UserService {
     private static final int MAX_ALIAS_TRY = 5;
     private static final String TO_SUPPORT_EMAIL = "support@latinhub.info";
 
-    @Value("${prx.verification.code.template.id}")
+    @Value("${umdc.verification.code.template.id}")
     private UUID verificationCodeTemplateId;
-    @Value("${prx.smartkin.application-id}")
+    @Value("${umdc.smartkin.application-id}")
     private String applicationIdString;
-    @Value("${prx.smartkin.role-id}")
+    @Value("${umdc.smartkin.role-id}")
     private String initialRoleId;
 
     private final EmailMessageProducerService emailMessageProducerService;

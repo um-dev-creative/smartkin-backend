@@ -13,7 +13,7 @@ umdc:
   api:
     endpoint: /api/v1
   backbone:
-    base-url: ${prx.clients.backbone.url}
+    base-url: ${umdc.clients.backbone.url}
   management:
     clientRoles: ${AUTH_ROLE_ID}
   logging:
@@ -41,12 +41,6 @@ umdc:
           redirect-uri: ${AUTH_SERVER_URI}${AUTH_TOKEN_URI}
           username: ${MERCURY_USERNAME}
           password: ${MERCURY_PASSWORD}
-# Application specific configurations
-prx:
-  logging:
-    trace:
-      enabled: ${LOGGING_TRACE_ENABLED}
-  security:
     revocation:
       # false = local development only: revoked tokens stay valid until they expire
       enabled: ${REVOCATION_ENABLED:true}
@@ -64,34 +58,34 @@ prx:
   kafka:
     # How both the producer and the consumer authenticate to the brokers. PLAINTEXT (the default) adds nothing. Aiven needs SSL (a client
     # certificate) or SASL_SSL (user and password). Files are read from the file system, never from the classpath: a GraalVM binary does
-    # not embed them and a private key does not belong in an image. Same names as mercury, so the Vault values can be shared.
+    # not embed them and a private key does not belong in an image.
     security:
-      protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+      protocol: ${BOOTSTRAP_SECURITY_PROTOCOL:PLAINTEXT}
       sasl:
-        mechanism: ${KAFKA_SASL_MECHANISM:SCRAM-SHA-256}
-        jaas-config: ${KAFKA_SASL_JAAS_CONFIG:}
+        mechanism: ${BOOTSTRAP_SASL_MECHANISM:SCRAM-SHA-256}
+        jaas-config: ${BOOTSTRAP_SASL_JAAS_CONFIG:}
       ssl:
-        truststore-type: ${KAFKA_SSL_TRUSTSTORE_TYPE:PEM}
-        truststore-location: ${KAFKA_SSL_TRUSTSTORE_LOCATION:}
-        truststore-password: ${KAFKA_SSL_TRUSTSTORE_PASSWORD:}
-        keystore-type: ${KAFKA_SSL_KEYSTORE_TYPE:PEM}
-        keystore-location: ${KAFKA_SSL_KEYSTORE_LOCATION:}
-        keystore-password: ${KAFKA_SSL_KEYSTORE_PASSWORD:}
-        key-password: ${KAFKA_SSL_KEY_PASSWORD:}
+        truststore-type: ${BOOTSTRAP_SSL_TRUSTSTORE_TYPE:PEM}
+        truststore-location: ${BOOTSTRAP_SSL_TRUSTSTORE_LOCATION:}
+        truststore-password: ${BOOTSTRAP_SSL_TRUSTSTORE_PASSWORD:}
+        keystore-type: ${BOOTSTRAP_SSL_KEYSTORE_TYPE:PEM}
+        keystore-location: ${BOOTSTRAP_SSL_KEYSTORE_LOCATION:}
+        keystore-password: ${BOOTSTRAP_SSL_KEYSTORE_PASSWORD:}
+        key-password: ${BOOTSTRAP_SSL_KEY_PASSWORD:}
         # Aiven delivers the client certificate and the key as two files; set these two instead of keystore-location
-        keystore-certificate-location: ${KAFKA_SSL_KEYSTORE_CERT_LOCATION:}
-        keystore-key-location: ${KAFKA_SSL_KEYSTORE_KEY_LOCATION:}
-        endpoint-identification-algorithm: ${KAFKA_SSL_ENDPOINT_ID_ALGO:https}
+        keystore-certificate-location: ${BOOTSTRAP_SSL_KEYSTORE_CERT_LOCATION:}
+        keystore-key-location: ${BOOTSTRAP_SSL_KEYSTORE_KEY_LOCATION:}
+        endpoint-identification-algorithm: ${BOOTSTRAP_SSL_ENDPOINT_ID_ALGO:https}
     consumer:
-      # Set KAFKA_CONSUMER_ENABLED=false on a deployment that must not process events
-      enabled: ${KAFKA_CONSUMER_ENABLED:true}
-      group-id: ${KAFKA_CONSUMER_GROUP_ID:smartkin-backend}
+      # Set BOOTSTRAP_CONSUMER_ENABLED=false on a deployment that must not process events
+      enabled: ${BOOTSTRAP_CONSUMER_ENABLED:true}
+      group-id: ${BOOTSTRAP_CONSUMER_GROUP_ID:smartkin-backend}
       # Records that still fail after the retries go here, with the exception in the headers
-      error-topic: ${KAFKA_ERROR_TOPIC:smartkin.events.error.v1}
-      max-attempts: ${KAFKA_CONSUMER_MAX_ATTEMPTS:4}
-      initial-interval: ${KAFKA_CONSUMER_RETRY_INTERVAL:1s}
-      multiplier: ${KAFKA_CONSUMER_RETRY_MULTIPLIER:2.0}
-      max-interval: ${KAFKA_CONSUMER_RETRY_MAX_INTERVAL:30s}
+      error-topic: ${BOOTSTRAP_ERROR_TOPIC:smartkin.events.error.v1}
+      max-attempts: ${BOOTSTRAP_CONSUMER_MAX_ATTEMPTS:4}
+      initial-interval: ${BOOTSTRAP_CONSUMER_RETRY_INTERVAL:1s}
+      multiplier: ${BOOTSTRAP_CONSUMER_RETRY_MULTIPLIER:2.0}
+      max-interval: ${BOOTSTRAP_CONSUMER_RETRY_MAX_INTERVAL:30s}
   interaction-events:
     # How long raw interaction events are kept before MongoDB expires them (a TTL index on expiresAt)
     retention: ${SMARTKIN_INTERACTION_EVENTS_RETENTION:90d}
