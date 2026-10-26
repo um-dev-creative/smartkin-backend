@@ -209,6 +209,8 @@ Three steps, in this order, before the first start of the service in QA or produ
 
 Both scripts are safe to run again, and both stop with a clear message when something is wrong.
 
+The verification e-mail of a new account is sent by mercury with SmartKin's own template: deploy the mercury version that contains `sk_verification_es.ftl`, register the template in mercury's database with its seed script, and put the `template_defined_id` it prints in Vault as `PRX_VERIFICATION_CODE_TEMPLATE_ID` (not the same value as mercury's property of that name). The QA runbook, section 3, has the steps and what to look at when no mail arrives.
+
 The service itself also needs the Kafka connection settings, in Vault: for Aiven, `BOOTSTRAP_SECURITY_PROTOCOL=SSL`, the path of the CA (`BOOTSTRAP_SSL_TRUSTSTORE_LOCATION`) and of the client certificate and key (`BOOTSTRAP_SSL_KEYSTORE_CERT_LOCATION`, `BOOTSTRAP_SSL_KEYSTORE_KEY_LOCATION`), as seen inside the container (mount the files read-only). Without them the service connects without TLS and Aiven refuses it.
 
 ## Running in a container

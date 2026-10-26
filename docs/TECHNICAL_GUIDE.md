@@ -207,6 +207,21 @@ list can be stale for up to the TTL.
 ## Kafka events
 
 Two kinds of messages leave the service. Email requests go to mercury's topic (`EmailMessageProducerService`). Domain events go through `SmartKinEventPublisher` to the topics below
+
+**The e-mail that mercury sends (verification code).** `UserServiceImpl.toEmailMessageTO` publishes an `EmailMessageTO` to mercury's topic (`umdc.producer.mercury.topic`, Vault `MERCURY_EMAIL_TOPIC`, value `mercury-email-messages`) with `templateDefinedId` = `umdc.verification.code.template.id`, and the params `vc` (`####-####`) and `user_name`; it does not send `expiresInMinutes`. Mercury's templates for it are `sk_verification_{es,en}.ftl` (mercury `docs/smartkin-mail-templates.md`, registered by its `scripts/smartkin/seed-templates.sql`). The property name is shared with mercury, where it means something else:
+
+```mermaid
+flowchart LR
+    S["smartkin-backend<br/>umdc.verification.code.template.id<br/>= template_defined id of sk_verification_es.ftl"] -->|EmailMessageTO| T[topic mercury-email-messages]
+    T --> M[mercury]
+    M -->|template_defined, then template| F["sk_verification_es.ftl<br/>template type = verification code"]
+    C["mercury umdc.verification.code.template.id<br/>= the template TYPE id"] -.->|keeps the code only if the type matches| F
+    F --> E[SMTP]
+    S -->|POST /api/v1/verification-code| M
+```
+
+The two values are different: if SmartKin's holds a type id, mercury finds no template; if the template is not of the verification-code type, the mail goes out but mercury keeps no code and the confirmation answers 404. The setup steps are in the QA runbook, section 3.
+
 (contract and rules in `docs/decisions/D-4-domain-events-and-topics.md`).
 
 | Event | Topic | Key | Published by |

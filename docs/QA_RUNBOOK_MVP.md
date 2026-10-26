@@ -56,7 +56,7 @@ The consumer group is `smartkin-backend` (`BOOTSTRAP_CONSUMER_GROUP_ID`). Grant 
 
 ## 3. Values the service reads (Vault and Config Server)
 
-Nothing below goes in `config/local.env`: an environment variable shadows the Vault value. The full list of placeholders is in `src/main/resources/bootstrap.yml`; the groups are:
+Nothing below goes in `config/local.env`: an environment variable shadows the Vault value. The full list of placeholders is in `src/main/resources/application.yml` and in the Config Server file `smartkin-backend-remote-supabase.yml`; the groups are:
 
 | Group | Keys |
 | --- | --- |
@@ -67,7 +67,20 @@ Nothing below goes in `config/local.env`: an environment variable shadows the Va
 | MongoDB | `SMARTKIN_MONGO_HOST`, `_USERNAME`, `_PASSWORD`, `_DATABASE` |
 | Redis | `REVOCATION_REDIS_URL` (token revocation), `CACHE_REDIS_URL` (lesson cache; empty = no cache) |
 | Kafka | `umdc.bootstrap.server.url` / `.port`, plus, for a secured cluster such as Aiven: `BOOTSTRAP_SECURITY_PROTOCOL` (`SSL`), `BOOTSTRAP_SSL_TRUSTSTORE_LOCATION` (the CA), `BOOTSTRAP_SSL_KEYSTORE_CERT_LOCATION` and `BOOTSTRAP_SSL_KEYSTORE_KEY_LOCATION` (the client certificate and key; paths inside the container, mount the files read-only). Optional: `KAFKA_CONSUMER_*` |
+| Mercury e-mail | `MERCURY_EMAIL_TOPIC` (`mercury-email-messages`), `PRX_VERIFICATION_CODE_TEMPLATE_ID` (the `template_defined_id` of `sk_verification_es.ftl`, see below) |
 | Platform | `VAULT_TOKEN`, `VAULT_SERVER_URL`, `CNFS_URI`, `CNFS_PORT`, `SPRING_BOOT_PROFILE_ACTIVE`, `APP_PORT` |
+
+### The verification e-mail (mercury)
+
+SmartKin sends one e-mail, the verification code of a new account, and mercury renders and sends it. Do this once per environment, in order (mercury's side is in its `docs/smartkin-mail-templates.md`):
+
+1. **Mercury has the templates.** The files `sk_verification_es.ftl` and `sk_verification_en.ftl` are inside mercury's image, so mercury must be rebuilt and redeployed with the version that contains them.
+2. **Register them in mercury's database** with mercury's `scripts/smartkin/seed-templates.sql` (idempotent; try it on a copy first). It needs five ids: `app_id` (SmartKin's row in `general.application`, the same value as `APPLICATION_ID` here), `owner_id`, `verification_type_id` (the template type id mercury has as `PRX_VERIFICATION_CODE_TEMPLATE_ID`), `severity_id` and `frequency_id`. It prints the `template_defined_id` of each template.
+3. **Point SmartKin at the Spanish template.** In Vault set `PRX_VERIFICATION_CODE_TEMPLATE_ID` to the `template_defined_id` of `sk_verification_es.ftl`. Careful: mercury has a property of the same name that holds the template **type** id; the two are different values.
+4. **Point SmartKin at mercury's topic.** `MERCURY_EMAIL_TOPIC` must be `mercury-email-messages`, and that topic must exist (it is mercury's, not one of the four `smartkin.*` topics).
+5. **Check.** Register a user (step 6): the mail arrives with SmartKin's text and the code as `####-####`, and confirming it answers 200.
+
+If it does not work: no mail and a "Received incomplete Email message" line in mercury means the message lacked a field; a render error in mercury's log means the template is missing from the image or a parameter did not arrive; mail arrives but the confirmation answers 404 means the template is not of the verification-code type (run the seed script again, it corrects it).
 
 ## 4. Start the service
 
@@ -116,7 +129,8 @@ To verify the alert: repeat the failure of step 7 and confirm `SmartKinEventDead
 - [ ] Flyway shows V1 to V6 applied and `smartkin_app` can log in (BE-2, BE-3).
 - [ ] The four topics exist (BE-3).
 - [ ] `scripts/qa-smoke.sh` ends with `failed 0`, including the S-1 section (S-1, X-4).
-- [ ] Registration, verification and login work through the BFF (X-1).
+- [ ] The SmartKin verification templates are deployed in mercury, registered in its database, and `PRX_VERIFICATION_CODE_TEMPLATE_ID` holds the `template_defined_id` of `sk_verification_es.ftl`.
+- [ ] Registration, verification and login work through the BFF (X-1): the e-mail arrives with SmartKin's text and the code confirms.
 - [ ] The end-to-end flow works with the frontend and a failed event reaches the error topic (X-4).
 - [ ] The Vault token of commit `2eb6965` in smartkin-frontend was rotated (FE-2, S-4).
 - [ ] The alert fires in the failure drill (BE-14).
