@@ -129,7 +129,7 @@ class RedisLessonCatalogCacheTest {
                 .withUserConfiguration(RedisLessonCatalogCache.class, NoLessonCatalogCache.class);
 
         runner.run(context -> assertTrue(context.getBean(LessonCatalogCache.class) instanceof NoLessonCatalogCache));
-        runner.withPropertyValues("prx.cache.lesson-catalog.redis-url=" + RedisTestSupport.url(redis))
+        runner.withPropertyValues("umdc.cache.lesson-catalog.redis-url=" + RedisTestSupport.url(redis))
                 .run(context -> {
                     assertTrue(context.getBean(LessonCatalogCache.class) instanceof RedisLessonCatalogCache);
                     assertNotNull(context.getBean(LessonCatalogProperties.class));

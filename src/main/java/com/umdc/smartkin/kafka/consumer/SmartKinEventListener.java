@@ -16,7 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 /// A record that cannot be parsed or processed throws; the container's error handler (see [KafkaConsumerConfig]) retries it and
 /// finally moves it to the error topic, so one bad record never blocks the partition.
 @Component
-@ConditionalOnProperty(prefix = "prx.kafka.consumer", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "umdc.kafka.consumer", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SmartKinEventListener {
 
     private final ObjectMapper mapper;
@@ -29,12 +29,12 @@ public class SmartKinEventListener {
         this.achievements = achievements;
     }
 
-    @KafkaListener(topics = "${prx.kafka.topics.activity-assigned:smartkin.activity.assigned.v1}")
+    @KafkaListener(topics = "${umdc.kafka.topics.activity-assigned:smartkin.activity.assigned.v1}")
     public void onActivityAssigned(String json) {
         effects.onActivityAssigned(parse(json, ActivityAssignedPayload.class));
     }
 
-    @KafkaListener(topics = "${prx.kafka.topics.quiz-completed:smartkin.quiz.completed.v1}")
+    @KafkaListener(topics = "${umdc.kafka.topics.quiz-completed:smartkin.quiz.completed.v1}")
     public void onQuizCompleted(String json) {
         var event = parse(json, QuizCompletedPayload.class);
         effects.onQuizCompleted(event);
@@ -43,7 +43,7 @@ public class SmartKinEventListener {
         }
     }
 
-    @KafkaListener(topics = "${prx.kafka.topics.achievement-earned:smartkin.achievement.earned.v1}")
+    @KafkaListener(topics = "${umdc.kafka.topics.achievement-earned:smartkin.achievement.earned.v1}")
     public void onAchievementEarned(String json) {
         var event = parse(json, AchievementEarnedPayload.class);
         effects.onAchievementEarned(event);

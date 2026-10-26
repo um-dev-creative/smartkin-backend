@@ -43,7 +43,7 @@ Partitions and replication are a platform choice; the numbers below are a starti
 | `smartkin.activity.assigned.v1` | a parent assigned an activity | `KafkaTopicsProperties.activityAssigned` |
 | `smartkin.quiz.completed.v1` | a child finished a quiz | `quizCompleted` |
 | `smartkin.achievement.earned.v1` | an achievement was awarded | `achievementEarned` |
-| `smartkin.events.error.v1` | records that failed every retry | `KAFKA_ERROR_TOPIC` |
+| `smartkin.events.error.v1` | records that failed every retry | `BOOTSTRAP_ERROR_TOPIC` |
 
 ```sh
 for t in smartkin.activity.assigned.v1 smartkin.quiz.completed.v1 smartkin.achievement.earned.v1 smartkin.events.error.v1; do
@@ -52,7 +52,7 @@ done
 kafka-topics.sh --bootstrap-server "$KAFKA" --list | grep '^smartkin\.'      # four lines
 ```
 
-The consumer group is `smartkin-backend` (`KAFKA_CONSUMER_GROUP_ID`). Grant the service principal read on the three event topics and write on all four.
+The consumer group is `smartkin-backend` (`BOOTSTRAP_CONSUMER_GROUP_ID`). Grant the service principal read on the three event topics and write on all four.
 
 ## 3. Values the service reads (Vault and Config Server)
 
@@ -66,7 +66,7 @@ Nothing below goes in `config/local.env`: an environment variable shadows the Va
 | PostgreSQL | `SMARTKIN_DB_URI`, `SMARTKIN_DB_USERNAME`, `SMARTKIN_DB_PASSWORD`, optionally `SMARTKIN_FLYWAY_USERNAME` / `_PASSWORD` |
 | MongoDB | `SMARTKIN_MONGO_HOST`, `_USERNAME`, `_PASSWORD`, `_DATABASE` |
 | Redis | `REVOCATION_REDIS_URL` (token revocation), `CACHE_REDIS_URL` (lesson cache; empty = no cache) |
-| Kafka | `prx.bootstrap.server.url` / `.port`, plus, for a secured cluster such as Aiven: `KAFKA_SECURITY_PROTOCOL` (`SSL`), `KAFKA_SSL_TRUSTSTORE_LOCATION` (the CA), `KAFKA_SSL_KEYSTORE_CERT_LOCATION` and `KAFKA_SSL_KEYSTORE_KEY_LOCATION` (the client certificate and key; paths inside the container, mount the files read-only). Optional: `KAFKA_CONSUMER_*` |
+| Kafka | `umdc.bootstrap.server.url` / `.port`, plus, for a secured cluster such as Aiven: `BOOTSTRAP_SECURITY_PROTOCOL` (`SSL`), `BOOTSTRAP_SSL_TRUSTSTORE_LOCATION` (the CA), `BOOTSTRAP_SSL_KEYSTORE_CERT_LOCATION` and `BOOTSTRAP_SSL_KEYSTORE_KEY_LOCATION` (the client certificate and key; paths inside the container, mount the files read-only). Optional: `KAFKA_CONSUMER_*` |
 | Platform | `VAULT_TOKEN`, `VAULT_SERVER_URL`, `CNFS_URI`, `CNFS_PORT`, `SPRING_BOOT_PROFILE_ACTIVE`, `APP_PORT` |
 
 ## 4. Start the service

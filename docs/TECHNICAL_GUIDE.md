@@ -44,6 +44,28 @@ Precedence, from lowest to highest: `application.yml`, Vault, Config Server; an 
 
 `NativeRuntimeHints` registers the properties types bound during the import (`VaultProperties`, `VaultKeyValueBackendProperties`, `ConfigClientProperties`, `RetryProperties`, `TlsProperties` and their nested classes), which AOT cannot see because they are bound before the context exists (`NativeRuntimeHintsTest`).
 
+### Property prefix: `prx.*` is now `umdc.*`
+
+The service's own settings moved from the `prx` prefix to `umdc`, the prefix the `com.umdc` libraries already use, and the Kafka variables of `application.yml` were renamed from `KAFKA_*` to `BOOTSTRAP_*` (the names of the Vault keys). The code, the tests, `config/native.env` and the Config Server file `smartkin-backend-remote-supabase.yml` use the new names; **a Config Server or Vault entry that still uses the old ones is silently ignored** and the default applies (for example a revocation list that is not forced on).
+
+| Before | Now |
+| --- | --- |
+| `prx.bootstrap.server.url` / `.port` | `umdc.bootstrap.server.url` / `.port` |
+| `prx.producer.mercury.topic` | `umdc.producer.mercury.topic` |
+| `prx.verification.code.template.id` | `umdc.verification.code.template.id` |
+| `prx.smartkin.application-id` / `.role-id` | `umdc.smartkin.application-id` / `.role-id` |
+| `prx.clients.backbone.url` / `.mercury.url` | `umdc.clients.backbone.url` / `.mercury.url` |
+| `prx.security.revocation.*` | `umdc.security.revocation.*` |
+| `prx.cache.lesson-catalog.*` | `umdc.cache.lesson-catalog.*` |
+| `prx.kafka.consumer.*`, `.security.*`, `.topics.*` | `umdc.kafka.consumer.*`, `.security.*`, `.topics.*` |
+| `prx.interaction-events.retention` | `umdc.interaction-events.retention` |
+| `prx.logging.trace.enabled` | `umdc.logging.trace.enabled` (the same key the libraries read) |
+| `KAFKA_SECURITY_PROTOCOL`, `KAFKA_SASL_*`, `KAFKA_SSL_*` | `BOOTSTRAP_SECURITY_PROTOCOL`, `BOOTSTRAP_SASL_*`, `BOOTSTRAP_SSL_*` |
+| `KAFKA_CONSUMER_*`, `KAFKA_ERROR_TOPIC` | `BOOTSTRAP_CONSUMER_*`, `BOOTSTRAP_ERROR_TOPIC` |
+| `PRX_*` in `config/native.env` (AOT fallback) | `UMDC_*` |
+
+Verified by starting the service with this `application.yml` and the Config Server file imported above it: with Redis stopped, a valid session token answers 503 (the revocation list is forced on by the Config Server and the service fails closed), and with Redis up it reaches the repository.
+
 ## Authentication (`SessionTokenSecurityConfig`)
 
 Same model as mercury and zerobound-rest. The Spring Security chain (`SessionTokenSecurityConfig`) lets `umdc.api.endpoint` + `/**` (`/api/v1/**`), the health probes, `/error` and Swagger through and denies everything else; the authentication itself happens at the MVC layer in security-oauth's `SessionJwtInterceptor`, which reads the `session-token` header and asks `SessionJwtServiceImpl.isValid` (HMAC signature with `APP_TOKEN_SECRET`, expiry, token type `session-token`, and the `jti` revocation list in Redis; it fails closed with 503 when the list is down). Anything else answers 401.
@@ -77,7 +99,7 @@ flowchart LR
 | Script | Needs | Does | Refuses |
 | --- | --- | --- | --- |
 | `scripts/db-migrate.sh [info\|validate\|migrate]` | Docker, `SMARTKIN_DB_URI`, `SMARTKIN_FLYWAY_USERNAME`, `SMARTKIN_FLYWAY_PASSWORD` | runs the files of `src/main/resources/db/migration` with the Flyway CLI image `flyway/flyway:12.4.0` (the version Spring Boot 4.1.1 brings), schema `smartkin`, `validateOnMigrate`; the password reaches the container through the environment, not a command line; `info` (default) changes nothing | the pooler port 6543 (migrations need session locks), the `postgres` user (the tables would belong to it) unless `ALLOW_ADMIN_USER=1`, any other command |
-| `scripts/kafka-create-topics.sh [--dry-run]` | Docker (or `KAFKA_TOPICS_BIN`), `KAFKA_BOOTSTRAP_SERVERS`, optionally `KAFKA_CLIENT_PROPERTIES` | creates `smartkin.activity.assigned.v1`, `smartkin.quiz.completed.v1`, `smartkin.achievement.earned.v1` and `smartkin.events.error.v1` (same names and overrides as the service: `TOPIC_*`, `KAFKA_ERROR_TOPIC`) with `--if-not-exists`, then describes each and fails if one is missing or has fewer partitions than `PARTITIONS` (default 3, `REPLICATION_FACTOR` default 3) | a missing bootstrap list, a missing properties file; an existing topic is never altered |
+| `scripts/kafka-create-topics.sh [--dry-run]` | Docker (or `KAFKA_TOPICS_BIN`), `KAFKA_BOOTSTRAP_SERVERS`, optionally `KAFKA_CLIENT_PROPERTIES` | creates `smartkin.activity.assigned.v1`, `smartkin.quiz.completed.v1`, `smartkin.achievement.earned.v1` and `smartkin.events.error.v1` (same names and overrides as the service: `TOPIC_*`, `BOOTSTRAP_ERROR_TOPIC`) with `--if-not-exists`, then describes each and fails if one is missing or has fewer partitions than `PARTITIONS` (default 3, `REPLICATION_FACTOR` default 3) | a missing bootstrap list, a missing properties file; an existing topic is never altered |
 
 **Verified** (throwaway containers on a Docker network, 2026-10-25). Database: PostgreSQL 17, `smartkin_roles.sql`, then `db-migrate.sh migrate`: six migrations applied, 14 tables and 4 enums (decision D-2), all owned by `smartkin_owner`; a second run says "up to date"; `validate` passes; the application role reads and cannot create tables; the service jar then starts with `FLYWAY_ENABLED=true`, validates the six migrations from the CLI-created history, finds nothing pending and answers 404 (no profile) from the real tables. Kafka: Apache Kafka 4.2.0 single node: the four topics are created with 3 partitions, a second run changes nothing, a replication factor of 3 on one broker fails with exit code 1, expecting more partitions than exist fails, and a message round-trips on `smartkin.activity.assigned.v1`. **Not verified:** Supabase (TLS parameters, pooler user suffix, platform limits on role management) and the real broker (SASL/SSL client properties, ACLs for the service principal: read on the three event topics, write on all four).
 
@@ -136,7 +158,7 @@ MongoDB holds what the relational model should not carry: lesson scene scripts a
 | `quiz_attempts` | One document per attempt, with answers and score | unique `childId` + `lessonId` + `attemptNumber`; `childId` + `completedAt` desc; `assignmentId` |
 | `interaction_events` | Raw taps, drops and choices, kept for analysis | `childId` + `lessonId` + `occurredAt` desc; `attemptId`; TTL on `expiresAt` (0 s) |
 
-`InteractionEventService.record(...)` stamps `expiresAt = now + prx.interaction-events.retention` (`SMARTKIN_INTERACTION_EVENTS_RETENTION`, default 90 days, an assumption to
+`InteractionEventService.record(...)` stamps `expiresAt = now + umdc.interaction-events.retention` (`SMARTKIN_INTERACTION_EVENTS_RETENTION`, default 90 days, an assumption to
 confirm with the data-protection policy for minors). MongoDB's TTL monitor runs about once a minute, so expiry is not instantaneous.
 
 | Variable | Default | Purpose |
@@ -195,11 +217,11 @@ Two kinds of messages leave the service. Email requests go to mercury's topic (`
 
 Messages are JSON envelopes (`eventId`, `type`, `schemaVersion`, `occurredAt`, `subjectId`, `payload`). Delivery is at least once and not transactional with the databases; consumers dedupe
 by `eventId` and ignore unknown fields. `publish` returns a `CompletableFuture`, which completes exceptionally when Kafka rejects the record. Topics must be created by the platform team;
-the application does not create them. Producer settings come from `prx.bootstrap.server.url` and `prx.bootstrap.server.port` (`KafkaProducerConfig`).
+the application does not create them. Producer settings come from `umdc.bootstrap.server.url` and `umdc.bootstrap.server.port` (`KafkaProducerConfig`).
 
 ### Consuming events and failures (KF-2, KF-3)
 
-`SmartKinEventListener` has one `@KafkaListener` per topic (names from `prx.kafka.topics.*`, group `prx.kafka.consumer.group-id`) and hands the parsed event to
+`SmartKinEventListener` has one `@KafkaListener` per topic (names from `umdc.kafka.topics.*`, group `umdc.kafka.consumer.group-id`) and hands the parsed event to
 `EventEffectsService`, one transaction per event:
 
 | Event | Effect |
@@ -212,8 +234,8 @@ The points rule (points = quiz score) is an assumption of this task; change it i
 (`PointRepository.existsBySourceType...`, `NotificationRepository.existsByUserId...`); the partial unique indexes of `V3` guarantee it if two consumers race. A child that is not
 registered in SmartKin makes the event fail (so it is retried and finally dead-lettered) instead of being dropped.
 
-Failures are handled by `KafkaConsumerConfig`'s `DefaultErrorHandler`: exponential back-off (`prx.kafka.consumer.max-attempts` total tries, `initial-interval`, `multiplier`, `max-interval`),
-then `DeadLetterPublishingRecoverer` publishes the original key and value to `prx.kafka.consumer.error-topic` (one topic for all events, partition chosen by Kafka) with the standard
+Failures are handled by `KafkaConsumerConfig`'s `DefaultErrorHandler`: exponential back-off (`umdc.kafka.consumer.max-attempts` total tries, `initial-interval`, `multiplier`, `max-interval`),
+then `DeadLetterPublishingRecoverer` publishes the original key and value to `umdc.kafka.consumer.error-topic` (one topic for all events, partition chosen by Kafka) with the standard
 `kafka_dlt-*` headers (exception class, message, stack trace, original topic/partition/offset). `JacksonException` and `IllegalArgumentException` are not retried. Retries block the
 partition (ordering per child is preserved) for at most the sum of the delays, about 7s with the defaults. Nothing reads the error topic automatically: replay is manual
 (re-publish the value to the original topic once the cause is fixed; the idempotent effects make that safe).
@@ -222,11 +244,11 @@ Open points: events are not published by any service yet, so the consumers are e
 
 ### Connecting to a secured cluster (Aiven)
 
-The producer and the consumer share `KafkaSecurityProperties` (`prx.kafka.security.*`). Until it existed they set only `bootstrap.servers`, so a cluster that requires TLS, such as Aiven, could not be reached. With the default (`PLAINTEXT`) it adds nothing to the client configuration, so local brokers and the Testcontainers tests behave as before. The environment variables are the ones mercury uses, so the Vault values can be shared.
+The producer and the consumer share `KafkaSecurityProperties` (`umdc.kafka.security.*`). Until it existed they set only `bootstrap.servers`, so a cluster that requires TLS, such as Aiven, could not be reached. With the default (`PLAINTEXT`) it adds nothing to the client configuration, so local brokers and the Testcontainers tests behave as before. The settings live under `umdc.kafka.security` and application.yml reads them from the `BOOTSTRAP_SECURITY_PROTOCOL`, `BOOTSTRAP_SSL_*` and `BOOTSTRAP_SASL_*` variables (the Vault keys, which are not the `KAFKA_*` names mercury uses).
 
 ```mermaid
 flowchart LR
-    V["Vault / Config Server<br/>KAFKA_SECURITY_PROTOCOL, KAFKA_SSL_*, KAFKA_SASL_*"] --> P["KafkaSecurityProperties<br/>prx.kafka.security.*"]
+    V["Vault / Config Server<br/>BOOTSTRAP_SECURITY_PROTOCOL, BOOTSTRAP_SSL_*, BOOTSTRAP_SASL_*"] --> P["KafkaSecurityProperties<br/>umdc.kafka.security.*"]
     F["Mounted files<br/>ca.pem, service.cert, service.key"] -->|read when the factory is built| P
     P -->|clientProperties| PF[Producer factory]
     P -->|clientProperties| CF[Consumer factory]
@@ -236,12 +258,12 @@ flowchart LR
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `KAFKA_SECURITY_PROTOCOL` | `PLAINTEXT` | `PLAINTEXT`, `SSL` (client certificate), `SASL_PLAINTEXT` or `SASL_SSL` (user and password); anything else stops the start with the valid values |
-| `KAFKA_SSL_TRUSTSTORE_LOCATION`, `_TYPE`, `_PASSWORD` | empty, `PEM` | the CA that signed the brokers (Aiven's `ca.pem`); `_PASSWORD` only for `PKCS12`/`JKS` |
-| `KAFKA_SSL_KEYSTORE_CERT_LOCATION`, `KAFKA_SSL_KEYSTORE_KEY_LOCATION` | empty | the client certificate and key **as two files**, the way Aiven delivers them; both are read and handed to the client as PEM text |
-| `KAFKA_SSL_KEYSTORE_LOCATION`, `_TYPE`, `_PASSWORD`, `KAFKA_SSL_KEY_PASSWORD` | empty, `PEM` | alternative: one file with key and certificate, or a `PKCS12`/`JKS` store; it wins over the two-file form |
-| `KAFKA_SSL_ENDPOINT_ID_ALGO` | `https` | host name check of the brokers; an empty value turns it off |
-| `KAFKA_SASL_MECHANISM`, `KAFKA_SASL_JAAS_CONFIG` | `SCRAM-SHA-256`, empty | for `SASL_*`; the JAAS line carries the user and password, so it belongs in Vault |
+| `BOOTSTRAP_SECURITY_PROTOCOL` | `PLAINTEXT` | `PLAINTEXT`, `SSL` (client certificate), `SASL_PLAINTEXT` or `SASL_SSL` (user and password); anything else stops the start with the valid values |
+| `BOOTSTRAP_SSL_TRUSTSTORE_LOCATION`, `_TYPE`, `_PASSWORD` | empty, `PEM` | the CA that signed the brokers (Aiven's `ca.pem`); `_PASSWORD` only for `PKCS12`/`JKS` |
+| `BOOTSTRAP_SSL_KEYSTORE_CERT_LOCATION`, `BOOTSTRAP_SSL_KEYSTORE_KEY_LOCATION` | empty | the client certificate and key **as two files**, the way Aiven delivers them; both are read and handed to the client as PEM text |
+| `BOOTSTRAP_SSL_KEYSTORE_LOCATION`, `_TYPE`, `_PASSWORD`, `BOOTSTRAP_SSL_KEY_PASSWORD` | empty, `PEM` | alternative: one file with key and certificate, or a `PKCS12`/`JKS` store; it wins over the two-file form |
+| `BOOTSTRAP_SSL_ENDPOINT_ID_ALGO` | `https` | host name check of the brokers; an empty value turns it off |
+| `BOOTSTRAP_SASL_MECHANISM`, `BOOTSTRAP_SASL_JAAS_CONFIG` | `SCRAM-SHA-256`, empty | for `SASL_*`; the JAAS line carries the user and password, so it belongs in Vault |
 
 Files are read from the file system (`file:` is optional) and never from the classpath: a GraalVM binary does not embed them and a private key does not belong in an image. A file that cannot be read stops the start with its path, never its content, and `toString()` of the properties hides every password and the JAAS line. Verified against a real Aiven service (read-only): an `AdminClient` built from these properties connected over TLS with the CA and the certificate and key in two files and listed the four SmartKin topics. Unit tests: `KafkaSecurityPropertiesTest` (12), `KafkaProducerConfigTest` and the consumer cases of `KafkaConsumerConfigTest`.
 
@@ -830,12 +852,12 @@ The first box is the assumption of S-1: everything after it is covered by tests.
 
 ## Feign client URLs
 
-`@FeignClient(url = "${prx.clients.backbone.url}")` and `${prx.clients.mercury.url}` are resolved from `bootstrap.yml`, where
+`@FeignClient(url = "${umdc.clients.backbone.url}")` and `${umdc.clients.mercury.url}` are resolved from `bootstrap.yml`, where
 `BACKBONE_URL` and `MERCURY_URL` override the QA defaults. `FeignClientUrlConfigTest` checks the placeholders, the defaults and the override.
 
 ## Library property names
 
-The com.umdc libraries bind `umdc.*` properties, not the old `prx.*` ones: `umdc.security.auth.clients` (outbound clients backbone and mercury), `umdc.security.jwt.{secret,expirationMs}`, `umdc.api.endpoint`, `umdc.backbone.base-url`, `umdc.management.clientRoles`, `umdc.logging.trace.enabled`. `LibraryPropertiesBindingTest` binds them from `bootstrap.yml`. The application's own settings keep the `prx.*` prefix (`prx.clients.*`, `prx.security.revocation.*`, `prx.cache.*`, `prx.kafka.*`, `prx.smartkin.*`).
+The com.umdc libraries bind `umdc.*` properties, not the old `prx.*` ones: `umdc.security.auth.clients` (outbound clients backbone and mercury), `umdc.security.jwt.{secret,expirationMs}`, `umdc.api.endpoint`, `umdc.backbone.base-url`, `umdc.management.clientRoles`, `umdc.logging.trace.enabled`. `LibraryPropertiesBindingTest` binds them from `bootstrap.yml`. The application's own settings keep the `prx.*` prefix (`umdc.clients.*`, `umdc.security.revocation.*`, `umdc.cache.*`, `umdc.kafka.*`, `umdc.smartkin.*`).
 
 ## Known gaps
 

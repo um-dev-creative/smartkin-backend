@@ -23,7 +23,7 @@ public class InteractionEventService {
 
     @Autowired
     public InteractionEventService(InteractionEventRepository repository,
-                                   @Value("${prx.interaction-events.retention:90d}") Duration retention) {
+                                   @Value("${umdc.interaction-events.retention:90d}") Duration retention) {
         this(repository, Clock.systemUTC(), retention);
     }
 

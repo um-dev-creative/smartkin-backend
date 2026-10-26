@@ -116,8 +116,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "spring.flyway.password=",
         "spring.data.mongodb.auto-index-creation=true",
         "spring.mongodb.uri=mongodb://localhost/ignored",
-        "prx.kafka.consumer.initial-interval=100ms",
-        "prx.kafka.consumer.max-interval=200ms"
+        "umdc.kafka.consumer.initial-interval=100ms",
+        "umdc.kafka.consumer.max-interval=200ms"
 })
 class EndToEndFlowContainerTest {
 
@@ -135,8 +135,8 @@ class EndToEndFlowContainerTest {
 
     @DynamicPropertySource
     static void kafkaProperties(DynamicPropertyRegistry registry) {
-        registry.add("prx.bootstrap.server.url", kafka::getBootstrapServers);
-        registry.add("prx.kafka.consumer.group-id", () -> "e2e-" + UUID.randomUUID());
+        registry.add("umdc.bootstrap.server.url", kafka::getBootstrapServers);
+        registry.add("umdc.kafka.consumer.group-id", () -> "e2e-" + UUID.randomUUID());
     }
 
     @BeforeAll

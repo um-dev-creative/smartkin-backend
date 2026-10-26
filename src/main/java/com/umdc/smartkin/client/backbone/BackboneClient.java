@@ -12,7 +12,7 @@ import java.util.UUID;
 
 import static com.umdc.security.constant.ConstantApp.SESSION_TOKEN_KEY;
 
-@FeignClient(name = "backboneClient", url = "${prx.clients.backbone.url}", configuration = BackboneFeignConfigurer.class)
+@FeignClient(name = "backboneClient", url = "${umdc.clients.backbone.url}", configuration = BackboneFeignConfigurer.class)
 public interface BackboneClient {
 
     @GetMapping("/api/v1/session/validate")

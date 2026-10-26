@@ -20,7 +20,7 @@ class KafkaConsumerConfigTest {
             .withUserConfiguration(KafkaConsumerConfig.class)
             .withBean(KafkaOperations.class, () -> mock(KafkaOperations.class))
             .withBean(io.micrometer.core.instrument.MeterRegistry.class, io.micrometer.core.instrument.simple.SimpleMeterRegistry::new)
-            .withPropertyValues("prx.bootstrap.server.url=broker");
+            .withPropertyValues("umdc.bootstrap.server.url=broker");
 
     @Test
     void defaultsMatchTheDocumentedValues() {
@@ -51,7 +51,7 @@ class KafkaConsumerConfigTest {
     @Test
     @SuppressWarnings("unchecked")
     void buildsTheConsumerFactoryWithTheBrokerAndGroup() {
-        runner.withPropertyValues("prx.bootstrap.server.port=9092", "prx.kafka.consumer.group-id=my-group").run(context -> {
+        runner.withPropertyValues("umdc.bootstrap.server.port=9092", "umdc.kafka.consumer.group-id=my-group").run(context -> {
             var factory = context.getBean(ConsumerFactory.class);
             assertEquals("broker:9092", factory.getConfigurationProperties().get("bootstrap.servers"));
             assertEquals("my-group", factory.getConfigurationProperties().get("group.id"));
@@ -66,9 +66,9 @@ class KafkaConsumerConfigTest {
                 context.getBean(ConsumerFactory.class).getConfigurationProperties().containsKey("security.protocol")));
 
         runner.withPropertyValues(
-                "prx.kafka.security.protocol=SASL_SSL",
-                "prx.kafka.security.sasl.jaas-config=login",
-                "prx.kafka.security.ssl.truststore-location=/k/ca.pem").run(context -> {
+                "umdc.kafka.security.protocol=SASL_SSL",
+                "umdc.kafka.security.sasl.jaas-config=login",
+                "umdc.kafka.security.ssl.truststore-location=/k/ca.pem").run(context -> {
             var configuration = context.getBean(ConsumerFactory.class).getConfigurationProperties();
             assertEquals("SASL_SSL", configuration.get("security.protocol"));
             assertEquals("login", configuration.get("sasl.jaas.config"));
@@ -86,7 +86,7 @@ class KafkaConsumerConfigTest {
 
     @Test
     void thereAreNoConsumersWhenDisabled() {
-        runner.withPropertyValues("prx.kafka.consumer.enabled=false").run(context ->
+        runner.withPropertyValues("umdc.kafka.consumer.enabled=false").run(context ->
                 assertFalse(context.containsBean("kafkaListenerContainerFactory")));
     }
 

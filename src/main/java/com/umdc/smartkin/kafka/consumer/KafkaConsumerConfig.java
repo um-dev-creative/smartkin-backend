@@ -28,13 +28,13 @@ import java.util.concurrent.ConcurrentHashMap;
 @Configuration
 @EnableKafka
 @EnableConfigurationProperties({KafkaConsumerProperties.class, KafkaSecurityProperties.class})
-@ConditionalOnProperty(prefix = "prx.kafka.consumer", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "umdc.kafka.consumer", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class KafkaConsumerConfig {
 
     private final String brokers;
 
-    public KafkaConsumerConfig(@Value("${prx.bootstrap.server.url}") String bootstrapServers,
-                               @Value("${prx.bootstrap.server.port:}") String bootstrapServerPort) {
+    public KafkaConsumerConfig(@Value("${umdc.bootstrap.server.url}") String bootstrapServers,
+                               @Value("${umdc.bootstrap.server.port:}") String bootstrapServerPort) {
         this.brokers = bootstrapServerPort.isEmpty() ? bootstrapServers : String.format("%s:%s", bootstrapServers, bootstrapServerPort);
     }
 

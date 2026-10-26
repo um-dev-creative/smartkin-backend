@@ -36,8 +36,8 @@ class FeignClientUrlConfigTest {
 
     @Test
     void clientsReadTheirBaseUrlFromProperties() {
-        assertEquals("${prx.clients.backbone.url}", urlOf(BackboneClient.class));
-        assertEquals("${prx.clients.mercury.url}", urlOf(MercuryClient.class));
+        assertEquals("${umdc.clients.backbone.url}", urlOf(BackboneClient.class));
+        assertEquals("${umdc.clients.mercury.url}", urlOf(MercuryClient.class));
     }
 
     @Test

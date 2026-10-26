@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 
 import java.time.Duration;
 
-/// Consumer settings (`prx.kafka.consumer.*`).
+/// Consumer settings (`umdc.kafka.consumer.*`).
 ///
 /// @param enabled         turns the listeners off, e.g. for a deployment that only produces
 /// @param groupId         consumer group of the listeners
@@ -14,7 +14,7 @@ import java.time.Duration;
 /// @param initialInterval wait before the first retry
 /// @param multiplier      growth of the wait between retries
 /// @param maxInterval     upper bound of the wait between retries
-@ConfigurationProperties("prx.kafka.consumer")
+@ConfigurationProperties("umdc.kafka.consumer")
 public record KafkaConsumerProperties(
         @DefaultValue("true") boolean enabled,
         @DefaultValue("smartkin-backend") String groupId,

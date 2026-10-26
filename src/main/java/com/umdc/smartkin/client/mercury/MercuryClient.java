@@ -16,7 +16,7 @@ import java.util.UUID;
 import static com.umdc.security.constant.ConstantApp.SESSION_TOKEN_KEY;
 
 /// Feign client for the Mercury service. This client is used to interact with the Mercury service.
-@FeignClient(name = "mercuryClient", url = "${prx.clients.mercury.url}", configuration = {MercuryFeignConfigurer.class})
+@FeignClient(name = "mercuryClient", url = "${umdc.clients.mercury.url}", configuration = {MercuryFeignConfigurer.class})
 public interface MercuryClient {
     String SESSION_TOKEN_BKD_KEY = "session-token-bkd";
 
