@@ -43,7 +43,7 @@ services:
     # Published to the host, where nginx (the only public entry point) proxies api.umdc-qa.tst/smartkin-backend/ to it over HTTPS.
     # Keep 8166 closed to everything but nginx with the host firewall.
     ports:
-      - "443:8166"
+      - "8166:8166"
     # `docker stop` sends SIGTERM to the JVM / native binary (PID 1); Spring needs a few seconds to stop the Kafka listeners and
     # close the pools before the default 10 s would SIGKILL it.
     stop_grace_period: 30s
@@ -81,42 +81,6 @@ services:
     env_file:
       - ../smartkin-frontend/local.env   # PORT, ENVM, VAULT_URI, VAULT_PATH, IS_DEBUG_ENABLED
       - secrets/local.env                # VAULT_TOKEN
-    networks:
-      nginx_umdc-net:
-        aliases:
-          - smartkin-frontend
-    ports:
-      - "443:7003"
-    depends_on:
-      - smartkin-backend
-    stop_grace_period: 15s
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-
-  # Frontend (Angular SSR + Express, HTTPS). Built from the sibling repo ../smartkin-frontend. nginx proxies smartkin.tst to it
-  # (upstream smartkin-frontend -> apps2-host:443, container port 7003). It reads its settings from Vault with the same token.
-  smartkin-frontend:
-    build:
-      context: ../smartkin-frontend
-    container_name: smartkin-frontend
-    image: lamata/smartkin-frontend:${SMARTKIN_FRONTEND_TAG:-0.0.1}
-    hostname: umdc-qa
-    domainname: smartkin-frontend.tst
-    dns_search:
-      - tst
-    extra_hosts:
-      - "vault.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
-      - "config-server.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
-      - "api.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
-    env_file:
-      - secrets/local.env       # VAULT_TOKEN
-    environment:
-      PORT: "7003"
-      ENVM: ${SMARTKIN_FRONTEND_ENVM:-qa}
-      VAULT_URI: https://vault.umdc-qa.tst
-      VAULT_PATH: ${SMARTKIN_FRONTEND_VAULT_PATH:?define SMARTKIN_FRONTEND_VAULT_PATH (shell or .env)}
-      IS_DEBUG_ENABLED: "false"
     networks:
       nginx_umdc-net:
         aliases:
