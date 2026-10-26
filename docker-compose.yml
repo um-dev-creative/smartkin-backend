@@ -81,42 +81,18 @@ services:
     env_file:
       - ../smartkin-frontend/local.env   # PORT, ENVM, VAULT_URI, VAULT_PATH, IS_DEBUG_ENABLED
       - secrets/local.env                # VAULT_TOKEN
-    networks:
-      nginx_umdc-net:
-        aliases:
-          - smartkin-frontend
-    ports:
-      - "443:7003"
-    depends_on:
-      - smartkin-backend
-    stop_grace_period: 15s
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-
-  # Frontend (Angular SSR + Express, HTTPS). Built from the sibling repo ../smartkin-frontend. nginx proxies smartkin.tst to it
-  # (upstream smartkin-frontend -> apps2-host:443, container port 7003). It reads its settings from Vault with the same token.
-  smartkin-frontend:
-    build:
-      context: ../smartkin-frontend
-    container_name: smartkin-frontend
-    image: lamata/smartkin-frontend:${SMARTKIN_FRONTEND_TAG:-0.0.1}
-    hostname: umdc-qa
-    domainname: smartkin-frontend.tst
-    dns_search:
-      - tst
-    extra_hosts:
-      - "vault.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
-      - "config-server.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
-      - "api.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
-    env_file:
-      - secrets/local.env       # VAULT_TOKEN
     environment:
-      PORT: "7003"
-      ENVM: ${SMARTKIN_FRONTEND_ENVM:-qa}
-      VAULT_URI: https://vault.umdc-qa.tst
-      VAULT_PATH: ${SMARTKIN_FRONTEND_VAULT_PATH:?define SMARTKIN_FRONTEND_VAULT_PATH (shell or .env)}
-      IS_DEBUG_ENABLED: "false"
+      # Vault (and the rest of *.umdc-qa.tst, through nginx) present certificates signed by the internal CA, which Node does not trust
+      # by default: without it Vault fails with UNABLE_TO_VERIFY_LEAF_SIGNATURE.
+      NODE_EXTRA_CA_CERTS: /usr/src/app/ssl/umdc-local-ca.crt
+    volumes:
+      # Issued by ../nginx (generate-all.sh); override the folder with TLS_DIR.
+      - type: bind
+        source: ${TLS_DIR:-../nginx/config/ssl}/umdc-local-ca.crt
+        target: /usr/src/app/ssl/umdc-local-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       nginx_umdc-net:
         aliases:
