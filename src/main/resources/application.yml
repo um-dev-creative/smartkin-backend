@@ -15,12 +15,12 @@ umdc:
       topic: ${MERCURY_EMAIL_TOPIC}  # the e-mail messages mercury consumes (mercury's topic, not a smartkin.* one)
   bootstrap:
     server:
-      port: ${BOOTSTRAP_SERVER_PORT}
+      port: ${BOOTSTRAP_SERVER_PORT:}  # optional: empty when BOOTSTRAP_SERVER_URI already carries host:port
       url: ${BOOTSTRAP_SERVER_URI}
   api:
     endpoint: /api/v1
   backbone:
-    base-url: ${BACKBONE_BASE_URL}
+    base-url: ${umdc.clients.backbone.url}
   management:
     clientRoles: ${AUTH_ROLE_ID}
   logging:
@@ -279,7 +279,7 @@ swagger:
     description: ${app.description}
     contact:
       name: 'Luis Antonio Mata'
-      url: 'www.umdevcreative.com'
+      url: 'https://umdc.net'
       email: 'luis.antonio.mata@gmail.com'
     cache:
       disabled: true

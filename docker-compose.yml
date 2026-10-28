@@ -26,15 +26,26 @@ services:
       - tst
     # A container does not read the host's /etc/hosts, so the *.umdc-qa.tst names (Vault, Config Server, backbone and mercury through
     # nginx) do not resolve inside it, and Vault would then be skipped silently. UMDC_GATEWAY_IP (shell or .env) = the machine running
-    # nginx; the default host-gateway is the Docker host itself, which works when nginx publishes :443 there.
+    # nginx; the default 192.168.50.49 is the LAN nginx (the address of these names in the hosts file of the dev machines). Use
+    # UMDC_GATEWAY_IP=host-gateway when nginx runs on the Docker host itself.
     extra_hosts:
-      - "vault.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
-      - "config-server.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
-      - "api.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
-      - "monitor.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
+      - "vault.umdc-qa.tst:${UMDC_GATEWAY_IP:-192.168.50.49}"
+      - "config-server.umdc-qa.tst:${UMDC_GATEWAY_IP:-192.168.50.49}"
+      - "api.umdc-qa.tst:${UMDC_GATEWAY_IP:-192.168.50.49}"
+      - "monitor.umdc-qa.tst:${UMDC_GATEWAY_IP:-192.168.50.49}"
     env_file:
       - config/local.env
       - secrets/local.env
+    # The keystores are read from certs/smartkin (git-ignored, copied privately to each machine), not from the image: the native binary
+    # does not embed them, and a stale SSL_*_LOCATION in an old config/local.env (e.g. file:certs/...) cannot break the start, because
+    # these values win over env_file. Without certs/smartkin, Docker mounts an empty folder and the start fails at umdc-truststore.jks.
+    environment:
+      SSL_KEYSTORE_LOCATION: smartkin.jks
+      SSL_TRUSTSTORE_LOCATION: umdc-truststore.jks
+      SSL_KEYSTORE_URL: file:/usr/local/runme/certs/smartkin/smartkin.jks
+      SSL_TRUSTSTORE_URL: file:/usr/local/runme/certs/smartkin/umdc-truststore.jks
+    volumes:
+      - ./certs/smartkin:/usr/local/runme/certs/smartkin:ro
     networks:
       nginx_umdc-net:
         ipv4_address: 172.22.0.12
@@ -51,7 +62,7 @@ services:
     # The image carries its own HEALTHCHECK (liveness over the loopback); declared here too so `docker compose ps` shows it even
     # for an image built elsewhere. Liveness does not depend on Postgres, MongoDB, Redis or Kafka.
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1:8166/actuator/health/liveness >/dev/null 2>&1 || curl -fsk https://127.0.0.1:8166/actuator/health/liveness >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1:443/actuator/health/liveness >/dev/null 2>&1 || curl -fsk https://127.0.0.1:443/actuator/health/liveness >/dev/null 2>&1"]
       interval: 15s
       timeout: 3s
       retries: 5
@@ -76,7 +87,7 @@ services:
     dns_search:
       - tst
     extra_hosts:
-      - "api.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
+      - "api.umdc-qa.tst:${UMDC_GATEWAY_IP:-192.168.50.49}"
     env_file:
       - ../smartkin-frontend/local.env   # PORT, SMARTKIN_API_URL, BACKBONE_BASE_URL, BACKBONE_APPLICATION_ID, BACKBONE_CLIENT_ID, ...
       - secrets/local.env                # BACKBONE_CLIENT_SECRET (git-ignored)
