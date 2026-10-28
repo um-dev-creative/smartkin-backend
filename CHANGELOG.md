@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `docker-compose.yml`: the `smartkin-frontend` container did not trust the internal CA of the `*.umdc-qa.tst` services (Node ships its own CA list), so its calls through nginx failed with `UNABLE_TO_VERIFY_LEAF_SIGNATURE`. It now mounts `umdc-local-ca.crt` (from `${TLS_DIR:-../nginx/config/ssl}`, issued by `../nginx`) read-only and sets `NODE_EXTRA_CA_CERTS` to it.
 - `docker-compose.yml` did not parse (`mapping key "smartkin-frontend" already defined`): commit `287d4fc` added back the old `smartkin-frontend` block, the one with inline settings and a required `SMARTKIN_FRONTEND_VAULT_PATH`. Only the block that reads `../smartkin-frontend/local.env` stays. The backend stays published on host port 443 (`443:8166`). The frontend also publishes 443, so do not run both on the same machine.
 - `docker-compose.yml`: the backend failed on a second machine with `class path resource [umdc-truststore.jks] does not exist` and then with "Network is unreachable" towards Vault. Fixed in two ways:
   - The service now mounts `./certs/smartkin` read-only. In its own `environment` it sets `SSL_KEYSTORE_URL`/`SSL_TRUSTSTORE_URL` (`file:/usr/local/runme/certs/smartkin/...`) and the bare `SSL_*_LOCATION` names. These values take precedence over `env_file`, so an old `config/local.env` with `file:certs/...` no longer breaks the start, and no local override is needed.

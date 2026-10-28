@@ -91,6 +91,18 @@ services:
     env_file:
       - ../smartkin-frontend/local.env   # PORT, SMARTKIN_API_URL, BACKBONE_BASE_URL, BACKBONE_APPLICATION_ID, BACKBONE_CLIENT_ID, ...
       - secrets/local.env                # BACKBONE_CLIENT_SECRET (git-ignored)
+    environment:
+      # api.umdc-qa.tst and the other *.umdc-qa.tst names (through nginx) present certificates signed by the internal CA, which Node
+      # does not trust by default: without it the calls fail with UNABLE_TO_VERIFY_LEAF_SIGNATURE.
+      NODE_EXTRA_CA_CERTS: /usr/src/app/ssl/umdc-local-ca.crt
+    volumes:
+      # Issued by ../nginx (generate-all.sh); override the folder with TLS_DIR.
+      - type: bind
+        source: ${TLS_DIR:-../nginx/config/ssl}/umdc-local-ca.crt
+        target: /usr/src/app/ssl/umdc-local-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       nginx_umdc-net:
         aliases:
