@@ -50,7 +50,7 @@ class FeignClientUrlConfigTest {
 
     @Test
     void environmentVariablesOverrideTheDefaults() throws IOException {
-        var resolver = resolver(Map.of("BACKBONE_URL", "https://backbone.example/api", "MERCURY_URL", "https://mercury.example/api"));
+        var resolver = resolver(Map.of("BACKBONE_BASE_URL", "https://backbone.example/api", "MERCURY_BASE_URL", "https://mercury.example/api"));
 
         assertEquals("https://backbone.example/api", resolver.resolvePlaceholders(urlOf(BackboneClient.class)));
         assertEquals("https://mercury.example/api", resolver.resolvePlaceholders(urlOf(MercuryClient.class)));
