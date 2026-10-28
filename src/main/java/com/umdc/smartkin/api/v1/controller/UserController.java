@@ -1,5 +1,6 @@
 package com.umdc.smartkin.api.v1.controller;
 
+import com.umdc.security.annotation.SkipSessionValidation;
 import com.umdc.smartkin.api.v1.service.UserService;
 import com.umdc.smartkin.api.v1.to.GetUserResponse;
 import com.umdc.smartkin.api.v1.to.PutUserRequest;
@@ -30,6 +31,7 @@ public class UserController implements UserApi {
     /// @param userCreateRequest the request object containing user details
     /// @return a ResponseEntity containing the UserCreateResponse
     @Override
+    @SkipSessionValidation("Public sign-up: the visitor has no session yet; backbone-rest validates the data and the account starts unverified")
     public ResponseEntity<UserCreateResponse> createUserPost(UserCreateRequest userCreateRequest) {
         return userService.create(userCreateRequest);
     }
