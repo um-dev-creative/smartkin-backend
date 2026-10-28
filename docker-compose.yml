@@ -75,7 +75,8 @@ services:
       - /tmp
 
   # Frontend (Angular SSR + Express, HTTPS). Built from the sibling repo ../smartkin-frontend. nginx proxies smartkin.tst to it
-  # (upstream smartkin-frontend -> apps2-host:443, container port 7003). It reads its settings from Vault with the same token.
+  # (upstream smartkin-frontend -> apps2-host:443, container port 7003). All its settings are environment variables, as in
+  # zerobound-frontend: the non-secret ones are in ../smartkin-frontend/local.env, the secret one in secrets/local.env.
   smartkin-frontend:
     build:
       context: ../smartkin-frontend
@@ -86,12 +87,10 @@ services:
     dns_search:
       - tst
     extra_hosts:
-      - "vault.umdc-qa.tst:${UMDC_GATEWAY_IP:-192.168.50.49}"
-      - "config-server.umdc-qa.tst:${UMDC_GATEWAY_IP:-192.168.50.49}"
       - "api.umdc-qa.tst:${UMDC_GATEWAY_IP:-192.168.50.49}"
     env_file:
-      - ../smartkin-frontend/local.env   # PORT, ENVM, VAULT_URI, VAULT_PATH, IS_DEBUG_ENABLED
-      - secrets/local.env                # VAULT_TOKEN
+      - ../smartkin-frontend/local.env   # PORT, SMARTKIN_API_URL, BACKBONE_BASE_URL, BACKBONE_APPLICATION_ID, BACKBONE_CLIENT_ID, ...
+      - secrets/local.env                # BACKBONE_CLIENT_SECRET (git-ignored)
     networks:
       nginx_umdc-net:
         aliases:
