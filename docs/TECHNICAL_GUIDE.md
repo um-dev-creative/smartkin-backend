@@ -293,7 +293,7 @@ Same scheme as mercury, backbone-rest and zerobound-rest; the choices that diffe
 | `Dockerfile.native` | GraalVM Community 25 on Debian 12 (not the Oracle Linux image: its glibc needs x86-64-v3), Maven 3.9.14, native profile, runtime on `debian:12-slim` with `curl` for the probe. Secrets: `maven_settings` (Repsy credentials, optional) and `prx_internal_ca` (optional); build context `umdc-local` re-seeds the `com.umdc` artifacts when Repsy is down. Stages: `graalvm` and `maven` (toolchains, downloaded in parallel), `builder` (AOT + `native:compile`), runtime. Optional build args: `NATIVE_QUICK_BUILD`, `BUILD_COMMIT`, `BUILD_BRANCH`, `BUILD_TIME`. No `go-offline` layer on purpose: the `com.umdc` artifacts are purged before each build so a re-published `0.0.x` is never stale, and the cache mount already keeps the rest of the dependency tree. |
 | `config/native.env` | Dummy values for every `${VAR}` without default, so Spring AOT can refresh the context. `SPRING_BOOT_PROFILE_ACTIVE` is empty on purpose (AOT bakes active profiles into the binary). Never a deployment config. |
 | `config/local.env`, `secrets/local.env` | Versioned bootstrap identity vs. git-ignored `VAULT_TOKEN`. Do not add Vault-provided variables here: an environment variable shadows Vault. |
-| `docker-compose.yml` | One service, IP `172.22.0.12` (9 = backbone, 10 = mercury, 11 = zerobound), `extra_hosts` for the `*.umdc-qa.tst` names, `read_only` + `tmpfs /tmp`, `no-new-privileges`, `stop_grace_period: 30s`. |
+| `docker-compose.yml` | `smartkin-backend` (`443:8166`) and `smartkin-frontend` (`443:7003`, settings from `../smartkin-frontend/local.env`). Both use host port 443, so they run on different machines. The backend mounts `./certs/smartkin` read-only. Its `environment` (which wins over `env_file`) sets `SSL_KEYSTORE_URL`/`SSL_TRUSTSTORE_URL` to `file:/usr/local/runme/certs/smartkin/...`, so the JVM and the native image read the same keystores. `UMDC_GATEWAY_IP` defaults to the LAN nginx `192.168.50.49`. The backend has IP `172.22.0.12` (9 = backbone, 10 = mercury, 11 = zerobound), `extra_hosts` for the `*.umdc-qa.tst` names, `read_only` + `tmpfs /tmp`, `no-new-privileges`, `stop_grace_period: 30s`. |
 
 **TLS material.** `certs/smartkin/` is git-ignored and is copied onto the classpath by `pom.xml`, because the TLS bundle and the security library read `classpath:` names. The truststore must hold a trusted certificate entry; a keystore with only a private key is not a truststore. The `umdc.security.keystore`/`truststore` properties are gone: only the library's `SecurityConfig` read them (see Authentication), and it is no longer scanned. `SSL_KEYSTORE_URL` and `SSL_TRUSTSTORE_URL` (optional, with a scheme, e.g. `file:/usr/local/runme/certs/smartkin/smartkin.jks`) override the classpath names for the TLS bundle, Vault, the Config Server and Eureka; the JVM jar keeps using the classpath, the native binary (which does not embed the `.jks`) reads them from a mounted path.
 
@@ -868,7 +868,7 @@ The first box is the assumption of S-1: everything after it is covered by tests.
 ## Feign client URLs
 
 `@FeignClient(url = "${umdc.clients.backbone.url}")` and `${umdc.clients.mercury.url}` are resolved from `bootstrap.yml`, where
-`BACKBONE_URL` and `MERCURY_URL` override the QA defaults. `FeignClientUrlConfigTest` checks the placeholders, the defaults and the override.
+`BACKBONE_BASE_URL` and `MERCURY_BASE_URL` override the QA defaults. `FeignClientUrlConfigTest` checks the placeholders, the defaults and the override.
 
 ## Library property names
 
