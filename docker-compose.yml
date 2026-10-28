@@ -64,7 +64,8 @@ services:
       - /tmp
 
   # Frontend (Angular SSR + Express, HTTPS). Built from the sibling repo ../smartkin-frontend. nginx proxies smartkin.tst to it
-  # (upstream smartkin-frontend -> apps2-host:443, container port 7003). It reads its settings from Vault with the same token.
+  # (upstream smartkin-frontend -> apps2-host:443, container port 7003). All its settings are environment variables, as in
+  # zerobound-frontend: the non-secret ones are in ../smartkin-frontend/local.env, the secret one in secrets/local.env.
   smartkin-frontend:
     build:
       context: ../smartkin-frontend
@@ -75,48 +76,10 @@ services:
     dns_search:
       - tst
     extra_hosts:
-      - "vault.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
-      - "config-server.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
       - "api.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
     env_file:
-      - ../smartkin-frontend/local.env   # PORT, ENVM, VAULT_URI, VAULT_PATH, IS_DEBUG_ENABLED
-      - secrets/local.env                # VAULT_TOKEN
-    networks:
-      nginx_umdc-net:
-        aliases:
-          - smartkin-frontend
-    ports:
-      - "443:7003"
-    depends_on:
-      - smartkin-backend
-    stop_grace_period: 15s
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-
-  # Frontend (Angular SSR + Express, HTTPS). Built from the sibling repo ../smartkin-frontend. nginx proxies smartkin.tst to it
-  # (upstream smartkin-frontend -> apps2-host:443, container port 7003). It reads its settings from Vault with the same token.
-  smartkin-frontend:
-    build:
-      context: ../smartkin-frontend
-    container_name: smartkin-frontend
-    image: lamata/smartkin-frontend:${SMARTKIN_FRONTEND_TAG:-0.0.1}
-    hostname: umdc-qa
-    domainname: smartkin-frontend.tst
-    dns_search:
-      - tst
-    extra_hosts:
-      - "vault.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
-      - "config-server.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
-      - "api.umdc-qa.tst:${UMDC_GATEWAY_IP:-host-gateway}"
-    env_file:
-      - secrets/local.env       # VAULT_TOKEN
-    environment:
-      PORT: "7003"
-      ENVM: ${SMARTKIN_FRONTEND_ENVM:-qa}
-      VAULT_URI: https://vault.umdc-qa.tst
-      VAULT_PATH: ${SMARTKIN_FRONTEND_VAULT_PATH:?define SMARTKIN_FRONTEND_VAULT_PATH (shell or .env)}
-      IS_DEBUG_ENABLED: "false"
+      - ../smartkin-frontend/local.env   # PORT, SMARTKIN_API_URL, BACKBONE_BASE_URL, BACKBONE_APPLICATION_ID, BACKBONE_CLIENT_ID, ...
+      - secrets/local.env                # BACKBONE_CLIENT_SECRET (git-ignored)
     networks:
       nginx_umdc-net:
         aliases:
