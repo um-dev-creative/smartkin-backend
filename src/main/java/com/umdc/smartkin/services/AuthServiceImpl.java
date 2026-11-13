@@ -6,6 +6,7 @@ import com.umdc.security.to.AuthRequest;
 import com.umdc.security.to.AuthResponse;
 import com.umdc.smartkin.client.backbone.BackboneClient;
 import com.umdc.smartkin.client.mercury.MercuryClient;
+import com.umdc.smartkin.client.mercury.MercuryTokens;
 import feign.FeignException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,18 +31,22 @@ public class AuthServiceImpl implements AuthService {
     private final SessionJwtService sessionJwtService;
     private final BackboneClient backboneClient;
     private final MercuryClient mercuryClient;
+    private final MercuryTokens mercuryTokens;
 
     /**
      * Constructor for AuthServiceImpl.
      *
      * @param sessionJwtService the service for generating JWT tokens
      * @param backboneClient    the client for interacting with the backbone service
-     * @param mercuryClient     the client for interacting with the backbone service
+     * @param mercuryClient     the client for interacting with the mercury service
+     * @param mercuryTokens     SmartKin's Mercury M2M token (from its Backbone managed client)
      */
-    public AuthServiceImpl(SessionJwtService sessionJwtService, BackboneClient backboneClient, MercuryClient mercuryClient) {
+    public AuthServiceImpl(SessionJwtService sessionJwtService, BackboneClient backboneClient, MercuryClient mercuryClient,
+                           MercuryTokens mercuryTokens) {
         this.sessionJwtService = sessionJwtService;
         this.backboneClient = backboneClient;
         this.mercuryClient = mercuryClient;
+        this.mercuryTokens = mercuryTokens;
     }
 
     /**
@@ -82,10 +87,9 @@ public class AuthServiceImpl implements AuthService {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         }
 
-        var mercuryToken = mercuryClient.token(sessionTokenBkd, authRequest);
         UUID userId = getUidFromToken(sessionTokenBkd);
         try {
-            verificationCodeCompleted = mercuryClient.isVerificationCodeDone(mercuryToken.token(), userId);
+            verificationCodeCompleted = mercuryTokens.withToken(mercuryToken -> mercuryClient.isVerificationCodeDone(mercuryToken, userId));
             parameters.put("vcCompleted", verificationCodeCompleted.toString());
             parameters.put("uid", userId.toString());
         } catch (FeignException.NotFound e) {

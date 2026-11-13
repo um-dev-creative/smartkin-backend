@@ -85,6 +85,42 @@ flowchart LR
 
 **Verified on the JVM jar** (a throwaway PostgreSQL, a token signed with the configured secret): a valid `session-token` reaches the repository (before the change the same token answered 401 from the library's chain); a token signed with another key, an unsigned one (`alg: none`), an expired one and a request with no token answer 401; `/actuator/health/liveness` is `UP` and `/actuator/env` is 403. This is the local half of finding S-1 in `docs/SECURITY_REVIEW_MVP.md`; the check against the real environment (Redis revocation list, the PRX library as deployed) still belongs to `scripts/qa-smoke.sh` in QA.
 
+## Authentication towards mercury (M2M token from the Backbone token)
+
+SmartKin is a *client application* of mercury. It no longer has an alias and a password in mercury (the login clients were removed there);
+it exchanges the Backbone M2M token of its managed client for mercury's own M2M token.
+
+```mermaid
+sequenceDiagram
+    participant S as SmartKin (MercuryTokens)
+    participant B as backbone-rest
+    participant M as mercury
+    S->>B: POST /api/v1/managed-clients/token {clientId, clientSecret, scopes}
+    B-->>S: accessToken (Backbone M2M), expiresIn
+    S->>M: POST /api/v1/auth/token, Authorization: Bearer <Backbone M2M>
+    M->>B: introspect the Bearer (application_id, scopes)
+    M-->>S: token (mercury M2M: sub=client, aid=application, scope)
+    S->>M: POST /api/v1/verification-code, session-token: <mercury M2M>
+    M-->>S: 200 / 4xx
+```
+
+| Piece | Role |
+| --- | --- |
+| `client/mercury/MercuryTokens` | Gets and caches both tokens (until one minute before `expiresIn` / the JWT `exp`; 5 minutes when `exp` cannot be read). `withToken(call)` runs a mercury call and, on a 401, drops both caches and repeats it once. Thread-safe (one lock). |
+| `client/backbone/BackboneManagedClient` | Feign client of `POST /api/v1/managed-clients/token`. **No `configuration`:** the endpoint is public and takes the credentials in the body, so the OAuth Bearer of `BackboneFeignConfigurer` must not be added. |
+| `client/mercury/MercuryAuthClient` | Feign client of mercury's `POST /api/v1/auth/token`. **No `configuration`** either: its `Authorization` is the Backbone M2M token, and `MercuryFeignConfigurer` would add a second one. |
+| `client/mercury/MercuryClient` | The calls that carry mercury's token in `session-token` (`confirmCode`, `isVerificationCodeDone`). It keeps `MercuryFeignConfigurer`. |
+
+Properties (`application.yml`, under `umdc.clients.mercury.m2m`): `client-id` (`MERCURY_M2M_CLIENT_ID`), `client-secret`
+(`MERCURY_M2M_CLIENT_SECRET`), `scopes` (`MERCURY_M2M_SCOPES`, default `mercury:message:read,mercury:message:write`). Empty id or secret makes
+`MercuryTokens.token()` throw `IllegalStateException` (the context still starts). Neither token nor secret is ever logged: the records
+override `toString`. mercury only lets the application Backbone ties to the client act (it answers 403 for another one), so the client must be
+SmartKin's.
+
+The old `MERCURY_CLIENT_*`/`MERCURY_USERNAME`/`MERCURY_PASSWORD` entries of `umdc.security.auth.clients` still feed `MercuryFeignConfigurer`'s
+Bearer; mercury ignores it on these paths. Tests: `MercuryTokensTest` (exchange, cache expiry, fallback, retry on 401, not configured),
+`UserRegisterServiceImplTest`, `AuthServiceImplTest`, `FeignClientUrlConfigTest`.
+
 ## Environment setup scripts
 
 Three scripts bring an empty environment to the point where the service can start. Run them in this order; each is idempotent and takes its secrets from the environment (Vault), never from a file in the repository.

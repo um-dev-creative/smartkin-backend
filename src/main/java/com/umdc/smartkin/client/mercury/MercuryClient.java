@@ -1,7 +1,5 @@
 package com.umdc.smartkin.client.mercury;
 
-import com.umdc.security.to.AuthRequest;
-import com.umdc.smartkin.client.backbone.to.PrxTokenString;
 import com.umdc.smartkin.client.mercury.to.VerificationCodeRequest;
 import com.umdc.smartkin.interceptor.MercuryFeignConfigurer;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -15,11 +13,10 @@ import java.util.UUID;
 
 import static com.umdc.security.constant.ConstantApp.SESSION_TOKEN_KEY;
 
-/// Feign client for the Mercury service. This client is used to interact with the Mercury service.
+/// Feign client for the Mercury service. Every call carries Mercury's M2M token in `session-token`; get it from [MercuryTokens]
+/// (the exchange itself is [MercuryAuthClient]).
 @FeignClient(name = "mercuryClient", url = "${umdc.clients.mercury.url}", configuration = {MercuryFeignConfigurer.class})
 public interface MercuryClient {
-    String SESSION_TOKEN_BKD_KEY = "session-token-bkd";
-
     /// Sends a verification code to the specified phoneNumber number.
     ///
     /// @param sessionToken the session token used to authenticate the request
@@ -27,17 +24,6 @@ public interface MercuryClient {
     /// @return a ResponseEntity containing the response of the verification code operation
     @PostMapping("/api/v1/verification-code")
     ResponseEntity<Void> confirmCode(@RequestHeader(SESSION_TOKEN_KEY) String sessionToken, VerificationCodeRequest verificationCodeRequest);
-
-    /// Generates a session token based on the provided authentication request.
-    ///
-    /// @param sessionToken the session token used to authenticate the request
-    /// @param authRequest the authentication request containing user alias
-    /// @return a PrxTokenString containing the authentication response with the session token
-    ///
-    /// @see AuthRequest
-    /// @see ResponseEntity
-    @PostMapping("/api/v1/auth/token")
-    PrxTokenString token(@RequestHeader(SESSION_TOKEN_BKD_KEY) String sessionToken, AuthRequest authRequest);
 
     /**
      * Checks the latest verification code status for a user.

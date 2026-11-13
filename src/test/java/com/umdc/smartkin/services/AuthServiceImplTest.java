@@ -3,8 +3,8 @@ package com.umdc.smartkin.services;
 import com.umdc.security.service.SessionJwtService;
 import com.umdc.security.to.AuthRequest;
 import com.umdc.smartkin.client.backbone.BackboneClient;
-import com.umdc.smartkin.client.backbone.to.PrxTokenString;
 import com.umdc.smartkin.client.mercury.MercuryClient;
+import com.umdc.smartkin.client.mercury.MercuryTokens;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 
 import static com.umdc.smartkin.support.TestData.feign;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -39,16 +40,23 @@ class AuthServiceImplTest {
     private BackboneClient backboneClient;
     @Mock
     private MercuryClient mercuryClient;
+    @Mock
+    private MercuryTokens mercuryTokens;
 
     private AuthServiceImpl service;
     private String backboneToken;
 
     @BeforeEach
     void setUp() {
-        service = new AuthServiceImpl(sessionJwtService, backboneClient, mercuryClient);
+        service = new AuthServiceImpl(sessionJwtService, backboneClient, mercuryClient, mercuryTokens);
         var payload = Base64.getUrlEncoder().withoutPadding()
                 .encodeToString(("{\"uid\":\"" + USER + "\"}").getBytes(StandardCharsets.UTF_8));
         backboneToken = "h." + payload + ".s";
+    }
+
+    @SuppressWarnings("unchecked")
+    private void runsCallsWithTheMercuryToken() {
+        when(mercuryTokens.withToken(any())).thenAnswer(call -> ((Function<String, Object>) call.getArgument(0)).apply("mercury"));
     }
 
     @Test
@@ -78,7 +86,7 @@ class AuthServiceImplTest {
     @Test
     void addsTheVerificationStatusWhenMercuryKnowsTheUser() {
         var request = new AuthRequest("alopez", "pwd");
-        when(mercuryClient.token(backboneToken, request)).thenReturn(new PrxTokenString("mercury"));
+        runsCallsWithTheMercuryToken();
         when(mercuryClient.isVerificationCodeDone("mercury", USER)).thenReturn(true);
         when(sessionJwtService.generateSessionToken(eq("alopez"), any())).thenReturn("jwt");
 
@@ -95,7 +103,7 @@ class AuthServiceImplTest {
     @Test
     void marksTheVerificationAsIncompleteWhenMercuryHasNoCode() {
         var request = new AuthRequest("alopez", "pwd");
-        when(mercuryClient.token(backboneToken, request)).thenReturn(new PrxTokenString("mercury"));
+        runsCallsWithTheMercuryToken();
         when(mercuryClient.isVerificationCodeDone("mercury", USER)).thenThrow(feign(404));
         when(sessionJwtService.generateSessionToken(eq("alopez"), any())).thenReturn("jwt");
 
@@ -111,13 +119,13 @@ class AuthServiceImplTest {
     @Test
     void rejectsABlankAliasWhenCheckingTheVerification() {
         assertEquals(HttpStatus.BAD_REQUEST, service.token(new AuthRequest("", "pwd"), backboneToken).getStatusCode());
-        verifyNoInteractions(mercuryClient);
+        verifyNoInteractions(mercuryClient, mercuryTokens);
     }
 
     @Test
     void answersNotAcceptableWhenTheVerifiedTokenIsBlank() {
         var request = new AuthRequest("alopez", "pwd");
-        when(mercuryClient.token(backboneToken, request)).thenReturn(new PrxTokenString("mercury"));
+        runsCallsWithTheMercuryToken();
         when(mercuryClient.isVerificationCodeDone("mercury", USER)).thenReturn(false);
         when(sessionJwtService.generateSessionToken(any(), any())).thenReturn("");
 

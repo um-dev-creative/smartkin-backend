@@ -14,9 +14,23 @@ OpenAPI UI (springdoc) when the service is running.
 | Update a user | `PUT /api/v1/users/{userId}` | |
 | Delete a user | `DELETE /api/v1/users/{userId}` | |
 | Generate a session token | `POST /api/v1/auth/session-token` | Body with `alias` and `password` |
-| Confirm a verification code | registration controller | Delegated to mercury |
+| Confirm a verification code | registration controller | Delegated to mercury, which SmartKin calls as an application (see below) |
 
 Authenticated calls carry the session token in the header defined by `SESSION_TOKEN_KEY` (`session-token`).
+
+## How SmartKin talks to mercury
+
+SmartKin proves to mercury who it is with the credentials of its own Backbone **managed client**, not with an alias and a password.
+Operators set it up once:
+
+1. In Backbone, create SmartKin's managed client, tied to the SmartKin application, with the scopes `mercury:message:read` and
+   `mercury:message:write`. There is one client per application.
+2. Put its id and secret in Vault as `MERCURY_M2M_CLIENT_ID` and `MERCURY_M2M_CLIENT_SECRET`. `MERCURY_M2M_SCOPES` is optional (default: both scopes).
+3. Remove nothing else is needed from the user's side: a person signing up and confirming the e-mail code sees no change.
+
+If the two variables are missing, confirming a code answers 500 with `SmartKin's Backbone managed client is not configured`. If Backbone
+refuses the client (wrong secret, missing scope), the same call fails with the status Backbone returned. mercury answers 403 when the
+client has no application in Backbone or lacks the scopes.
 
 ## What changed for operators in this release
 
