@@ -1,10 +1,8 @@
 package com.umdc.smartkin.api.v1.service;
 
-import com.umdc.security.to.AuthRequest;
 import com.umdc.smartkin.api.v1.to.ConfirmCodeRequest;
-import com.umdc.smartkin.client.backbone.BackboneClient;
-import com.umdc.smartkin.client.backbone.to.PrxTokenString;
 import com.umdc.smartkin.client.mercury.MercuryClient;
+import com.umdc.smartkin.client.mercury.MercuryTokens;
 import com.umdc.smartkin.client.mercury.to.VerificationCodeRequest;
 import com.umdc.smartkin.mapper.ConfirmCodeMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,12 +16,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import static com.umdc.smartkin.support.TestData.APPLICATION_ID;
 import static com.umdc.smartkin.support.TestData.USER_ID;
-import static com.umdc.smartkin.support.TestData.backboneUser;
 import static com.umdc.smartkin.support.TestData.feign;
-import static com.umdc.smartkin.support.TestData.person;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -39,7 +36,7 @@ class UserRegisterServiceImplTest {
     @Mock
     private MercuryClient mercuryClient;
     @Mock
-    private BackboneClient backboneClient;
+    private MercuryTokens mercuryTokens;
     @Mock
     private ConfirmCodeMapper confirmCodeMapper;
 
@@ -48,28 +45,31 @@ class UserRegisterServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new UserRegisterServiceImpl(mercuryClient, confirmCodeMapper, backboneClient);
+        service = new UserRegisterServiceImpl(mercuryClient, mercuryTokens, confirmCodeMapper);
         ReflectionTestUtils.setField(service, "applicationId", APPLICATION_ID);
-        when(backboneClient.findUserById(USER_ID)).thenReturn(backboneUser(person("Phone"), List.of(), List.of()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private void runsCallsWithTheMercuryToken() {
+        when(mercuryTokens.withToken(any())).thenAnswer(call -> ((Function<String, Object>) call.getArgument(0)).apply(MERCURY_TOKEN));
     }
 
     @Test
     void confirmsTheCodeWithTheMercuryToken() {
         var verificationRequest = mock(VerificationCodeRequest.class);
-        when(mercuryClient.token(any(), any(AuthRequest.class))).thenReturn(new PrxTokenString(MERCURY_TOKEN));
+        runsCallsWithTheMercuryToken();
         when(confirmCodeMapper.toVerificationCodeRequest(request, APPLICATION_ID)).thenReturn(verificationRequest);
         when(mercuryClient.confirmCode(MERCURY_TOKEN, verificationRequest)).thenReturn(ResponseEntity.noContent().build());
 
         var response = service.confirmCode(SESSION_BKD, request);
 
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-        verify(mercuryClient).token(SESSION_BKD, new AuthRequest("alopez", "pwd"));
+        verify(mercuryClient).confirmCode(MERCURY_TOKEN, verificationRequest);
     }
 
     @Test
     void relaysTheMercuryStatusAndMessageHeader() {
-        when(mercuryClient.token(any(), any(AuthRequest.class)))
-                .thenThrow(feign(422, Map.of("message", List.of("Invalid code"))));
+        when(mercuryTokens.withToken(any())).thenThrow(feign(422, Map.of("message", List.of("Invalid code"))));
 
         var response = service.confirmCode(SESSION_BKD, request);
 
@@ -79,7 +79,7 @@ class UserRegisterServiceImplTest {
 
     @Test
     void relaysTheStatusWithAnEmptyMessageWhenMercuryDoesNotSendOne() {
-        when(mercuryClient.token(any(), any(AuthRequest.class))).thenThrow(feign(500));
+        when(mercuryTokens.withToken(any())).thenThrow(feign(500));
 
         var response = service.confirmCode(SESSION_BKD, request);
 
