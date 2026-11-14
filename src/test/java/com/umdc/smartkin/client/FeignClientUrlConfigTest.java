@@ -38,6 +38,9 @@ class FeignClientUrlConfigTest {
     void clientsReadTheirBaseUrlFromProperties() {
         assertEquals("${umdc.clients.backbone.url}", urlOf(BackboneClient.class));
         assertEquals("${umdc.clients.mercury.url}", urlOf(MercuryClient.class));
+        // the token exchanges go to the same two services, with their own (Bearer-less) clients
+        assertEquals("${umdc.clients.backbone.url}", urlOf(com.umdc.smartkin.client.backbone.BackboneManagedClient.class));
+        assertEquals("${umdc.clients.mercury.url}", urlOf(com.umdc.smartkin.client.mercury.MercuryAuthClient.class));
     }
 
     @Test
