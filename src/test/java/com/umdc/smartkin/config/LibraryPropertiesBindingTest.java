@@ -85,7 +85,7 @@ class LibraryPropertiesBindingTest {
         var environment = environmentOverApplicationYml();
 
         assertEquals("/api/v1", environment.getProperty("umdc.api.endpoint"));
-        assertEquals("https://prx-qa.backbone.tst/backbone", environment.getProperty("umdc.backbone.base-url"));
+        assertEquals("https://api.umdc-qa.tst/backbone", environment.getProperty("umdc.backbone.base-url"));
         assertEquals("role", environment.getProperty("umdc.management.clientRoles"));
         assertEquals("false", environment.getProperty("umdc.logging.trace.enabled"));
     }

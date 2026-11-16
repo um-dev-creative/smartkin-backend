@@ -1,5 +1,7 @@
 package com.umdc.smartkin.client.mercury;
 
+import com.umdc.smartkin.client.mercury.to.MercuryMessageRequest;
+import com.umdc.smartkin.client.mercury.to.MercuryMessageResponse;
 import com.umdc.smartkin.client.mercury.to.VerificationCodeRequest;
 import com.umdc.smartkin.interceptor.MercuryFeignConfigurer;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -17,6 +19,18 @@ import static com.umdc.security.constant.ConstantApp.SESSION_TOKEN_KEY;
 /// (the exchange itself is [MercuryAuthClient]).
 @FeignClient(name = "mercuryClient", url = "${umdc.clients.mercury.url}", configuration = {MercuryFeignConfigurer.class})
 public interface MercuryClient {
+
+    /// Hands a message to mercury (`POST /api/v1/messages`): it answers 202 with the state `OPENED` and delivers asynchronously.
+    ///
+    /// @param sessionToken   mercury's M2M token
+    /// @param idempotencyKey the same key with the same request is accepted once; a retry answers the first message
+    /// @param request        the message
+    /// @return mercury's acknowledgement
+    @PostMapping("/api/v1/messages")
+    ResponseEntity<MercuryMessageResponse> sendMessage(@RequestHeader(SESSION_TOKEN_KEY) String sessionToken,
+                                                       @RequestHeader("Idempotency-Key") String idempotencyKey,
+                                                       MercuryMessageRequest request);
+
     /// Sends a verification code to the specified phoneNumber number.
     ///
     /// @param sessionToken the session token used to authenticate the request

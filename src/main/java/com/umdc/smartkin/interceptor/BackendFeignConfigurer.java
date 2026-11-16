@@ -1,26 +1,17 @@
 package com.umdc.smartkin.interceptor;
 
-import com.umdc.commons.general.pojo.UserSession;
-import com.umdc.commons.general.to.TokenResponse;
 import com.umdc.security.properties.ClientProperties;
+import feign.Client;
 import feign.RequestInterceptor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.restclient.RestTemplateBuilder;
+import org.springframework.boot.ssl.SslBundles;
+import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.Collection;
-import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
-import static org.springframework.cloud.openfeign.security.OAuth2AccessTokenInterceptor.BEARER;
-import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 
 /**
  * An abstract class that provides a template for configuring Feign clients with custom behaviors
@@ -41,12 +32,14 @@ import static org.springframework.http.HttpHeaders.AUTHORIZATION;
  */
 public abstract class BackendFeignConfigurer {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(BackendFeignConfigurer.class);
     protected static final String BACKBONE_ID = "backbone";
     protected static final String MERCURY_ID = "mercury";
+    private static final String SSL_BUNDLE = "smartkin-security";
 
-    @Value("${umdc.logging.trace.enabled}")
-    private boolean isTraceEnabled;
+    /// The SSL bundles of the application. The token endpoint is behind nginx with the internal CA, which the JVM trust store does not
+    /// hold; the `smartkin-security` bundle does.
+    @Autowired(required = false)
+    private SslBundles sslBundles;
 
     /**
      * Holds the configuration properties specific to the client for which this
@@ -76,76 +69,28 @@ public abstract class BackendFeignConfigurer {
 
     abstract RequestInterceptor requestInterceptor();
 
-    /**
-     * Creates a {@link RequestInterceptor} that customizes the behavior of the Feign client by adding
-     * an authorization header and, if enabled, logging the request headers for debugging purposes.
-     *
-     * The interceptor retrieves a token based on the provided {@code ClientProperties} and appends it
-     * as a Bearer Token in the authorization header of the request. If trace logging is enabled,
-     * the method logs all headers from the outgoing request.
-     *
-     * @return a {@link RequestInterceptor} that adds an authorization header and logs request headers
-     *         when tracing is enabled.
-     */
-    protected RequestInterceptor createInterceptor() {
-        return template -> {
-            try {
-                assert clientProperties != null;
-                String token = getToken(clientProperties);
-                template.header(AUTHORIZATION, BEARER.concat(" ").concat(token));
-                if (isTraceEnabled) {
-                    logHeaders(template.headers());
-                }
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        };
-    }
-
-    /**
-     * Retrieves an authentication token by making a POST request to the specified server URI
-     * using the provided client properties.
-     *
-     * @param clientProperties the client properties containing credentials and configuration
-     *                          required to obtain the token. Must include grant type, client ID,
-     *                          username, password, client secret, and redirect URI.
-     * @return the authentication token as a {@code String}.
-     * @throws Exception if the token could not be retrieved due to an error during the server interaction.
-     */
-    protected String getToken(ClientProperties clientProperties) throws Exception {
-        RestTemplate client = new RestTemplate();
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
-        MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
-        parameters.add("grant_type", clientProperties.getAuthorizationGrantType());
-        parameters.add("client_id", clientProperties.getClientId());
-        parameters.add("username", clientProperties.getUsername());
-        parameters.add("password", clientProperties.getPassword());
-        parameters.add("client_secret", clientProperties.getClientSecret());
-
-        var response = client.postForObject(clientProperties.getRedirectUri(), new HttpEntity<>(parameters, headers), TokenResponse.class);
-        if (Objects.isNull(response)) {
-            LOGGER.error("Error occurred while connecting with the Manager authenticator");
-            throw new Exception("Error occurred while connecting with the Manager authenticator");
+    /// Builds the client for the token endpoint. It trusts what the `smartkin-security` bundle trusts (the internal CA); without bundles
+    /// (plain unit tests) it falls back to the JVM defaults.
+    protected RestTemplate restTemplate() {
+        if (Objects.isNull(sslBundles)) {
+            return new RestTemplate();
         }
-        return create(response, UUID.randomUUID()).token();
-    }
-
-    private void logHeaders(Map<String, Collection<String>> headers) {
-        LOGGER.info("Headers key/value :::::");
-        headers.forEach((key, value) -> LOGGER.info("KEY: {}, VALUE: {} :::::", key, value));
+        return new RestTemplateBuilder().sslBundle(sslBundles.getBundle(SSL_BUNDLE)).build();
     }
 
     /**
-     * Creates a new {@link UserSession} instance using the provided token response and UUID.
+     * The HTTP client of the Feign calls. Feign's default one trusts only the JVM trust store, which lacks the internal CA of the
+     * {@code *.umdc-qa.tst} services (PKIX path building failed); this one trusts the {@code smartkin-security} bundle, as the
+     * token request does.
      *
-     * @param tokenResponse the {@link TokenResponse} containing the access token used to establish the session
-     * @param id the unique identifier for the session
-     * @return a new {@link UserSession} instance initialized with the provided UUID and access token
+     * @return the client Feign sends its requests with
      */
-    protected static UserSession create(TokenResponse tokenResponse, UUID id) {
-        return new UserSession(id, null, tokenResponse.accessToken());
+    @Bean
+    Client feignHttpClient() {
+        if (Objects.isNull(sslBundles)) {
+            return new Client.Default(null, null);
+        }
+        return new Client.Default(sslBundles.getBundle(SSL_BUNDLE).createSslContext().getSocketFactory(), null);
     }
 
     /**

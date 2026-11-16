@@ -43,6 +43,10 @@ public interface BackboneClient {
     @PutMapping(value = "/api/v1/roles/find/{roleId}", produces = {MediaType.APPLICATION_JSON_VALUE})
     ResponseEntity<Role> findRoleById(@PathVariable UUID roleId);
 
+    // Activates a user so that it can sign in (backbone refuses the session of an inactive one). Needs the users:manage scope.
+    @PutMapping("/api/v1/users/application/{applicationId}/user/{userId}/activate")
+    ResponseEntity<Void> activateUser(@PathVariable UUID applicationId, @PathVariable UUID userId);
+
     @DeleteMapping("/api/v1/users/application/{applicationId}/user/{userId}")
     ResponseEntity<Void> deleteUserByUserIdAndApplicationId(@PathVariable UUID applicationId, @PathVariable UUID userId);
 

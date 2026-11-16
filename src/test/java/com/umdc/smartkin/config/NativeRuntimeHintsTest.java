@@ -1,5 +1,15 @@
 package com.umdc.smartkin.config;
 
+import com.umdc.smartkin.achievement.AchievementRule;
+import com.umdc.smartkin.achievement.AchievementRuleType;
+import com.umdc.smartkin.catalog.LessonSummary;
+import com.umdc.smartkin.kafka.event.EventType;
+import com.umdc.smartkin.kafka.event.SmartKinEvent;
+import com.umdc.smartkin.kafka.event.payload.AchievementEarnedPayload;
+import com.umdc.smartkin.kafka.event.payload.ActivityAssignedPayload;
+import com.umdc.smartkin.kafka.event.payload.QuizCompletedPayload;
+import com.umdc.smartkin.client.mercury.to.MercuryMessageRequest;
+import com.umdc.smartkin.client.mercury.to.MercuryMessageResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.util.UUID;
@@ -36,6 +46,23 @@ class NativeRuntimeHintsTest {
                 TlsProperties.class}) {
             assertTrue(RuntimeHintsPredicates.reflection().onType(type)
                     .withMemberCategory(MemberCategory.INVOKE_DECLARED_CONSTRUCTORS).test(hints), type.getName());
+        }
+    }
+
+    @Test
+    void theRecordsJacksonWritesByHandAreReflectable() {
+        for (Class<?> type : new Class<?>[] {MercuryMessageRequest.class, MercuryMessageResponse.class, SmartKinEvent.class, ActivityAssignedPayload.class,
+                QuizCompletedPayload.class, AchievementEarnedPayload.class, AchievementRule.class, LessonSummary.class}) {
+            assertTrue(RuntimeHintsPredicates.reflection().onType(type)
+                    .withMemberCategories(MemberCategory.INVOKE_DECLARED_CONSTRUCTORS, MemberCategory.INVOKE_DECLARED_METHODS).test(hints),
+                    type.getName());
+        }
+    }
+
+    @Test
+    void theEnumsOfThoseRecordsAreReflectable() {
+        for (Class<?> type : new Class<?>[] {EventType.class, AchievementRuleType.class}) {
+            assertTrue(RuntimeHintsPredicates.reflection().onType(type).test(hints), type.getName());
         }
     }
 

@@ -8,9 +8,8 @@ import com.umdc.smartkin.api.v1.to.UserCreateRequest;
 import com.umdc.smartkin.api.v1.to.UserCreateResponse;
 import com.umdc.smartkin.client.backbone.BackboneClient;
 import com.umdc.smartkin.client.backbone.to.BackboneUserUpdateRequest;
-import com.umdc.smartkin.kafka.producer.EmailMessageProducerService;
-import com.umdc.smartkin.kafka.to.EmailMessageTO;
-import com.umdc.smartkin.kafka.to.Recipient;
+import com.umdc.smartkin.client.mercury.MercuryMailer;
+import com.umdc.smartkin.util.UpstreamFailure;
 import com.umdc.smartkin.mapper.GetUserMapper;
 import com.umdc.smartkin.mapper.PutUserMapper;
 import com.umdc.smartkin.mapper.UserCreateMapper;
@@ -36,18 +35,17 @@ public class UserServiceImpl implements UserService {
     private static final String USERNAME_ALREADY_EXISTS = "Username {} already exists";
     private static final String EMAIL_ALREADY_EXISTS = "Email already exists";
     private static final String ERROR_CREATING_USER = "Error creating user";
+    private static final String IDENTITY_SERVICE_ERROR = "Identity service error";
+    private static final String VERIFICATION_EMAIL_NOT_SENT = "Verification e-mail could not be sent";
     private static final int MAX_ALIAS_LENGTH = 12;
     private static final int MAX_ALIAS_TRY = 5;
-    private static final String TO_SUPPORT_EMAIL = "support@latinhub.info";
 
-    @Value("${umdc.verification.code.template.id}")
-    private UUID verificationCodeTemplateId;
     @Value("${umdc.smartkin.application-id}")
     private String applicationIdString;
     @Value("${umdc.smartkin.role-id}")
     private String initialRoleId;
 
-    private final EmailMessageProducerService emailMessageProducerService;
+    private final MercuryMailer mercuryMailer;
     private final UserCreateMapper userCreateMapper;
     private final PutUserMapper putUserMapper;
     private final BackboneClient backboneClient;
@@ -57,10 +55,10 @@ public class UserServiceImpl implements UserService {
     ///
     /// @param backboneClient   the client used to communicate with the backend
     /// @param userCreateMapper the mapper used to convert between request/response objects and backend objects
-    public UserServiceImpl(BackboneClient backboneClient, EmailMessageProducerService emailMessageProducerService,
+    public UserServiceImpl(BackboneClient backboneClient, MercuryMailer mercuryMailer,
                            UserCreateMapper userCreateMapper, PutUserMapper putUserMapper,
                            GetUserMapper getUserMapper) {
-        this.emailMessageProducerService = emailMessageProducerService;
+        this.mercuryMailer = mercuryMailer;
         this.userCreateMapper = userCreateMapper;
         this.backboneClient = backboneClient;
         this.putUserMapper = putUserMapper;
@@ -81,11 +79,24 @@ public class UserServiceImpl implements UserService {
                     applicationID, UUID.fromString(initialRoleId), generateAlias(userCreateRequest, true, 1));
             logger.debug("Creating user: {}", backboneUserCreateRequest);
             var userCreateResponse = userCreateMapper.fromBackbone(backboneClient.post(backboneUserCreateRequest));
-            emailMessageProducerService.sendMessage(toEmailMessageTO(userCreateRequest, userCreateResponse));
+            try {
+                mercuryMailer.sendVerificationCode(userCreateResponse.id(), userCreateResponse.email(),
+                        userCreateRequest.firstname().concat(" ").concat(userCreateRequest.lastname()));
+            } catch (RuntimeException e) {
+                // without the e-mail the visitor can never confirm the code: do not leave the user behind, a retry would meet its own e-mail
+                logger.error("The verification e-mail of user {} could not be handed to mercury, removing the user: {}", userCreateResponse.id(), e.getMessage());
+                removeUserQuietly(applicationID, userCreateResponse.id());
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header(MESSAGE_ERROR_HEADER, VERIFICATION_EMAIL_NOT_SENT).build();
+            }
             return ResponseEntity.status(HttpStatus.CREATED).body(userCreateResponse);
         } catch (FeignException e) {
-            logger.warn("Error creating user: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.CONFLICT).header(MESSAGE_ERROR_HEADER, EMAIL_ALREADY_EXISTS).build();
+            if (e.status() == HttpStatus.CONFLICT.value()) {
+                // backbone answers 409 to the e-mail check only when the e-mail is taken
+                logger.warn("Error creating user, the e-mail is taken: {}", e.getMessage());
+                return ResponseEntity.status(HttpStatus.CONFLICT).header(MESSAGE_ERROR_HEADER, EMAIL_ALREADY_EXISTS).build();
+            }
+            logger.error("Backbone failed while creating a user (status {}): {}", e.status(), e.getMessage());
+            return ResponseEntity.status(UpstreamFailure.statusToAnswer(e)).header(MESSAGE_ERROR_HEADER, IDENTITY_SERVICE_ERROR).build();
         } catch (StandardException e) {
             logger.warn("Standard Error creating user: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.CONFLICT).header(MESSAGE_ERROR_HEADER, ERROR_CREATING_USER).build();
@@ -323,26 +334,11 @@ public class UserServiceImpl implements UserService {
         return alias.toString();
     }
 
-    private EmailMessageTO toEmailMessageTO(UserCreateRequest userCreateRequest, UserCreateResponse userCreateResponse) {
-        String fullname = userCreateRequest.firstname().concat(" ").concat(userCreateRequest.lastname());
-        return new EmailMessageTO(verificationCodeTemplateId,
-                userCreateResponse.id(),
-                TO_SUPPORT_EMAIL,
-                List.of(new Recipient(
-                        fullname,
-                        userCreateResponse.email(),
-                        userCreateRequest.firstname())),
-                Collections.emptyList(),
-                "Verification Code subscription",
-                "Your verification code format is: ####-####",
-                userCreateResponse.createdDate(),
-                Map.of("vc", generateVerificationCode(), "user_name", fullname)
-        );
-    }
-
-    private String generateVerificationCode() {
-        // Implement your code generation logic here
-        return generateFourDigitNumber() +
-                "-" + generateFourDigitNumber();
+    private void removeUserQuietly(UUID applicationID, UUID userId) {
+        try {
+            backboneClient.deleteUserByUserIdAndApplicationId(applicationID, userId);
+        } catch (FeignException e) {
+            logger.error("The user {} could not be removed from backbone (status {}), delete it by hand", userId, e.status());
+        }
     }
 }

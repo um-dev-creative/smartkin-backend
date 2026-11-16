@@ -18,8 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FeignClientUrlConfigTest {
 
-    private static final String BACKBONE_DEFAULT = "https://prx-qa.backbone.tst/backbone";
-    private static final String MERCURY_DEFAULT = "https://prx-qa.backbone.tst/mercury";
+    private static final String BACKBONE_DEFAULT = "https://api.umdc-qa.tst/backbone";
+    private static final String MERCURY_DEFAULT = "https://api.umdc-qa.tst/mercury";
 
     private static PropertySourcesPropertyResolver resolver(Map<String, Object> overrides) throws IOException {
         var sources = new MutablePropertySources();
@@ -49,6 +49,14 @@ class FeignClientUrlConfigTest {
 
         assertEquals(BACKBONE_DEFAULT, resolver.resolvePlaceholders(urlOf(BackboneClient.class)));
         assertEquals(MERCURY_DEFAULT, resolver.resolvePlaceholders(urlOf(MercuryClient.class)));
+    }
+
+    @Test
+    void theConfigServerVariableNamesAlsoSetTheUrls() throws IOException {
+        var resolver = resolver(Map.of("BACKBONE_URL", "https://backbone.example/api", "MERCURY_URL", "https://mercury.example/api"));
+
+        assertEquals("https://backbone.example/api", resolver.resolvePlaceholders(urlOf(BackboneClient.class)));
+        assertEquals("https://mercury.example/api", resolver.resolvePlaceholders(urlOf(MercuryClient.class)));
     }
 
     @Test

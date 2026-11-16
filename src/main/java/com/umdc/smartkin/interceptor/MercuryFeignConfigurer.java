@@ -15,6 +15,8 @@ public class MercuryFeignConfigurer extends BackendFeignConfigurer {
     @Bean("mercuryFeignClientInterceptor")
     @Override
     RequestInterceptor requestInterceptor() {
-        return createInterceptor();
+        // Mercury is called with its own `session-token` header (see MercuryServiceLogin) and checks no Authorization bearer. The one this
+        // interceptor used to add came from the Keycloak-style token server, which no longer exists (404) and made every call fail.
+        return template -> { };
     }
 }

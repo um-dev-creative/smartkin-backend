@@ -8,8 +8,8 @@ import com.umdc.smartkin.client.backbone.to.BackboneProfileImageRefResponse;
 import com.umdc.smartkin.client.backbone.to.BackboneUserCreateRequest;
 import com.umdc.smartkin.client.backbone.to.BackboneUserCreateResponse;
 import com.umdc.smartkin.client.backbone.to.BackboneUserUpdateRequest;
-import com.umdc.smartkin.kafka.producer.EmailMessageProducerService;
-import com.umdc.smartkin.kafka.to.EmailMessageTO;
+import com.umdc.smartkin.client.mercury.MailDeliveryException;
+import com.umdc.smartkin.client.mercury.MercuryMailer;
 import com.umdc.smartkin.mapper.GetUserMapper;
 import com.umdc.smartkin.mapper.PutUserMapper;
 import com.umdc.smartkin.mapper.UserCreateMapper;
@@ -42,6 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -58,7 +59,7 @@ class UserServiceImplTest {
     @Mock
     private BackboneClient backboneClient;
     @Mock
-    private EmailMessageProducerService producer;
+    private MercuryMailer mailer;
     @Mock
     private UserCreateMapper userCreateMapper;
     @Mock
@@ -70,8 +71,7 @@ class UserServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new UserServiceImpl(backboneClient, producer, userCreateMapper, putUserMapper, getUserMapper);
-        ReflectionTestUtils.setField(service, "verificationCodeTemplateId", UUID.randomUUID());
+        service = new UserServiceImpl(backboneClient, mailer, userCreateMapper, putUserMapper, getUserMapper);
         ReflectionTestUtils.setField(service, "applicationIdString", APPLICATION_ID.toString());
         ReflectionTestUtils.setField(service, "initialRoleId", ROLE_ID.toString());
     }
@@ -103,12 +103,7 @@ class UserServiceImplTest {
 
             assertEquals(HttpStatus.CREATED, response.getStatusCode());
             assertNotNull(response.getBody());
-            var captor = ArgumentCaptor.forClass(EmailMessageTO.class);
-            verify(producer).sendMessage(captor.capture());
-            var email = captor.getValue();
-            assertEquals("ana@smartkin.test", email.to().getFirst().email());
-            assertEquals("Ana Lopez", email.to().getFirst().name());
-            assertTrue(email.params().get("vc").toString().matches("\\d{4}-\\d{4}"));
+            verify(mailer).sendVerificationCode(USER_ID, "ana@smartkin.test", "Ana Lopez");
         }
 
         @Test
@@ -139,7 +134,7 @@ class UserServiceImplTest {
 
             assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
             assertEquals("Content null invalid", response.getHeaders().getFirst(MESSAGE_ERROR));
-            verifyNoInteractions(backboneClient, producer);
+            verifyNoInteractions(backboneClient, mailer);
         }
 
         @Test
@@ -150,7 +145,60 @@ class UserServiceImplTest {
 
             assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
             assertEquals("Email already exists", response.getHeaders().getFirst(MESSAGE_ERROR));
-            verify(producer, never()).sendMessage(any());
+            verify(mailer, never()).sendVerificationCode(any(), any(), any());
+        }
+
+        @Test
+        void removesTheUserAndAnswers503WhenMercuryDoesNotTakeTheVerificationEmail() {
+            stubCreateFlow();
+            doThrow(new MailDeliveryException("Send failed")).when(mailer).sendVerificationCode(any(), any(), any());
+
+            var response = service.create(userCreateRequest("Lopez", "+15550100"));
+
+            assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+            assertEquals("Verification e-mail could not be sent", response.getHeaders().getFirst(MESSAGE_ERROR));
+            verify(backboneClient).deleteUserByUserIdAndApplicationId(eq(APPLICATION_ID), any());
+        }
+
+        @Test
+        void stillAnswers503WhenTheUserCannotBeRemovedEither() {
+            stubCreateFlow();
+            doThrow(new MailDeliveryException("Send failed")).when(mailer).sendVerificationCode(any(), any(), any());
+            when(backboneClient.deleteUserByUserIdAndApplicationId(any(), any())).thenThrow(feign(500));
+
+            var response = service.create(userCreateRequest("Lopez", "+15550100"));
+
+            assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
+        }
+
+        @Test
+        void doesNotReportAnExistingEmailWhenBackboneRefusesTheServiceCredential() {
+            when(backboneClient.checkEmail(any(), eq(APPLICATION_ID))).thenThrow(feign(403));
+
+            var response = service.create(userCreateRequest("Lopez", "+15550100"));
+
+            assertEquals(HttpStatus.BAD_GATEWAY, response.getStatusCode());
+            assertEquals("Identity service error", response.getHeaders().getFirst(MESSAGE_ERROR));
+            verify(mailer, never()).sendVerificationCode(any(), any(), any());
+        }
+
+        @Test
+        void answersBadGatewayWhenBackboneCannotBeReached() {
+            when(backboneClient.checkEmail(any(), eq(APPLICATION_ID))).thenThrow(feign(-1));
+
+            var response = service.create(userCreateRequest("Lopez", "+15550100"));
+
+            assertEquals(HttpStatus.BAD_GATEWAY, response.getStatusCode());
+        }
+
+        @Test
+        void relaysTheStatusBackboneAnswered() {
+            when(backboneClient.checkEmail(any(), eq(APPLICATION_ID))).thenThrow(feign(400));
+
+            var response = service.create(userCreateRequest("Lopez", "+15550100"));
+
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertEquals("Identity service error", response.getHeaders().getFirst(MESSAGE_ERROR));
         }
 
         @Test
