@@ -67,20 +67,20 @@ Nothing below goes in `config/local.env`: an environment variable shadows the Va
 | MongoDB | `SMARTKIN_MONGO_HOST`, `_USERNAME`, `_PASSWORD`, `_DATABASE` |
 | Redis | `REVOCATION_REDIS_URL` (token revocation), `CACHE_REDIS_URL` (lesson cache; empty = no cache) |
 | Kafka | `umdc.bootstrap.server.url` / `.port`, plus, for a secured cluster such as Aiven: `BOOTSTRAP_SECURITY_PROTOCOL` (`SSL`), `BOOTSTRAP_SSL_TRUSTSTORE_LOCATION` (the CA), `BOOTSTRAP_SSL_KEYSTORE_CERT_LOCATION` and `BOOTSTRAP_SSL_KEYSTORE_KEY_LOCATION` (the client certificate and key; paths inside the container, mount the files read-only). Optional: `KAFKA_CONSUMER_*` |
-| Mercury e-mail | `MERCURY_EMAIL_TOPIC` (`mercury-email-messages`), `PRX_VERIFICATION_CODE_TEMPLATE_ID` (the `template_defined_id` of `sk_verification_es.ftl`, see below) |
+| Mercury e-mail | `PRX_VERIFICATION_CODE_TEMPLATE_ID` (the `template_defined_id` of `sk_verification_es.ftl`, see below) |
 | Platform | `VAULT_TOKEN`, `VAULT_SERVER_URL`, `CNFS_URI`, `CNFS_PORT`, `SPRING_BOOT_PROFILE_ACTIVE`, `APP_PORT` |
 
 ### The verification e-mail (mercury)
 
 SmartKin sends one e-mail, the verification code of a new account, and mercury renders and sends it. Do this once per environment, in order (mercury's side is in its `docs/smartkin-mail-templates.md`):
 
-1. **Mercury has the templates.** The files `sk_verification_es.ftl` and `sk_verification_en.ftl` are inside mercury's image, so mercury must be rebuilt and redeployed with the version that contains them.
+1. **Mercury has the templates.** The files `sk_verification_es.ftl` and `sk_verification_en.ftl` live in mercury's template storage (`TEMPLATE_STORAGE`).
 2. **Register them in mercury's database** with mercury's `scripts/smartkin/seed-templates.sql` (idempotent; try it on a copy first). It needs five ids: `app_id` (SmartKin's row in `general.application`, the same value as `APPLICATION_ID` here), `owner_id`, `verification_type_id` (the template type id mercury has as `PRX_VERIFICATION_CODE_TEMPLATE_ID`), `severity_id` and `frequency_id`. It prints the `template_defined_id` of each template.
 3. **Point SmartKin at the Spanish template.** In Vault set `PRX_VERIFICATION_CODE_TEMPLATE_ID` to the `template_defined_id` of `sk_verification_es.ftl`. Careful: mercury has a property of the same name that holds the template **type** id; the two are different values.
-4. **Point SmartKin at mercury's topic.** `MERCURY_EMAIL_TOPIC` must be `mercury-email-messages`, and that topic must exist (it is mercury's, not one of the four `smartkin.*` topics).
+4. **Mercury is reached over HTTP.** SmartKin posts the e-mail to mercury's `POST /api/v1/messages` with its Backbone managed client (`MERCURY_M2M_CLIENT_ID`/`_SECRET`, scopes `mercury:message:read` and `:write`); no Kafka topic is involved for e-mails.
 5. **Check.** Register a user (step 6): the mail arrives with SmartKin's text and the code as `####-####`, and confirming it answers 200.
 
-If it does not work: no mail and a "Received incomplete Email message" line in mercury means the message lacked a field; a render error in mercury's log means the template is missing from the image or a parameter did not arrive; mail arrives but the confirmation answers 404 means the template is not of the verification-code type (run the seed script again, it corrects it).
+If it does not work: sign-up answering 503 means mercury did not take the message (check SmartKin's log line `mercury did not take the verification e-mail (status N)`: 400 = unknown template or missing field, 401/403 = the managed client lacks the mercury scopes); a render error in mercury's log means the template is missing from the image or a parameter did not arrive; mail arrives but the confirmation answers 404 means the template is not of the verification-code type (run the seed script again, it corrects it).
 
 ## 4. Start the service
 

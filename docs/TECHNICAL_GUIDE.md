@@ -51,7 +51,7 @@ The service's own settings moved from the `prx` prefix to `umdc`, the prefix the
 | Before | Now |
 | --- | --- |
 | `prx.bootstrap.server.url` / `.port` | `umdc.bootstrap.server.url` / `.port` |
-| `prx.producer.mercury.topic` | `umdc.producer.mercury.topic` |
+| `prx.producer.mercury.topic` | removed: e-mails go to mercury over HTTP, not Kafka |
 | `prx.verification.code.template.id` | `umdc.verification.code.template.id` |
 | `prx.smartkin.application-id` / `.role-id` | `umdc.smartkin.application-id` / `.role-id` |
 | `prx.clients.backbone.url` / `.mercury.url` | `umdc.clients.backbone.url` / `.mercury.url` |
@@ -120,6 +120,12 @@ SmartKin's.
 The old `MERCURY_CLIENT_*`/`MERCURY_USERNAME`/`MERCURY_PASSWORD` entries of `umdc.security.auth.clients` still feed `MercuryFeignConfigurer`'s
 Bearer; mercury ignores it on these paths. Tests: `MercuryTokensTest` (exchange, cache expiry, fallback, retry on 401, not configured),
 `UserRegisterServiceImplTest`, `AuthServiceImplTest`, `FeignClientUrlConfigTest`.
+
+### Identity through backbone-rest
+
+SmartKin owns no users: they live in backbone-rest. [`BACKBONE_INTEGRATION.md`](BACKBONE_INTEGRATION.md) explains the two kinds of token (M2M and
+session), the managed clients SmartKin needs (`users:manage`), the flows, a setup checklist and the open findings. The outbound bearer of the
+`backbone` Feign client comes from `POST /api/v1/managed-clients/token` through the `smartkin-security` SSL bundle (`BackboneFeignConfigurer`).
 
 ## Environment setup scripts
 
@@ -242,21 +248,48 @@ list can be stale for up to the TTL.
 
 ## Kafka events
 
-Two kinds of messages leave the service. Email requests go to mercury's topic (`EmailMessageProducerService`). Domain events go through `SmartKinEventPublisher` to the topics below
+Domain events go through `SmartKinEventPublisher` to the topics below. **E-mails do not use Kafka**: they are handed to mercury over HTTP (next section).
 
-**The e-mail that mercury sends (verification code).** `UserServiceImpl.toEmailMessageTO` publishes an `EmailMessageTO` to mercury's topic (`umdc.producer.mercury.topic`, Vault `MERCURY_EMAIL_TOPIC`, value `mercury-email-messages`) with `templateDefinedId` = `umdc.verification.code.template.id`, and the params `vc` (`####-####`) and `user_name`; it does not send `expiresInMinutes`. Mercury's templates for it are `sk_verification_{es,en}.ftl` (mercury `docs/smartkin-mail-templates.md`, registered by its `scripts/smartkin/seed-templates.sql`). The property name is shared with mercury, where it means something else:
+## Notifications through mercury (HTTP)
+
+`UserServiceImpl.create` creates the user in backbone and then calls `MercuryMailer.sendVerificationCode(userId, email, fullName)`. `MercuryMailer` builds a `MercuryMessageRequest` and sends it with `MercuryClient.sendMessage` (`POST /api/v1/messages`) inside `MercuryTokens.withToken` (M2M token, one retry with fresh tokens on 401). Fields: `channel=email`, `userId`, `target` (the address), `templateDefinedId` = `umdc.verification.code.template.id`, `applicationId`, `language` (`umdc.smartkin.mail.language`, default `es`), `from` (`umdc.smartkin.mail.from`), `body` (a placeholder, the template renders the real one), `sendDate` (UTC) and `params` `vc` (`####-####`, `SecureRandom`) and `user_name`. No subject: it belongs to the template. The header `Idempotency-Key` is `REGISTER-CODE:<userId>`, so a retry never produces a second e-mail. Mercury answers 202 with state `OPENED` and delivers asynchronously; SmartKin keeps no queue. Failures (unreachable, token refused, non-2xx, managed client not configured) become `MailDeliveryException`; `create` then removes the new backbone user and answers 503 (`message-error: Verification e-mail could not be sent`). Neither the address nor the code is ever logged (`MercuryMessageRequest.toString`).
+
+```mermaid
+sequenceDiagram
+    participant U as Visitor
+    participant S as smartkin-backend
+    participant B as backbone-rest
+    participant M as mercury
+    U->>S: POST /api/v1/users
+    S->>B: checkEmail, create user (inactive)
+    S->>M: POST /api/v1/messages (session-token, Idempotency-Key)
+    M-->>S: 202 OPENED
+    S-->>U: 201
+    M->>U: e-mail with the code (sk_verification_es)
+    U->>S: POST /api/v1/users/confirm-code
+    S->>M: POST /api/v1/verification-code
+    alt 202 right code
+        S->>B: PUT .../user/{id}/activate
+        S-->>U: 200
+    else 406 wrong
+        S-->>U: 406 + Attempts-Remaining
+    else 404 none left
+        S->>M: GET /verification-code/latest-status
+        S->>B: activate when verified
+    end
+```
+
+`UserRegisterServiceImpl.confirmCode` activates the user in backbone after mercury accepts the code; a 404 from mercury is recovered when `latest-status` says the latest code was verified; a backbone failure answers 502 (`UpstreamFailure`). The template ids are different from mercury's `umdc.verification.code.template.id`, which is the template **type** id:
 
 ```mermaid
 flowchart LR
-    S["smartkin-backend<br/>umdc.verification.code.template.id<br/>= template_defined id of sk_verification_es.ftl"] -->|EmailMessageTO| T[topic mercury-email-messages]
-    T --> M[mercury]
+    S["smartkin-backend<br/>umdc.verification.code.template.id<br/>= template_defined id of sk_verification_es"] -->|POST /api/v1/messages| M[mercury]
     M -->|template_defined, then template| F["sk_verification_es.ftl<br/>template type = verification code"]
     C["mercury umdc.verification.code.template.id<br/>= the template TYPE id"] -.->|keeps the code only if the type matches| F
     F --> E[SMTP]
-    S -->|POST /api/v1/verification-code| M
 ```
 
-The two values are different: if SmartKin's holds a type id, mercury finds no template; if the template is not of the verification-code type, the mail goes out but mercury keeps no code and the confirmation answers 404. The setup steps are in the QA runbook, section 3.
+## Domain events
 
 (contract and rules in `docs/decisions/D-4-domain-events-and-topics.md`).
 
@@ -373,12 +406,12 @@ as environment variables for the private Repsy repository. The workflow does not
 
 | Test | What it covers |
 | --- | --- |
-| `UserServiceImplTest`, `UserRegisterServiceImplTest`, `AuthServiceImplTest` | Business flows with mocked Feign clients, mappers and Kafka producer |
+| `UserServiceImplTest`, `UserRegisterServiceImplTest`, `AuthServiceImplTest` | Business flows with mocked Feign clients, mappers and `MercuryMailer` |
 | `SessionJwtServiceImplTest`, `JwtUtilTest` | Token signing, claims and parsing |
 | `UserControllersTest` | Delegation, route mapping with MockMvc and the `*Api` default methods |
 | `MappersTest` | MapStruct mappings and their default methods |
 | `FeignConfigurersTest` | Bearer token interceptors against a local HTTP server that plays the token endpoint |
-| `TransferObjectsTest`, `EmailMessageProducerServiceImplTest` | `toString` and the Jackson 3 contract, including the snake_case payload sent to mercury |
+| `TransferObjectsTest`, `MercuryMailerTest` | `toString` and the Jackson 3 contract of `POST /api/v1/messages`; the hand-over, its idempotency key and its failures |
 | `MongoCollectionsContainerTest`, `InteractionEventServiceTest` | Documents, repositories, unique and TTL indexes on MongoDB 7 (Testcontainers) and the retention stamp |
 | `RedisRevocationCheckerTest`, `RedisConnectorTest`, `RevocationWiringTest` | Deny-list lookups against Redis 7 (Testcontainers): cache, eviction, fail-closed, reconnection and bean selection |
 | `LessonCatalogServiceTest`, `RedisLessonCatalogCacheTest` | Cache-aside flow, JSON round trip, TTL, eviction, fail-open and bean selection (Redis 7 in Testcontainers) |
@@ -918,3 +951,7 @@ The com.umdc libraries bind `umdc.*` properties, not the old `prx.*` ones: `umdc
 - The error topic must exist before the first failure (the application does not create topics). The application now counts and logs what goes to it (see *Error topic monitoring*), but the **alert rule itself** is the platform team's: it needs a metrics scraper or a log monitor that this repository does not configure.
 - The enum labels (D-2) and the baseline DDL are derived from the entities and need confirmation against any existing `smartkin` schema in `umdevc`.
 - Flyway and the Supabase connection were exercised only against a Testcontainers PostgreSQL, not against Supabase.
+
+### Mercury login (service, not user)
+
+`MercuryServiceLogin` obtains mercury's `session-token` with smartkin-backend's own login client (`MERCURY_LOGIN_ALIAS` / `MERCURY_LOGIN_PASSWORD`, else the `mercury` client's `MERCURY_USERNAME` / `MERCURY_PASSWORD`). `AuthServiceImpl.token(request, sessionTokenBkd)` uses it to ask whether the verification code is done, and `UserRegisterServiceImpl.confirmCode` to confirm it. The visitor's credentials are never sent to mercury. `MercuryFeignConfigurer` adds no `Authorization` bearer.

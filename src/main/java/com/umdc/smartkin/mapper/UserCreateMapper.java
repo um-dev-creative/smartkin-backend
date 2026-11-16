@@ -35,6 +35,11 @@ public interface UserCreateMapper {
     @Mapping(target = "email", source = "userCreateRequest.email")
     @Mapping(target = "password", source = "userCreateRequest.password")
     @Mapping(target = "person", expression = "java(getPerson(userCreateRequest))")
+    // backbone declares these three as primitive booleans: a null one is answered 400 ("Cannot map null into type boolean"), and the
+    // sign-up form leaves them optional
+    @Mapping(target = "notificationSms", source = "userCreateRequest.notificationSms", defaultValue = "false")
+    @Mapping(target = "notificationEmail", source = "userCreateRequest.notificationEmail", defaultValue = "false")
+    @Mapping(target = "privacyDataOutActive", source = "userCreateRequest.privacyDataOutActive", defaultValue = "false")
     BackboneUserCreateRequest toBackbone(UserCreateRequest userCreateRequest, UUID applicationId, UUID roleId, String alias);
 
     @Mapping(target = "id", source = "id")

@@ -10,9 +10,6 @@
 # Properties of the com.umdc libraries (security-oauth, commons-services). They moved from the old `prx.*` names when the libraries
 # moved from com.prx to com.umdc; with the old names nothing binds and the context fails at start (AuthProperties.getClients() is null).
 umdc:
-  producer:
-    mercury:
-      topic: ${MERCURY_EMAIL_TOPIC}  # the e-mail messages mercury consumes (mercury's topic, not a smartkin.* one)
   bootstrap:
     server:
       port: ${BOOTSTRAP_SERVER_PORT:}  # optional: empty when BOOTSTRAP_SERVER_URI already carries host:port
@@ -97,11 +94,19 @@ umdc:
     # How long raw interaction events are kept before MongoDB expires them (a TTL index on expiresAt)
     retention: ${SMARTKIN_INTERACTION_EVENTS_RETENTION:90d}
   clients:
-    # Base URLs of the services reached through Feign; override per environment with BACKBONE_BASE_URL and MERCURY_BASE_URL
+    # Base URLs of the services reached through Feign; override per environment with BACKBONE_BASE_URL / MERCURY_BASE_URL (or BACKBONE_URL / MERCURY_URL, the names the Config Server uses for the same property, whose value wins when it is loaded)
     backbone:
-      url: ${BACKBONE_BASE_URL:https://prx-qa.backbone.tst/backbone}
+      url: ${BACKBONE_BASE_URL:${BACKBONE_URL:https://api.umdc-qa.tst/backbone}}
+      # Scopes asked for the M2M token (comma separated). Not BACKBONE_SCOPE: that one is the old Keycloak value (openid), which the
+      # managed client does not have registered. users:manage is what creating and looking up users needs.
+      scopes: ${BACKBONE_M2M_SCOPES:users:manage}
+      # The managed client (scope users:manage, bound to the SmartKin application) the backend authenticates with, as zerobound-rest does.
+      # Named apart from BACKBONE_CLIENT_ID / BACKBONE_CLIENT_SECRET on purpose: those belong to the security-oauth library. Vault-owned.
+      registration:
+        client-id: ${BACKBONE_REGISTRATION_CLIENT_ID:}
+        client-secret: ${BACKBONE_REGISTRATION_CLIENT_SECRET:}
     mercury:
-      url: ${MERCURY_BASE_URL:https://prx-qa.backbone.tst/mercury}
+      url: ${MERCURY_BASE_URL:${MERCURY_URL:https://api.umdc-qa.tst/mercury}}
       # SmartKin's Backbone managed client. Its Backbone M2M token is what proves to Mercury which application is calling: Mercury
       # trades it (POST /api/v1/auth/token) for its own token, tied to the application Backbone links the client to. Replaces the
       # alias and password SmartKin used to send to Mercury. The client needs the scopes below in Backbone. Both from Vault.

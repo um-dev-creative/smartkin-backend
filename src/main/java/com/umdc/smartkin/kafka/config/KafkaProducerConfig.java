@@ -21,6 +21,7 @@ import java.util.Map;
 public class KafkaProducerConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(KafkaProducerConfig.class);
+    private static final int MAX_BLOCK_MS = 10_000;
 
     @Value("${umdc.bootstrap.server.url}")
     private String bootstrapServers;
@@ -36,6 +37,8 @@ public class KafkaProducerConfig {
                 !Objects.isEmpty(bootstrapServerPort) ? String.format("%s:%s", bootstrapServers, bootstrapServerPort) : bootstrapServers);
         configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        // A topic that does not exist makes send() wait max.block.ms (60 s by default) for its metadata while the visitor waits; fail fast.
+        configProps.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, MAX_BLOCK_MS);
         configProps.putAll(security.clientProperties());
         logger.info("Producer Factory created");
         return new DefaultKafkaProducerFactory<>(configProps);

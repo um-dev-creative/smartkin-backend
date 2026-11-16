@@ -16,7 +16,7 @@ Date: 2026-10-18. Status: accepted. Task: KF-1.
 2. **Envelope.** Every message is JSON: `eventId` (UUID), `type`, `schemaVersion` (int), `occurredAt` (ISO-8601 UTC), `subjectId` (the child's backbone user id) and `payload`.
 3. **Key = child id.** One child's events land in one partition and keep their order. Consumers dedupe by `eventId` (delivery is at least once).
 4. **Compatible changes** (new optional payload fields) keep the version; consumers must ignore unknown fields. Removing or retyping a field means a new topic `.v2` published alongside `.v1` until consumers move.
-5. **Email stays separate.** Verification and notification emails still go to mercury's topic as `EmailMessageTO` (`umdc.producer.mercury.topic`). The domain events are internal facts; KF-2 consumers
+5. **Email stays separate.** Verification and notification emails no longer use Kafka: they go to mercury over HTTP (`POST /api/v1/messages`, see the technical guide), superseding the earlier `EmailMessageTO` topic. The domain events are internal facts; KF-2 consumers
    (points, achievements, in-app inbox) and any mercury integration subscribe to them.
 
 ## Payloads (schema version 1)

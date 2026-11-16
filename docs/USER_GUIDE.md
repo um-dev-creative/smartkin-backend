@@ -9,12 +9,12 @@ OpenAPI UI (springdoc) when the service is running.
 
 | Operation | Method and path | Notes |
 | --- | --- | --- |
-| Create a user | `POST /api/v1/users` | Returns 201; 409 when alias or email already exists |
+| Create a user | `POST /api/v1/users` | Returns 201 and mercury sends the verification e-mail; 409 when alias or email already exists; 503 (and the user is not kept) when mercury does not take the e-mail |
 | Get a user | `GET /api/v1/users/{id}` | |
 | Update a user | `PUT /api/v1/users/{userId}` | |
 | Delete a user | `DELETE /api/v1/users/{userId}` | |
 | Generate a session token | `POST /api/v1/auth/session-token` | Body with `alias` and `password` |
-| Confirm a verification code | registration controller | Delegated to mercury, which SmartKin calls as an application (see below) |
+| Confirm a verification code | registration controller | Checked by mercury (SmartKin calls it as an application); a right code activates the user in backbone and answers 200, a wrong one 406 with `Attempts-Remaining` |
 
 Authenticated calls carry the session token in the header defined by `SESSION_TOKEN_KEY` (`session-token`).
 
@@ -38,7 +38,7 @@ client has no application in Backbone or lacks the scopes.
   `amazoncorretto:25.0.4-alpine3.24` already includes it.
 - The API contract (paths, request and response bodies) did not change.
 - Configuration is unchanged, except for two optional variables: `BACKBONE_BASE_URL` and `MERCURY_BASE_URL` set the base URL of each service
-  (default `https://prx-qa.backbone.tst/backbone` and `https://prx-qa.backbone.tst/mercury`). Set them per environment, for example in the
+  (default `https://api.umdc-qa.tst/backbone` and `https://api.umdc-qa.tst/mercury`). Set them per environment, for example in the
   Config Server or Vault.
 
 - Data: SmartKin now stores its data in the `smartkin` schema of the existing Supabase project, created by database migrations at startup. Configure the
@@ -56,10 +56,18 @@ client has no application in Backbone or lacks the scopes.
 - Events: SmartKin now also reads its three event topics. Passing a quiz and earning an achievement add points to the child, and new assignments and achievements appear in the child's
   inbox. Records that cannot be processed are retried and then sent to the error topic `smartkin.events.error.v1`, which the platform team must create and monitor (see the technical guide).
   Apply migration V3 (it runs at startup) before the first event arrives.
+- Sign-up and confirmation: the verification e-mail is now sent through mercury's HTTP API instead of Kafka, and confirming a right code activates the account in backbone (the answer is 200). A wrong code answers 406 with the remaining attempts in `Attempts-Remaining`. `MERCURY_EMAIL_TOPIC` is no longer needed.
 - Delivery: every pull request now runs the build and tests on Java 25 in GitHub Actions.
 - Quality: the build now runs 150 automated tests and fails below 85% coverage. This has no effect on API consumers.
 - Fix: confirming a verification code no longer fails with an internal error when mercury rejects it without a `message` header; the
   response keeps mercury's status and an empty `message` header.
+
+## Operators: the backbone client (new)
+
+Creating users needs a backbone *managed client* of SmartKin with the scope `users:manage` (Vault `BACKBONE_REGISTRATION_CLIENT_ID`, `BACKBONE_REGISTRATION_CLIENT_SECRET`,
+`BACKBONE_M2M_SCOPES=users:manage`). The old `AUTH_SERVER_URI`/`AUTH_TOKEN_URI` token path is no longer used for backbone. A `403` on sign-up means the
+scope or the application of the client is wrong; `invalid_scope` means the scope in `BACKBONE_M2M_SCOPES` is not registered for it. Setup and checks:
+[`BACKBONE_INTEGRATION.md`](BACKBONE_INTEGRATION.md).
 
 ## Parents and children (new)
 
@@ -223,7 +231,7 @@ Three steps, in this order, before the first start of the service in QA or produ
 
 Both scripts are safe to run again, and both stop with a clear message when something is wrong.
 
-The verification e-mail of a new account is sent by mercury with SmartKin's own template: deploy the mercury version that contains `sk_verification_es.ftl`, register the template in mercury's database with its seed script, and put the `template_defined_id` it prints in Vault as `PRX_VERIFICATION_CODE_TEMPLATE_ID` (not the same value as mercury's property of that name). The QA runbook, section 3, has the steps and what to look at when no mail arrives.
+The verification e-mail of a new account is handed to mercury over HTTP (no Kafka) and sent by mercury with SmartKin's own template: make sure mercury has `sk_verification_es.ftl`, register the template in mercury's database with its seed script, and put the `template_defined_id` it prints in Vault as `PRX_VERIFICATION_CODE_TEMPLATE_ID` (not the same value as mercury's property of that name). The QA runbook, section 3, has the steps and what to look at when no mail arrives.
 
 The service itself also needs the Kafka connection settings, in Vault: for Aiven, `BOOTSTRAP_SECURITY_PROTOCOL=SSL`, the path of the CA (`BOOTSTRAP_SSL_TRUSTSTORE_LOCATION`) and of the client certificate and key (`BOOTSTRAP_SSL_KEYSTORE_CERT_LOCATION`, `BOOTSTRAP_SSL_KEYSTORE_KEY_LOCATION`), as seen inside the container (mount the files read-only). Without them the service connects without TLS and Aiven refuses it.
 
@@ -247,3 +255,5 @@ The container stops gracefully on `docker stop` (up to 30 s). A new Vault token 
 
 Without those variables the service stops at startup with a message such as
 `Profile '${SPRING_BOOT_PROFILE_ACTIVE}' must contain a letter, digit or allowed char`.
+
+**Mercury.** SmartKin does not log in to mercury with an alias and a password any more, and it does not use Kafka to send e-mails: it asks backbone for the M2M token of its managed client (`MERCURY_M2M_CLIENT_ID`, `MERCURY_M2M_CLIENT_SECRET`) and calls mercury's HTTP API. See "Verification e-mail" below.

@@ -1,5 +1,15 @@
 package com.umdc.smartkin.config;
 
+import com.umdc.smartkin.achievement.AchievementRule;
+import com.umdc.smartkin.achievement.AchievementRuleType;
+import com.umdc.smartkin.catalog.LessonSummary;
+import com.umdc.smartkin.kafka.event.EventType;
+import com.umdc.smartkin.kafka.event.SmartKinEvent;
+import com.umdc.smartkin.kafka.event.payload.AchievementEarnedPayload;
+import com.umdc.smartkin.kafka.event.payload.ActivityAssignedPayload;
+import com.umdc.smartkin.kafka.event.payload.QuizCompletedPayload;
+import com.umdc.smartkin.client.mercury.to.MercuryMessageRequest;
+import com.umdc.smartkin.client.mercury.to.MercuryMessageResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -46,6 +56,22 @@ public class NativeRuntimeHints {
             RetryProperties.class,
             TlsProperties.class);
 
+    /// Types the code turns into JSON or back with its own `ObjectMapper` (the message sent to mercury, the domain events, the
+    /// achievement rules read from a column, the lesson list cached in Redis). Spring only registers what crosses a controller, so these
+    /// are invisible to AOT: in the native image Jackson fails on a record with `Record components not available for record class ...`,
+    /// which made the sign-up answer 500 right after backbone had created the user and before mercury got the e-mail.
+    private static final List<Class<?>> HAND_SERIALIZED = List.of(
+            MercuryMessageRequest.class,
+            MercuryMessageResponse.class,
+            SmartKinEvent.class,
+            EventType.class,
+            ActivityAssignedPayload.class,
+            QuizCompletedPayload.class,
+            AchievementEarnedPayload.class,
+            AchievementRule.class,
+            AchievementRuleType.class,
+            LessonSummary.class);
+
     /// Registers the hints.
     public static class Hints implements RuntimeHintsRegistrar {
 
@@ -67,6 +93,10 @@ public class NativeRuntimeHints {
                     binding.registerReflectionHints(hints.reflection(), nested);
                     hints.reflection().registerType(nested, FULL_ACCESS);
                 }
+            }
+            for (Class<?> type : HAND_SERIALIZED) {
+                binding.registerReflectionHints(hints.reflection(), type);
+                hints.reflection().registerType(type, FULL_ACCESS);
             }
             // The keystores behind the smartkin-security TLS bundle are read as classpath:<name>.jks; native-image only embeds
             // the resources it is told about.

@@ -52,6 +52,26 @@ class MappersTest {
     }
 
     @Test
+    void userCreateMapperNeverSendsNullBooleansBecauseBackboneAnswers400() {
+        var withoutChoices = new com.umdc.smartkin.api.v1.to.UserCreateRequest("secret", "ana@smartkin.test", "Ana", "Lopez",
+                java.time.LocalDate.of(2010, 5, 20), "+15550100", "Ana", null, null, null);
+
+        var request = userCreateMapper.toBackbone(withoutChoices, APPLICATION_ID, ROLE_ID, "alopez");
+
+        assertEquals(Boolean.FALSE, request.notificationSms());
+        assertEquals(Boolean.FALSE, request.notificationEmail());
+        assertEquals(Boolean.FALSE, request.privacyDataOutActive());
+    }
+
+    @Test
+    void userCreateMapperKeepsTheChoicesTheVisitorMade() {
+        var request = userCreateMapper.toBackbone(userCreateRequest("Lopez", "+15550100"), APPLICATION_ID, ROLE_ID, "alopez");
+
+        assertEquals(Boolean.TRUE, request.notificationSms());
+        assertEquals(Boolean.TRUE, request.notificationEmail());
+    }
+
+    @Test
     void userCreateMapperSkipsTheContactWhenThereIsNoPhone() {
         var person = userCreateMapper.getPerson(userCreateRequest("Lopez", " "));
 
