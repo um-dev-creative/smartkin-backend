@@ -179,6 +179,6 @@ class ChildAccountServiceImplTest {
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertEquals(CHILD_ACCOUNT_FAILED_MESSAGE, response.getHeaders().getFirst(MESSAGE_ERROR_HEADER));
-        verify(userService).deleteUserByUserAndApplication(CHILD_ID);
+        verify(userService).deleteUser(CHILD_ID);
     }
 }

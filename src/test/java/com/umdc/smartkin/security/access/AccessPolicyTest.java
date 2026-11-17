@@ -127,4 +127,28 @@ class AccessPolicyTest {
         assertFalse(new ChildAccess(ChildAccessDecision.FORBIDDEN, null).allowed());
         assertFalse(new ChildAccess(ChildAccessDecision.NOT_VISIBLE, null).allowed());
     }
+
+    @Test
+    void aUserReadsTheirOwnAccountAndAParentReadsTheirChildrens() {
+        when(parentRepository.existsById(PARENT_ID)).thenReturn(true);
+        when(childRepository.findById(CHILD_ID)).thenReturn(Optional.of(child));
+
+        assertTrue(policy.canViewUser(PARENT_ID, PARENT_ID));
+        assertTrue(policy.canViewUser(PARENT_ID, CHILD_ID));
+    }
+
+    @Test
+    void aStrangerReadsNobodyElsesAccount() {
+        when(parentRepository.existsById(OTHER_PARENT_ID)).thenReturn(true);
+        when(childRepository.findById(CHILD_ID)).thenReturn(Optional.of(child));
+
+        assertFalse(policy.canViewUser(OTHER_PARENT_ID, CHILD_ID));
+        assertFalse(policy.canViewUser(OTHER_PARENT_ID, PARENT_ID));
+    }
+
+    @Test
+    void onlyTheOwnerChangesTheirAccount() {
+        assertTrue(policy.isSelf(PARENT_ID, PARENT_ID));
+        assertFalse(policy.isSelf(PARENT_ID, CHILD_ID));
+    }
 }

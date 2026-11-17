@@ -13,6 +13,7 @@ import com.umdc.smartkin.client.mercury.MercuryMailer;
 import com.umdc.smartkin.mapper.GetUserMapper;
 import com.umdc.smartkin.mapper.PutUserMapper;
 import com.umdc.smartkin.mapper.UserCreateMapper;
+import com.umdc.smartkin.security.access.AccessPolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -52,7 +53,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class UserServiceImplTest {
 
-    private static final String TOKEN = "session-token";
+    private static final String TOKEN = com.umdc.smartkin.support.TestData.tokenFor(USER_ID);
+    private static final UUID OTHER_ID = UUID.fromString("99999999-9999-9999-9999-999999999999");
     private static final String MESSAGE_ERROR = "message-error";
     private static final String MESSAGE = "message";
 
@@ -66,12 +68,16 @@ class UserServiceImplTest {
     private PutUserMapper putUserMapper;
     @Mock
     private GetUserMapper getUserMapper;
+    @Mock
+    private AccessPolicy accessPolicy;
 
     private UserServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new UserServiceImpl(backboneClient, mailer, userCreateMapper, putUserMapper, getUserMapper);
+        service = new UserServiceImpl(backboneClient, mailer, userCreateMapper, putUserMapper, getUserMapper, accessPolicy);
+        lenient().when(accessPolicy.canViewUser(USER_ID, USER_ID)).thenReturn(true);
+        lenient().when(accessPolicy.isSelf(USER_ID, USER_ID)).thenReturn(true);
         ReflectionTestUtils.setField(service, "applicationIdString", APPLICATION_ID.toString());
         ReflectionTestUtils.setField(service, "initialRoleId", ROLE_ID.toString());
     }
@@ -311,7 +317,7 @@ class UserServiceImplTest {
             stubExistingUser();
             stubUpdate(ResponseEntity.noContent().build());
 
-            var response = service.update(USER_ID, putRequest(List.of(ROLE_ID)));
+            var response = service.update(TOKEN, USER_ID, putRequest(null));
 
             assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
         }
@@ -321,12 +327,12 @@ class UserServiceImplTest {
             stubExistingUser();
             stubUpdate(ResponseEntity.ok().build());
 
-            assertEquals(HttpStatus.OK, service.update(USER_ID, putRequest(null)).getStatusCode());
+            assertEquals(HttpStatus.OK, service.update(TOKEN, USER_ID, putRequest(null)).getStatusCode());
         }
 
         @Test
         void rejectsANullRequest() {
-            var response = service.update(USER_ID, null);
+            var response = service.update(TOKEN, USER_ID, null);
 
             assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
             assertEquals("Request body is missing.", response.getHeaders().getFirst(MESSAGE));
@@ -334,39 +340,41 @@ class UserServiceImplTest {
 
         @Test
         void rejectsANullUserId() {
-            var response = service.update(null, putRequest(null));
+            var response = service.update(TOKEN, null, putRequest(null));
 
             assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
             assertEquals("User ID is required.", response.getHeaders().getFirst(MESSAGE));
         }
 
         @Test
-        void rejectsAnEmptyRoleList() {
-            var response = service.update(USER_ID, putRequest(List.of()));
+        void refusesAnyRoleChangeBecauseAUserMustNotChooseTheirOwnRoles() {
+            var response = service.update(TOKEN, USER_ID, putRequest(List.of(ROLE_ID)));
 
-            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-            assertTrue(response.getHeaders().getFirst(MESSAGE).startsWith("Cannot remove all roles"));
+            assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+            assertEquals("Roles cannot be changed through this operation.", response.getHeaders().getFirst(MESSAGE_ERROR));
+            verifyNoInteractions(backboneClient);
         }
 
         @Test
-        void rejectsNullRoleIds() {
-            var response = service.update(USER_ID, putRequest(Arrays.asList(ROLE_ID, null)));
+        void refusesToUpdateAnotherUsersAccount() {
+            var response = service.update(TOKEN, OTHER_ID, putRequest(null));
 
-            assertEquals("Role collection contains invalid null values.", response.getHeaders().getFirst(MESSAGE));
+            assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+            verifyNoInteractions(backboneClient);
         }
 
         @Test
-        void rejectsDuplicatedRoleIds() {
-            var response = service.update(USER_ID, putRequest(List.of(ROLE_ID, ROLE_ID)));
-
-            assertEquals("Role collection contains duplicate values.", response.getHeaders().getFirst(MESSAGE));
+        void refusesATokenThatDoesNotIdentifyAUser() {
+            assertEquals(HttpStatus.FORBIDDEN, service.update("garbage", USER_ID, putRequest(null)).getStatusCode());
+            assertEquals(HttpStatus.FORBIDDEN, service.deleteUserByUserAndApplication("garbage", USER_ID).getStatusCode());
+            assertEquals(HttpStatus.FORBIDDEN, service.findUser("garbage", USER_ID).getStatusCode());
+            verifyNoInteractions(backboneClient);
         }
 
         @Test
-        void rejectsTheZeroRoleId() {
-            var response = service.update(USER_ID, putRequest(List.of(new UUID(0, 0))));
-
-            assertEquals("Role collection contains invalid role ID.", response.getHeaders().getFirst(MESSAGE));
+        void refusesToDeleteOrReadAnotherUsersAccount() {
+            assertEquals(HttpStatus.FORBIDDEN, service.deleteUserByUserAndApplication(TOKEN, OTHER_ID).getStatusCode());
+            assertEquals(HttpStatus.FORBIDDEN, service.findUser(TOKEN, OTHER_ID).getStatusCode());
             verifyNoInteractions(backboneClient);
         }
 
@@ -374,7 +382,7 @@ class UserServiceImplTest {
         void answersNotFoundWhenBackboneReturnsNoUser() {
             when(backboneClient.findUserById(USER_ID)).thenReturn(null);
 
-            var response = service.update(USER_ID, putRequest(null));
+            var response = service.update(TOKEN, USER_ID, putRequest(null));
 
             assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
             assertEquals("User not found.", response.getHeaders().getFirst(MESSAGE));
@@ -384,14 +392,14 @@ class UserServiceImplTest {
         void answersNotFoundWhenTheLookupReturns404() {
             when(backboneClient.findUserById(USER_ID)).thenThrow(feign(404));
 
-            assertEquals(HttpStatus.NOT_FOUND, service.update(USER_ID, putRequest(null)).getStatusCode());
+            assertEquals(HttpStatus.NOT_FOUND, service.update(TOKEN, USER_ID, putRequest(null)).getStatusCode());
         }
 
         @Test
         void answersServerErrorWhenTheLookupFails() {
             when(backboneClient.findUserById(USER_ID)).thenThrow(feign(502));
 
-            var response = service.update(USER_ID, putRequest(null));
+            var response = service.update(TOKEN, USER_ID, putRequest(null));
 
             assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
             assertEquals("Error updating user.", response.getHeaders().getFirst(MESSAGE));
@@ -403,7 +411,7 @@ class UserServiceImplTest {
             when(putUserMapper.toBackbone(any(), any())).thenReturn(mock(BackboneUserUpdateRequest.class));
             when(backboneClient.userPartialUpdate(eq(USER_ID), any())).thenThrow(feign(404));
 
-            assertEquals(HttpStatus.NOT_FOUND, service.update(USER_ID, putRequest(null)).getStatusCode());
+            assertEquals(HttpStatus.NOT_FOUND, service.update(TOKEN, USER_ID, putRequest(null)).getStatusCode());
         }
 
         @Test
@@ -412,7 +420,7 @@ class UserServiceImplTest {
             when(putUserMapper.toBackbone(any(), any())).thenReturn(mock(BackboneUserUpdateRequest.class));
             when(backboneClient.userPartialUpdate(eq(USER_ID), any())).thenThrow(feign(400));
 
-            var response = service.update(USER_ID, putRequest(null));
+            var response = service.update(TOKEN, USER_ID, putRequest(null));
 
             assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
             assertEquals("Invalid request data.", response.getHeaders().getFirst(MESSAGE));
@@ -423,7 +431,7 @@ class UserServiceImplTest {
             stubExistingUser();
             when(putUserMapper.toBackbone(any(), any())).thenThrow(new IllegalStateException("boom"));
 
-            var response = service.update(USER_ID, putRequest(null));
+            var response = service.update(TOKEN, USER_ID, putRequest(null));
 
             assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
             assertEquals("An unexpected error occurred while updating the user.", response.getHeaders().getFirst(MESSAGE));
@@ -438,7 +446,7 @@ class UserServiceImplTest {
             when(backboneClient.deleteUserByUserIdAndApplicationId(APPLICATION_ID, USER_ID))
                     .thenReturn(ResponseEntity.noContent().build());
 
-            assertEquals(HttpStatus.NO_CONTENT, service.deleteUserByUserAndApplication(USER_ID).getStatusCode());
+            assertEquals(HttpStatus.NO_CONTENT, service.deleteUserByUserAndApplication(TOKEN, USER_ID).getStatusCode());
         }
 
         @Test
@@ -446,42 +454,42 @@ class UserServiceImplTest {
             when(backboneClient.deleteUserByUserIdAndApplicationId(APPLICATION_ID, USER_ID))
                     .thenReturn(ResponseEntity.ok().build());
 
-            assertEquals(HttpStatus.NOT_MODIFIED, service.deleteUserByUserAndApplication(USER_ID).getStatusCode());
+            assertEquals(HttpStatus.NOT_MODIFIED, service.deleteUserByUserAndApplication(TOKEN, USER_ID).getStatusCode());
         }
 
         @Test
         void relaysNotFound() {
             when(backboneClient.deleteUserByUserIdAndApplicationId(any(), any())).thenThrow(feign(404));
 
-            assertEquals(HttpStatus.NOT_FOUND, service.deleteUserByUserAndApplication(USER_ID).getStatusCode());
+            assertEquals(HttpStatus.NOT_FOUND, service.deleteUserByUserAndApplication(TOKEN, USER_ID).getStatusCode());
         }
 
         @Test
         void relaysForbidden() {
             when(backboneClient.deleteUserByUserIdAndApplicationId(any(), any())).thenThrow(feign(403));
 
-            assertEquals(HttpStatus.FORBIDDEN, service.deleteUserByUserAndApplication(USER_ID).getStatusCode());
+            assertEquals(HttpStatus.FORBIDDEN, service.deleteUserByUserAndApplication(TOKEN, USER_ID).getStatusCode());
         }
 
         @Test
         void relaysBadRequest() {
             when(backboneClient.deleteUserByUserIdAndApplicationId(any(), any())).thenThrow(feign(400));
 
-            assertEquals(HttpStatus.BAD_REQUEST, service.deleteUserByUserAndApplication(USER_ID).getStatusCode());
+            assertEquals(HttpStatus.BAD_REQUEST, service.deleteUserByUserAndApplication(TOKEN, USER_ID).getStatusCode());
         }
 
         @Test
         void answersServerErrorForOtherBackboneStatuses() {
             when(backboneClient.deleteUserByUserIdAndApplicationId(any(), any())).thenThrow(feign(502));
 
-            assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, service.deleteUserByUserAndApplication(USER_ID).getStatusCode());
+            assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, service.deleteUserByUserAndApplication(TOKEN, USER_ID).getStatusCode());
         }
 
         @Test
         void answersServerErrorOnUnexpectedFailures() {
             when(backboneClient.deleteUserByUserIdAndApplicationId(any(), any())).thenThrow(new IllegalStateException("boom"));
 
-            assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, service.deleteUserByUserAndApplication(USER_ID).getStatusCode());
+            assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, service.deleteUserByUserAndApplication(TOKEN, USER_ID).getStatusCode());
         }
     }
 

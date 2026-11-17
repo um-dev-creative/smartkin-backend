@@ -1,5 +1,6 @@
 package com.umdc.smartkin.api.v1.controller;
 
+import com.umdc.smartkin.api.v1.service.ProfileImageService;
 import com.umdc.smartkin.api.v1.service.UserRegisterService;
 import com.umdc.smartkin.api.v1.service.UserService;
 import com.umdc.smartkin.api.v1.to.ConfirmCodeRequest;
@@ -46,13 +47,15 @@ class UserControllersTest {
         ResponseEntity<Void> deleted = ResponseEntity.noContent().build();
         when(userService.create(createRequest)).thenReturn(created);
         when(userService.findUser("token", USER_ID)).thenReturn(found);
-        when(userService.update(USER_ID, putRequest)).thenReturn(updated);
-        when(userService.deleteUserByUserAndApplication(USER_ID)).thenReturn(deleted);
+        when(userService.update("token", USER_ID, putRequest)).thenReturn(updated);
+        when(userService.deleteUserByUserAndApplication("token", USER_ID)).thenReturn(deleted);
 
         assertEquals(created, controller.createUserPost(createRequest));
         assertEquals(found, controller.userGet("token", USER_ID));
-        assertEquals(updated, controller.update(USER_ID, putRequest));
-        assertEquals(deleted, controller.deleteUserByUserId(USER_ID));
+        assertEquals(updated, controller.update("token", USER_ID, putRequest));
+        assertEquals(deleted, controller.deleteUserByUserId("token", USER_ID));
+        when(userRegisterService.resendCode("bkd", USER_ID)).thenReturn(ResponseEntity.accepted().build());
+        assertEquals(HttpStatus.ACCEPTED, new UserRegisterController(userRegisterService).resendCode("bkd", USER_ID).getStatusCode());
     }
 
     @Test
@@ -69,11 +72,11 @@ class UserControllersTest {
     void routesAreMappedUnderApiV1() throws Exception {
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new UserController(userService)).build();
         when(userService.findUser("token", USER_ID)).thenReturn(ResponseEntity.notFound().build());
-        when(userService.deleteUserByUserAndApplication(USER_ID)).thenReturn(ResponseEntity.noContent().build());
+        when(userService.deleteUserByUserAndApplication("token", USER_ID)).thenReturn(ResponseEntity.noContent().build());
 
         mvc.perform(get("/api/v1/users/{id}", USER_ID).header("session-token", "token")).andExpect(status().isNotFound());
-        mvc.perform(delete("/api/v1/users/{id}", USER_ID)).andExpect(status().isNoContent());
-        verify(userService).deleteUserByUserAndApplication(USER_ID);
+        mvc.perform(delete("/api/v1/users/{id}", USER_ID).header("session-token", "token")).andExpect(status().isNoContent());
+        verify(userService).deleteUserByUserAndApplication("token", USER_ID);
     }
 
     @Test
@@ -83,8 +86,8 @@ class UserControllersTest {
 
         assertEquals(HttpStatus.NOT_IMPLEMENTED, userApi.createUserPost(mock(UserCreateRequest.class)).getStatusCode());
         assertEquals(HttpStatus.NOT_IMPLEMENTED, userApi.userGet("token", UUID.randomUUID()).getStatusCode());
-        assertEquals(HttpStatus.NOT_IMPLEMENTED, userApi.update(USER_ID, mock(PutUserRequest.class)).getStatusCode());
-        assertEquals(HttpStatus.NOT_IMPLEMENTED, userApi.deleteUserByUserId(USER_ID).getStatusCode());
+        assertEquals(HttpStatus.NOT_IMPLEMENTED, userApi.update("token", USER_ID, mock(PutUserRequest.class)).getStatusCode());
+        assertEquals(HttpStatus.NOT_IMPLEMENTED, userApi.deleteUserByUserId("token", USER_ID).getStatusCode());
         assertEquals(HttpStatus.NOT_IMPLEMENTED, registerApi.confirmCode("bkd", new ConfirmCodeRequest(USER_ID, "1")).getStatusCode());
     }
 
@@ -108,14 +111,14 @@ class UserControllersTest {
 
         userApi.createUserPost(createRequest);
         userApi.userGet("token", USER_ID);
-        userApi.update(USER_ID, putRequest);
-        userApi.deleteUserByUserId(USER_ID);
+        userApi.update("token", USER_ID, putRequest);
+        userApi.deleteUserByUserId("token", USER_ID);
         registerApi.confirmCode("bkd", confirm);
 
         verify(userService).create(createRequest);
         verify(userService).findUser("token", USER_ID);
-        verify(userService).update(USER_ID, putRequest);
-        verify(userService).deleteUserByUserAndApplication(USER_ID);
+        verify(userService).update("token", USER_ID, putRequest);
+        verify(userService).deleteUserByUserAndApplication("token", USER_ID);
         verify(userRegisterService).confirmCode("bkd", confirm);
     }
 
@@ -126,8 +129,11 @@ class UserControllersTest {
 
         assertEquals(HttpStatus.NOT_IMPLEMENTED, users.create(null).getStatusCode());
         assertEquals(HttpStatus.NOT_IMPLEMENTED, users.findUser("t", USER_ID).getStatusCode());
-        assertEquals(HttpStatus.NOT_IMPLEMENTED, users.update(USER_ID, null).getStatusCode());
-        assertEquals(HttpStatus.NOT_IMPLEMENTED, users.deleteUserByUserAndApplication(USER_ID).getStatusCode());
+        assertEquals(HttpStatus.NOT_IMPLEMENTED, users.update("t", USER_ID, null).getStatusCode());
+        assertEquals(HttpStatus.NOT_IMPLEMENTED, users.deleteUserByUserAndApplication("t", USER_ID).getStatusCode());
         assertEquals(HttpStatus.NOT_IMPLEMENTED, register.confirmCode("t", null).getStatusCode());
+        assertEquals(HttpStatus.NOT_IMPLEMENTED, register.resendCode("t", USER_ID).getStatusCode());
+        assertEquals(HttpStatus.NOT_IMPLEMENTED, users.deleteUser(USER_ID).getStatusCode());
+        assertEquals(HttpStatus.NOT_IMPLEMENTED, new ProfileImageService() { }.upload("t", null).getStatusCode());
     }
 }

@@ -26,6 +26,14 @@ class JwtUtilTest {
     }
 
     @Test
+    void readsAnyClaimAndAnswersNullForMissingOrMalformedOnes() {
+        assertEquals("true", JwtUtil.getClaim(tokenWithPayload("{\"vcCompleted\":\"true\"}"), "vcCompleted"));
+        assertNull(JwtUtil.getClaim(tokenWithPayload("{\"sub\":\"ana\"}"), "vcCompleted"));
+        assertNull(JwtUtil.getClaim("not-a-jwt", "vcCompleted"));
+        assertNull(JwtUtil.getUidFromToken(tokenWithPayload("{\"uid\":\"not-a-uuid\"}")));
+    }
+
+    @Test
     void returnsNullWhenThereIsNoUidClaim() {
         assertNull(JwtUtil.getUidFromToken(tokenWithPayload("{\"sub\":\"ana\"}")));
     }

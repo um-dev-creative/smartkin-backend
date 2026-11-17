@@ -3,7 +3,9 @@ info:
   title: SmartKin API
   version: 1.0.0
   description: |
-    MVP contract of smartkin-backend (X-2). It extends the existing `/api/v1/users` and `/api/v1/user-register` operations, which do not change,
+    MVP contract of smartkin-backend (X-2). It extends the existing `/api/v1/users` and `/api/v1/user-register` operations,
+    whose only change is that `GET/PUT/DELETE /users/{id}`, the code confirmation and the resend answer 403 for an account that is not the caller's,
+    and that a session whose e-mail is not verified (`vcCompleted` is not `true` in the token) gets 403 everywhere else,
     with the resources of the vertical slice: a parent invites (or creates the account of) a child, assigns an activity, the child completes the lesson quiz and earns points,
     and the parent follows the progress.
 
@@ -26,6 +28,44 @@ tags:
   - name: rewards
   - name: notifications
 paths:
+  /user-register/{userId}/resend:
+    post:
+      tags: [user-register]
+      summary: Send a new verification code to the e-mail of the caller (the pending code stops working)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '202': {description: The e-mail was handed to the mail service}
+        '403': {description: Not your account}
+        '409': {description: The e-mail is already verified}
+        '503': {description: The mail service did not take the message}
+  /profile/image:
+    post:
+      tags: [profile-image]
+      summary: Upload the profile image of the caller
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [imageData]
+              properties:
+                imageData: {type: string, format: binary}
+      responses:
+        '201':
+          description: The image was stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ref: {type: string}
+        '400': {description: The image is missing or empty}
+        '502': {description: Backbone did not take the image}
   /parents/me:
     get:
       tags: [parents]

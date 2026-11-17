@@ -32,6 +32,12 @@ If the two variables are missing, confirming a code answers 500 with `SmartKin's
 refuses the client (wrong secret, missing scope), the same call fails with the status Backbone returned. mercury answers 403 when the
 client has no application in Backbone or lacks the scopes.
 
+## Verifying your e-mail (for families)
+
+After signing up you get an e-mail with a code (`1234-5678`). Until you enter it you cannot use SmartKin: every other screen answers "Verify your e-mail to use SmartKin". If the code does not arrive, expired or you used up your three attempts, ask for a new one (**Resend code**): the old code stops working. You can only verify, resend, read, change or delete **your own** account; a parent can read the account of their own children, nobody else's. You cannot change your own roles.
+
+For operators: `umdc.smartkin.verification.required=false` switches the verification gate off (accounts created before it existed). The profile image goes to `POST /api/v1/profile/image`.
+
 ## What changed for operators in this release
 
 - The service now runs on **Java 25** and **Spring Boot 4.1.1**. Hosts and containers need a Java 25 runtime; the Docker image

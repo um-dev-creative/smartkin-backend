@@ -15,4 +15,13 @@ public interface UserRegisterService {
         return new ResponseEntity<>(HttpStatus.NOT_IMPLEMENTED);
     }
 
+    /// Sends a new verification code to the e-mail of the user; the new code replaces the pending one.
+    /// @param sessionTokenBkd the session token of the caller, who must be the user
+    /// @param userId the user who asks for a new code
+    /// @return 202 when the e-mail was handed over, 403 for somebody else's account, 409 when the e-mail is already verified, 502/503 when
+    ///         the identity or the mail service fails
+    default ResponseEntity<Void> resendCode(String sessionTokenBkd, java.util.UUID userId) {
+        return new ResponseEntity<>(HttpStatus.NOT_IMPLEMENTED);
+    }
+
 }

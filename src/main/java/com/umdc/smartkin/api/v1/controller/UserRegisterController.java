@@ -20,4 +20,9 @@ public class UserRegisterController implements UserRegisterApi {
     public ResponseEntity<Void> confirmCode(String sessionTokenBkd, ConfirmCodeRequest confirmCodeRequest) {
         return userRegisterService.confirmCode(sessionTokenBkd, confirmCodeRequest);
     }
+
+    @Override
+    public ResponseEntity<Void> resendCode(String sessionTokenBkd, java.util.UUID userId) {
+        return userRegisterService.resendCode(sessionTokenBkd, userId);
+    }
 }

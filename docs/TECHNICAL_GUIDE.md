@@ -583,6 +583,37 @@ flowchart TD
 `ChildServiceImpl` and `ParentServiceImpl` now use the policy; their behavior and answers did not change (their tests pass unmodified apart from how the service is built).
 Tests: `AccessPolicyTest` covers every cell of the table, and `CrossFamilyAccessContainerTest` runs the real services over PostgreSQL with two families and a user without profile: a parent lists, reads and changes only their own children, another family's child is a 404 and is left untouched, a child sees only themselves and changes nobody, a user without profile reaches nothing, and a family's child cannot be linked by another parent.
 
+## Account ownership and e-mail verification (P1 audit)
+
+**Ownership.** `GET/PUT/DELETE /api/v1/users/{id}`, `POST /api/v1/user-register` (confirm) and `POST /api/v1/user-register/{userId}/resend` compare the `uid` claim of the `session-token` with the user in the path. `AccessPolicy.canViewUser` (own account, or the account of a child linked to the caller) guards the read; `AccessPolicy.isSelf` guards change and delete. Anything else is `403` with `message-error` (`You can only do this on your own account.`); a token without `uid` is `403` too. `PUT /users/{id}` refuses `roleIds` with `403`. `UserService.deleteUser(userId)` has no caller check and exists only for the service's own clean-up (`ChildAccountServiceImpl` removes the account of a child whose profile failed); no endpoint calls it.
+
+**Verification gate.** `AuthServiceImpl.token(request, backboneToken)` puts `vcCompleted` and `uid` in the session token (both branches). `VerifiedSessionInterceptor` is registered by `VerificationWebConfig` on `umdc.api.endpoint/**` with the lowest precedence, so it runs after the library's `SessionJwtInterceptor`, which has already validated the token; it reads the claim with `JwtUtil.getClaim`. Without `vcCompleted=true` it answers `403` (`Verify your e-mail to use SmartKin.`), except: `POST /users` (sign-up), `/auth/**`, `/user-register/**` (confirm and resend), `GET /users/{id}` and `OPTIONS`. `umdc.smartkin.verification.required=false` switches it off. Login itself does not change: it depends on Backbone, and the Mercury lookup of the claim is the one already there (a Mercury `404` means "not verified").
+
+**Resend.** `UserRegisterServiceImpl.resendCode`: ownership, then `mercury latest-status` (already verified: `409`), then the e-mail and name from Backbone (`findUserById`), then `MercuryMailer.resendVerificationCode` with `Idempotency-Key: RESEND-CODE:<userId>:<epoch minute>`. Mercury expires the pending code when the new one is created (`VerificationCodeServiceImpl.create`).
+
+**Profile image.** `ProfileImageController` (`POST /api/v1/profile/image`, multipart part `imageData`) hands the bytes to `BackboneClient.saveProfilePhoto` with the caller's token, so Backbone stores it for that user only; `201` with `{ref}`.
+
+```mermaid
+sequenceDiagram
+    participant F as Frontend (BFF)
+    participant S as smartkin-backend
+    participant M as mercury
+    participant B as backbone-rest
+    F->>S: any call (session-token, vcCompleted=false)
+    S-->>F: 403 Verify your e-mail
+    F->>S: POST /user-register/{uid}/resend
+    S->>M: latest-status
+    S->>B: GET user (e-mail, name)
+    S->>M: POST /messages (new code)
+    S-->>F: 202
+    F->>S: POST /user-register (code)
+    S->>M: confirm
+    S->>B: activate
+    S-->>F: 200 (the BFF asks for a new session token: vcCompleted=true)
+```
+
+Tests: `VerifiedSessionInterceptorTest`, `UserServiceImplTest` (ownership, roles), `UserRegisterServiceImplTest` (confirm, resend), `MercuryMailerTest`, `ProfileImageServiceImplTest`, `AccessPolicyTest`, `JwtUtilTest`, `AuthServiceImplTest`.
+
 ## Catalog API (BE-6)
 
 `CatalogApi`/`CatalogController` (base `/api/v1`) implement `listTopics`, `listTopicLessons`, `getLesson`, `listActivities` and `getActivity`. They are read-only and open to any authenticated user (the security library validates the token; no ownership applies to the catalog).

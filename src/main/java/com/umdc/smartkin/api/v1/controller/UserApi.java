@@ -66,6 +66,7 @@ public interface UserApi {
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
                 schema = @Schema(implementation = GetUserResponse.class))),
         @ApiResponse(responseCode = "400", description = "Invalid request", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Not your account (nor a child linked to you)", content = @Content),
         @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
     })
     @GetMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -76,8 +77,9 @@ public interface UserApi {
         return this.getService().findUser(token, id);
     }
 
-    /// Updates a user by ID.
+    /// Updates a user by ID. Only the user can change their own account.
     ///
+    /// @param token the session token of the caller
     /// @param userId the ID of the user to update
     /// @param request the patch user request
     /// @return the patch user response
@@ -87,17 +89,21 @@ public interface UserApi {
             content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
                 schema = @Schema(implementation = Void.class))),
         @ApiResponse(responseCode = "400", description = "Invalid request", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Not your account", content = @Content),
         @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
     })
     @PutMapping(value = "/{userId}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     default ResponseEntity<Void> update(
+            @Parameter(description = "Token session", required = true)
+            @RequestHeader(SESSION_TOKEN_KEY) String token,
             @PathVariable("userId") UUID userId,
             @RequestBody PutUserRequest request) {
-        return this.getService().update(userId, request);
+        return this.getService().update(token, userId, request);
     }
 
-    /// Deletes a user by user ID and application ID.
+    /// Deletes a user by user ID and application ID. Only the user can delete their own account.
     ///
+    /// @param token the session token of the caller
     /// @param userId the ID of the user to delete
     /// @return a ResponseEntity with appropriate status
     @Operation(summary = "Delete a user by ID", description = "Deletes a user from the system with the provided user ID. Requires admin or appropriate authorization.")
@@ -108,8 +114,11 @@ public interface UserApi {
         @ApiResponse(responseCode = "500", description = "Internal server error", content = @Content)
     })
     @DeleteMapping(value = "/{userId}")
-    default ResponseEntity<Void> deleteUserByUserId(@NotNull @PathVariable UUID userId) {
-        return this.getService().deleteUserByUserAndApplication(userId);
+    default ResponseEntity<Void> deleteUserByUserId(
+            @Parameter(description = "Token session", required = true)
+            @RequestHeader(SESSION_TOKEN_KEY) String token,
+            @NotNull @PathVariable UUID userId) {
+        return this.getService().deleteUserByUserAndApplication(token, userId);
     }
 
 }

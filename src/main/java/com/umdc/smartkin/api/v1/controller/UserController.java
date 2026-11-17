@@ -51,8 +51,8 @@ public class UserController implements UserApi {
     /// @param request the request object containing the lastUpdate user details
     /// @return a ResponseEntity containing the PatchUserResponse
     @Override
-    public ResponseEntity<Void> update(UUID userId, PutUserRequest request) {
-        return userService.update(userId, request);
+    public ResponseEntity<Void> update(String token, UUID userId, PutUserRequest request) {
+        return userService.update(token, userId, request);
     }
 
     /// Handles the HTTP DELETE request to delete a user by user ID and application ID.
@@ -60,8 +60,8 @@ public class UserController implements UserApi {
     /// @param userId the ID of the user to delete
     /// @return a ResponseEntity with appropriate status
     @Override
-    public ResponseEntity<Void> deleteUserByUserId(UUID userId) {
-        return userService.deleteUserByUserAndApplication(userId);
+    public ResponseEntity<Void> deleteUserByUserId(String token, UUID userId) {
+        return userService.deleteUserByUserAndApplication(token, userId);
     }
 
 }

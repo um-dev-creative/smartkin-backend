@@ -39,20 +39,31 @@ public interface UserService {
 
     /// Updates a user by ID.
     ///
+    /// @param token the session token of the caller, who must be the user
     /// @param userId the ID of the user to update
     /// @param request the patch user request
     /// @return a ResponseEntity containing the patch user response
-    default ResponseEntity<Void> update(UUID userId, PutUserRequest request) {
+    default ResponseEntity<Void> update(String token, UUID userId, PutUserRequest request) {
         return new ResponseEntity<>(HttpStatus.NOT_IMPLEMENTED);
     }
 
     /// Deletes a user by user ID and application ID.
     ///
+    /// @param token the session token of the caller, who must be the user
     /// @param userId the ID of the user to delete
     /// @return a ResponseEntity with appropriate status
     /// @see ResponseEntity
     /// @see UUID
-    default ResponseEntity<Void> deleteUserByUserAndApplication(UUID userId) {
+    default ResponseEntity<Void> deleteUserByUserAndApplication(String token, UUID userId) {
+        return new ResponseEntity<>(HttpStatus.NOT_IMPLEMENTED);
+    }
+
+    /// Deletes a user without asking who the caller is. Only for the service's own clean-up of an account it has just created (a child
+    /// whose profile failed); never reachable from an endpoint.
+    ///
+    /// @param userId the ID of the user to delete
+    /// @return a ResponseEntity with appropriate status
+    default ResponseEntity<Void> deleteUser(UUID userId) {
         return new ResponseEntity<>(HttpStatus.NOT_IMPLEMENTED);
     }
 
