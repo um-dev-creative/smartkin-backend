@@ -26,6 +26,7 @@ public class MercuryMailer {
     private static final String BODY = "verification";
     private static final String KEY_PREFIX = "REGISTER-CODE:";
     private static final String RESEND_KEY_PREFIX = "RESEND-CODE:";
+    private static final String RESET_KEY_PREFIX = "RESET-CODE:";
     private static final long SECONDS_PER_MINUTE = 60;
     private static final int GROUP_BOUND = 10_000;
 
@@ -33,6 +34,7 @@ public class MercuryMailer {
     private final MercuryTokens mercuryTokens;
     private final UUID applicationId;
     private final UUID templateDefinedId;
+    private final String passwordResetTemplate;
     private final String language;
     private final String from;
     private final Clock clock;
@@ -45,11 +47,13 @@ public class MercuryMailer {
     /// @param clock             the clock `sendDate` is read from
     /// @param applicationId     SmartKin's application id
     /// @param templateDefinedId the mercury template definition of the verification e-mail (`sk_verification_<language>`)
+    /// @param passwordResetTemplate the mercury template definition of the password reset e-mail (`sk_password_reset_<language>`); empty = not configured
     /// @param language          language of that template
     /// @param from              sender address
     public MercuryMailer(MercuryClient mercuryClient, MercuryTokens mercuryTokens, Clock clock,
                          @Value("${umdc.smartkin.application-id}") UUID applicationId,
                          @Value("${umdc.verification.code.template.id}") UUID templateDefinedId,
+                         @Value("${umdc.password-reset.template.id:}") String passwordResetTemplate,
                          @Value("${umdc.smartkin.mail.language:es}") String language,
                          @Value("${umdc.smartkin.mail.from:support@latinhub.info}") String from) {
         this.mercuryClient = mercuryClient;
@@ -57,6 +61,7 @@ public class MercuryMailer {
         this.clock = clock;
         this.applicationId = applicationId;
         this.templateDefinedId = templateDefinedId;
+        this.passwordResetTemplate = passwordResetTemplate;
         this.language = language;
         this.from = from;
     }
@@ -83,15 +88,34 @@ public class MercuryMailer {
         send(RESEND_KEY_PREFIX + userId + ":" + minute, userId, email, fullName);
     }
 
+    /// Sends the code that lets the owner of an account choose a new password. It uses its own template, so the e-mail does not talk about
+    /// verifying the account. The key repeats inside the same minute, so a double click sends one e-mail.
+    ///
+    /// @param userId   the user
+    /// @param email    where the code goes
+    /// @param fullName shown in the e-mail (`user_name`)
+    /// @throws MailDeliveryException when the template is not configured, mercury cannot be reached, refuses the token or does not accept the message
+    public void sendPasswordResetCode(UUID userId, String email, String fullName) {
+        if (passwordResetTemplate == null || passwordResetTemplate.isBlank()) {
+            throw new MailDeliveryException("the password reset template is not configured (PRX_PASSWORD_RESET_TEMPLATE_ID)");
+        }
+        long minute = clock.instant().getEpochSecond() / SECONDS_PER_MINUTE;
+        send(RESET_KEY_PREFIX + userId + ":" + minute, userId, email, fullName, UUID.fromString(passwordResetTemplate.trim()));
+    }
+
     private void send(String idempotencyKey, UUID userId, String email, String fullName) {
-        var request = new MercuryMessageRequest(CHANNEL_EMAIL, userId, email, templateDefinedId, applicationId, language, from, BODY,
+        send(idempotencyKey, userId, email, fullName, templateDefinedId);
+    }
+
+    private void send(String idempotencyKey, UUID userId, String email, String fullName, UUID template) {
+        var request = new MercuryMessageRequest(CHANNEL_EMAIL, userId, email, template, applicationId, language, from, BODY,
                 LocalDateTime.now(clock.withZone(ZoneOffset.UTC)), Map.of("vc", newCode(), "user_name", fullName));
         try {
             var response = mercuryTokens.withToken(token -> mercuryClient.sendMessage(token, idempotencyKey, request));
             if (!response.getStatusCode().is2xxSuccessful()) {
                 throw new MailDeliveryException("mercury answered " + response.getStatusCode().value());
             }
-            LOGGER.info("Verification e-mail of user {} queued in mercury", userId);
+            LOGGER.info("E-mail with a code for user {} queued in mercury", userId);
         } catch (FeignException e) {
             throw new MailDeliveryException("mercury did not take the verification e-mail (status " + e.status() + ")", e);
         } catch (IllegalStateException e) {

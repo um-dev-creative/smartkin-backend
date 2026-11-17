@@ -47,6 +47,14 @@ public interface BackboneClient {
     @PutMapping("/api/v1/users/application/{applicationId}/user/{userId}/activate")
     ResponseEntity<Void> activateUser(@PathVariable UUID applicationId, @PathVariable UUID userId);
 
+    // Finds who owns an e-mail (404 when nobody does). Needs the users:manage scope.
+    @PostMapping(value = "/api/v1/users/application/{applicationId}/lookup-by-email", consumes = MediaType.APPLICATION_JSON_VALUE)
+    BackboneEmailLookupResponse lookupByEmail(@PathVariable UUID applicationId, @RequestBody BackboneEmailLookupRequest request);
+
+    // Sets a new password; the caller must have verified the owner first. 422 when the password breaks backbone's policy. Needs users:manage.
+    @PutMapping(value = "/api/v1/users/application/{applicationId}/user/{userId}/password", consumes = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<Void> resetPassword(@PathVariable UUID applicationId, @PathVariable UUID userId, @RequestBody BackbonePasswordResetRequest request);
+
     @DeleteMapping("/api/v1/users/application/{applicationId}/user/{userId}")
     ResponseEntity<Void> deleteUserByUserIdAndApplicationId(@PathVariable UUID applicationId, @PathVariable UUID userId);
 

@@ -33,6 +33,7 @@ class MercuryMailerTest {
 
     private static final String TOKEN = "mercury-token";
     private static final UUID TEMPLATE = UUID.randomUUID();
+    private static final UUID RESET_TEMPLATE = UUID.randomUUID();
 
     @Mock
     private MercuryClient mercuryClient;
@@ -44,7 +45,7 @@ class MercuryMailerTest {
     @BeforeEach
     void setUp() {
         var clock = Clock.fixed(Instant.parse("2026-11-15T12:30:00Z"), ZoneOffset.UTC);
-        mailer = new MercuryMailer(mercuryClient, mercuryTokens, clock, APPLICATION_ID, TEMPLATE, "es", "support@smartkin.test");
+        mailer = new MercuryMailer(mercuryClient, mercuryTokens, clock, APPLICATION_ID, TEMPLATE, RESET_TEMPLATE.toString(), "es", "support@smartkin.test");
     }
 
     @SuppressWarnings("unchecked")
@@ -120,5 +121,32 @@ class MercuryMailerTest {
     void theExceptionKeepsItsCause() {
         var cause = new RuntimeException("boom");
         assertEquals(cause, new MailDeliveryException("x", cause).getCause());
+    }
+
+    @Test
+    void thePasswordResetEmailUsesItsOwnTemplateAndKey() {
+        runsCallsWithTheMercuryToken();
+        when(mercuryClient.sendMessage(eq(TOKEN), any(), any()))
+                .thenReturn(ResponseEntity.accepted().body(new MercuryMessageResponse(UUID.randomUUID(), "OPENED", null)));
+
+        mailer.sendPasswordResetCode(USER_ID, "ana@smartkin.test", "Ana Lopez");
+
+        long minute = Instant.parse("2026-11-15T12:30:00Z").getEpochSecond() / 60;
+        var request = ArgumentCaptor.forClass(MercuryMessageRequest.class);
+        verify(mercuryClient).sendMessage(eq(TOKEN), eq("RESET-CODE:" + USER_ID + ":" + minute), request.capture());
+        assertEquals(RESET_TEMPLATE, request.getValue().templateDefinedId());
+        assertEquals("Ana Lopez", request.getValue().params().get("user_name"));
+        assertTrue(request.getValue().params().get("vc").toString().matches("\\d{4}-\\d{4}"));
+    }
+
+    @Test
+    void thePasswordResetEmailFailsWhenItsTemplateIsNotConfigured() {
+        var unconfigured = new MercuryMailer(mercuryClient, mercuryTokens,
+                Clock.fixed(Instant.parse("2026-11-15T12:30:00Z"), ZoneOffset.UTC), APPLICATION_ID, TEMPLATE, " ", "es", "support@smartkin.test");
+
+        var failure = assertThrows(MailDeliveryException.class, () -> unconfigured.sendPasswordResetCode(USER_ID, "a@b.c", "Ana"));
+
+        assertTrue(failure.getMessage().contains("PRX_PASSWORD_RESET_TEMPLATE_ID"));
+        org.mockito.Mockito.verifyNoInteractions(mercuryClient);
     }
 }

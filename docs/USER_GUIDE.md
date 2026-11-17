@@ -267,3 +267,30 @@ Without those variables the service stops at startup with a message such as
 `Profile '${SPRING_BOOT_PROFILE_ACTIVE}' must contain a letter, digit or allowed char`.
 
 **Mercury.** SmartKin does not log in to mercury with an alias and a password any more, and it does not use Kafka to send e-mails: it asks backbone for the M2M token of its managed client (`MERCURY_M2M_CLIENT_ID`, `MERCURY_M2M_CLIENT_SECRET`) and calls mercury's HTTP API. See "Verification e-mail" below.
+
+## Recuperar la contraseña (para el equipo de soporte)
+
+Una persona que no recuerda su contraseña la recupera sola, sin pasar por soporte:
+
+1. En el inicio de sesión toca **¿Olvidaste tu contraseña?** y escribe el correo de su cuenta.
+2. Si la cuenta existe y está activa, recibe un correo con un código de 8 dígitos (`1234-5678`). La pantalla responde lo mismo aunque el correo no esté registrado, para que nadie pueda averiguar quién tiene cuenta.
+3. Escribe el código y la contraseña nueva (mínimo 8 caracteres). El código sirve **una sola vez** y vence; tiene 3 intentos.
+4. Con la contraseña cambiada inicia sesión normalmente.
+
+```mermaid
+flowchart TD
+    A[Olvidé mi contraseña] --> B[Escribe su correo]
+    B --> C{¿Cuenta activa?}
+    C -- sí --> D[Llega el correo con el código]
+    C -- no --> E[No llega nada, la pantalla no lo dice]
+    D --> F[Código + contraseña nueva]
+    F --> G{¿Código válido?}
+    G -- sí --> H[Contraseña cambiada: inicia sesión]
+    G -- no --> I[Pide un código nuevo]
+```
+
+Qué decirle a quien escribe a soporte:
+
+- **No llega el correo**: debe revisar el spam y esperar un minuto; solo se envía un código por minuto. Si su cuenta nunca se verificó, primero debe verificar el correo.
+- **"El código no es válido o venció"**: pidió otro código y el anterior dejó de servir, se acabaron los 3 intentos, o ya lo usó. Que pida uno nuevo.
+- **"La contraseña no cumple la política"**: el código ya se gastó; debe pedir uno nuevo y elegir otra contraseña (con letras y números).
