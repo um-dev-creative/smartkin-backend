@@ -46,6 +46,26 @@ paths:
         '200': {description: Profile saved, content: {application/json: {schema: {$ref: '#/components/schemas/ParentProfile'}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /parents/me/family-contract:
+    get:
+      tags: [parents]
+      operationId: getFamilyContract
+      summary: Family contract of the authenticated parent
+      responses:
+        '200': {description: The contract, content: {application/json: {schema: {$ref: '#/components/schemas/FamilyContract'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      tags: [parents]
+      operationId: putFamilyContract
+      summary: Create or replace the family contract of the authenticated parent
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/FamilyContractRequest'}}}
+      responses:
+        '200': {description: Contract saved, content: {application/json: {schema: {$ref: '#/components/schemas/FamilyContract'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /children:
     get:
       tags: [children]
@@ -381,6 +401,23 @@ components:
         phoneNumber: {type: string, maxLength: 20}
         address: {type: string}
         profilePicture: {type: string}
+    FamilyContractRequest:
+      type: object
+      required: [familyName, rules, signature]
+      properties:
+        familyName: {type: string, maxLength: 100}
+        rules: {type: array, minItems: 1, maxItems: 30, items: {type: string, maxLength: 300}}
+        signature: {type: string, maxLength: 100}
+        agreementDate: {type: string, format: date, description: Day of the agreement; today when omitted}
+    FamilyContract:
+      type: object
+      required: [familyName, rules, signature, agreementDate, updatedAt]
+      properties:
+        familyName: {type: string}
+        rules: {type: array, items: {type: string}}
+        signature: {type: string}
+        agreementDate: {type: string, format: date}
+        updatedAt: {type: string, format: date-time}
     Child:
       type: object
       required: [childId, parentId, totalPoints]
