@@ -614,6 +614,26 @@ sequenceDiagram
 
 Tests: `VerifiedSessionInterceptorTest`, `UserServiceImplTest` (ownership, roles), `UserRegisterServiceImplTest` (confirm, resend), `MercuryMailerTest`, `ProfileImageServiceImplTest`, `AccessPolicyTest`, `JwtUtilTest`, `AuthServiceImplTest`.
 
+## Family contract (F-10)
+
+`FamilyContractController` (`/api/v1/parents/me/family-contract`) and `FamilyContractServiceImpl` keep one `FamilyContractDocument` per parent in MongoDB (`family_contracts`, `_id` = the parent's user id), so a parent can neither read nor write another's contract: the id comes from the `uid` claim, never from the request. `AccessPolicy.isParent` gates it (`403` for a child or a user without a profile). `PUT` replaces the whole document, trims the text and takes today (UTC, from the injected `Clock`) when no date comes. A Mongo failure is `503` with `message-error`. Validation lives in `FamilyContractRequest` (`@NotBlank`, `@Size`, 1 to 30 rules).
+
+```mermaid
+sequenceDiagram
+    participant F as Frontend
+    participant S as smartkin-backend
+    participant M as MongoDB
+    F->>S: PUT /parents/me/family-contract (session-token)
+    S->>S: uid from the token, isParent?
+    S->>M: save family_contracts[uid]
+    S-->>F: 200 contract
+    F->>S: GET /parents/me/family-contract
+    S->>M: find family_contracts[uid]
+    S-->>F: 200 contract, or 404 before the first save
+```
+
+Tests: `FamilyContractServiceImplTest`, and the contract tests (`OpenApiContractTest`, `ControllerContractConformanceTest`) now count 31 operations.
+
 ## Catalog API (BE-6)
 
 `CatalogApi`/`CatalogController` (base `/api/v1`) implement `listTopics`, `listTopicLessons`, `getLesson`, `listActivities` and `getActivity`. They are read-only and open to any authenticated user (the security library validates the token; no ownership applies to the catalog).

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Family contract of the parent: `GET` and `PUT /api/v1/parents/me/family-contract` (operations `getFamilyContract`, `putFamilyContract`, in `docs/api/openapi-v1.yaml`). The contract is a family name, 1 to 30 rules (up to 300 characters each), the parent's typed signature and the agreement date (today when omitted); one per parent, kept in the MongoDB collection `family_contracts` keyed by the parent's user id, so there is nothing to migrate. Only a parent reaches it, and only their own: the key is the `uid` of the token (`403` otherwise; `404` before the first save; `503` when MongoDB fails). It replaces the contract the dashboard kept in the browser's `localStorage`.
+
 ### Security
 - `GET/PUT/DELETE /api/v1/users/{id}` and the code confirmation (`POST /api/v1/user-register`) did not check whose account it was: any signed-in user who knew a UUID could read, change or delete another account. Now the caller (the `uid` of the session token) must be the user (a parent may also read the account of a child linked to them), otherwise `403` with `message-error`. `PUT` and `DELETE` of `/users/{id}` now take the `session-token` header. `PUT /users/{id}` also refuses `roleIds` (`403`): a user must not choose their own roles. The clean-up of a child account that failed to complete uses the new internal `UserService.deleteUser`, not reachable from an endpoint.
 - A session whose e-mail is not verified is kept out of the API. New `VerifiedSessionInterceptor` (registered after the library's session interceptor): without `vcCompleted=true` in the token every operation answers `403` (`message-error: Verify your e-mail to use SmartKin.`) except sign-up, the code confirmation and resend, `/auth/**` and reading the own account. Switch off with `umdc.smartkin.verification.required=false` (accounts that predate the verification).

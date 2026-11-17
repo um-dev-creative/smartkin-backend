@@ -32,6 +32,10 @@ If the two variables are missing, confirming a code answers 500 with `SmartKin's
 refuses the client (wrong secret, missing scope), the same call fails with the status Backbone returned. mercury answers 403 when the
 client has no application in Backbone or lacks the scopes.
 
+## Family contract (for families)
+
+A parent writes the family contract once (family name, the rules they agree on and their signature) and it is saved in their account: it is there on any device and no other parent can see it. Saving again replaces it. Before the first save the answer is "there is no family contract yet".
+
 ## Verifying your e-mail (for families)
 
 After signing up you get an e-mail with a code (`1234-5678`). Until you enter it you cannot use SmartKin: every other screen answers "Verify your e-mail to use SmartKin". If the code does not arrive, expired or you used up your three attempts, ask for a new one (**Resend code**): the old code stops working. You can only verify, resend, read, change or delete **your own** account; a parent can read the account of their own children, nobody else's. You cannot change your own roles.
