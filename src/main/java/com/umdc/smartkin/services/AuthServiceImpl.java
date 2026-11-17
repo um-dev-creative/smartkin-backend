@@ -7,6 +7,7 @@ import com.umdc.security.to.AuthResponse;
 import com.umdc.smartkin.client.backbone.BackboneClient;
 import com.umdc.smartkin.client.mercury.MercuryClient;
 import com.umdc.smartkin.client.mercury.MercuryTokens;
+import com.umdc.smartkin.constant.SmartKinAppConstants;
 import feign.FeignException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,6 +89,10 @@ public class AuthServiceImpl implements AuthService {
         }
 
         UUID userId = getUidFromToken(sessionTokenBkd);
+        if (Objects.isNull(userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .header(SmartKinAppConstants.MESSAGE_ERROR_HEADER, SmartKinAppConstants.CALLER_UNKNOWN_MESSAGE).build();
+        }
         try {
             verificationCodeCompleted = mercuryTokens.withToken(mercuryToken -> mercuryClient.isVerificationCodeDone(mercuryToken, userId));
             parameters.put("vcCompleted", verificationCodeCompleted.toString());
@@ -95,6 +100,7 @@ public class AuthServiceImpl implements AuthService {
         } catch (FeignException.NotFound e) {
             logger.info("Token verification code not found for user {}:{}", userId, authRequest.alias());
             parameters.put("vcCompleted", FALSE);
+            parameters.put("uid", userId.toString());
         }
         var authResponse = new AuthResponse(sessionJwtService.generateSessionToken(authRequest.alias(), parameters));
         if (authResponse.token().isBlank()) {

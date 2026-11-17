@@ -9,6 +9,8 @@ import com.umdc.smartkin.api.v1.to.UserCreateResponse;
 import com.umdc.smartkin.client.backbone.BackboneClient;
 import com.umdc.smartkin.client.backbone.to.BackboneUserUpdateRequest;
 import com.umdc.smartkin.client.mercury.MercuryMailer;
+import com.umdc.smartkin.security.access.AccessPolicy;
+import com.umdc.smartkin.util.JwtUtil;
 import com.umdc.smartkin.util.UpstreamFailure;
 import com.umdc.smartkin.mapper.GetUserMapper;
 import com.umdc.smartkin.mapper.PutUserMapper;
@@ -50,14 +52,17 @@ public class UserServiceImpl implements UserService {
     private final PutUserMapper putUserMapper;
     private final BackboneClient backboneClient;
     private final GetUserMapper getUserMapper;
+    private final AccessPolicy accessPolicy;
 
     /// Constructs a new UserServiceImpl with the specified BackboneClient and UserCreateMapper.
     ///
     /// @param backboneClient   the client used to communicate with the backend
     /// @param userCreateMapper the mapper used to convert between request/response objects and backend objects
+    /// @param accessPolicy     decides whose account the caller may read, change or delete
     public UserServiceImpl(BackboneClient backboneClient, MercuryMailer mercuryMailer,
                            UserCreateMapper userCreateMapper, PutUserMapper putUserMapper,
-                           GetUserMapper getUserMapper) {
+                           GetUserMapper getUserMapper, AccessPolicy accessPolicy) {
+        this.accessPolicy = accessPolicy;
         this.mercuryMailer = mercuryMailer;
         this.userCreateMapper = userCreateMapper;
         this.backboneClient = backboneClient;
@@ -105,6 +110,13 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public ResponseEntity<GetUserResponse> findUser(String token, UUID id) {
+        var callerId = JwtUtil.getUidFromToken(token);
+        if (callerId == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).header(MESSAGE_ERROR_HEADER, CALLER_UNKNOWN_MESSAGE).build();
+        }
+        if (!accessPolicy.canViewUser(callerId, id)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).header(MESSAGE_ERROR_HEADER, OWN_ACCOUNT_ONLY_MESSAGE).build();
+        }
         try {
             UUID applicationID = UUID.fromString(applicationIdString);
             var result = backboneClient.findUserById(id);
@@ -133,7 +145,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public ResponseEntity<Void> update(UUID userId, PutUserRequest request) {
+    public ResponseEntity<Void> update(String token, UUID userId, PutUserRequest request) {
         try {
             // Validate request object
             if (Objects.isNull(request)) {
@@ -151,12 +163,15 @@ public class UserServiceImpl implements UserService {
                         .build();
             }
 
-            // Validate role IDs if provided
+            var denied = refuseOthers(token, userId);
+            if (denied != null) {
+                return denied;
+            }
+
+            // a user must not choose their own roles: that would be a privilege escalation
             if (request.roleIds() != null) {
-                ResponseEntity<Void> roleValidation = validateRoleIds(request.roleIds());
-                if (roleValidation != null) {
-                    return roleValidation;
-                }
+                logger.warn("User {} tried to change their roles", userId);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).header(MESSAGE_ERROR_HEADER, ROLES_NOT_CHANGEABLE_MESSAGE).build();
             }
 
             // Check if user exists before updating
@@ -210,7 +225,16 @@ public class UserServiceImpl implements UserService {
      * @return a ResponseEntity with appropriate status
      */
     @Override
-    public ResponseEntity<Void> deleteUserByUserAndApplication(UUID userId) {
+    public ResponseEntity<Void> deleteUserByUserAndApplication(String token, UUID userId) {
+        var denied = refuseOthers(token, userId);
+        if (denied != null) {
+            return denied;
+        }
+        return deleteUser(userId);
+    }
+
+    @Override
+    public ResponseEntity<Void> deleteUser(UUID userId) {
         var applicationId = UUID.fromString(applicationIdString);
         logger.info("Attempting to delete user with ID: {} for application: {}", userId, applicationId);
 
@@ -245,48 +269,17 @@ public class UserServiceImpl implements UserService {
         return new ResponseEntity<>(HttpStatus.NOT_MODIFIED);
     }
 
-    /**
-     * Validates role IDs for edge cases.
-     *
-     * @param roleIds the collection of role IDs to validate
-     * @return ResponseEntity with error details if validation fails, null if validation passes
-     */
-    private ResponseEntity<Void> validateRoleIds(List<UUID> roleIds) {
-        // Check for empty collection (removing all roles)
-        if (roleIds.isEmpty()) {
-            logger.warn("Attempting to remove all roles from user");
-            return ResponseEntity.status(BAD_REQUEST)
-                    .header(MESSAGE_HEADER, "Cannot remove all roles from user. At least one role is required.")
-                    .build();
+    /// Answers 403 unless the caller is the user the operation is about; `null` means go on.
+    private ResponseEntity<Void> refuseOthers(String token, UUID userId) {
+        var callerId = JwtUtil.getUidFromToken(token);
+        if (callerId == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).header(MESSAGE_ERROR_HEADER, CALLER_UNKNOWN_MESSAGE).build();
         }
-
-        // Check for null role IDs
-        if (roleIds.stream().anyMatch(Objects::isNull)) {
-            logger.warn("Role collection contains null values");
-            return ResponseEntity.status(BAD_REQUEST)
-                    .header(MESSAGE_HEADER, "Role collection contains invalid null values.")
-                    .build();
+        if (!accessPolicy.isSelf(callerId, userId)) {
+            logger.warn("User {} tried to change the account of {}", callerId, userId);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).header(MESSAGE_ERROR_HEADER, OWN_ACCOUNT_ONLY_MESSAGE).build();
         }
-
-        // Check for duplicate role IDs
-        if (roleIds.size() != roleIds.stream().distinct().count()) {
-            logger.warn("Role collection contains duplicate values");
-            return ResponseEntity.status(BAD_REQUEST)
-                    .header(MESSAGE_HEADER, "Role collection contains duplicate values.")
-                    .build();
-        }
-
-        // Check for invalid/empty UUIDs
-        for (UUID roleId : roleIds) {
-            if (roleId.toString().equals("00000000-0000-0000-0000-000000000000")) {
-                logger.warn("Role collection contains invalid UUID: {}", roleId);
-                return ResponseEntity.status(BAD_REQUEST)
-                        .header(MESSAGE_HEADER, "Role collection contains invalid role ID.")
-                        .build();
-            }
-        }
-
-        return null; // Validation passed
+        return null;
     }
 
     /// Generates a random four-digit number.

@@ -73,7 +73,7 @@ public class ChildAccountServiceImpl implements ChildAccountService {
                     .body(new ChildAccountResponse(childMapper.toResponse(child), user.alias(), user.email()));
         } catch (RuntimeException e) {
             logger.error("The child profile of the new user {} failed, removing the user: {}", user.id(), e.getMessage());
-            userService.deleteUserByUserAndApplication(user.id());
+            userService.deleteUser(user.id());
             return error(HttpStatus.INTERNAL_SERVER_ERROR, SmartKinAppConstants.CHILD_ACCOUNT_FAILED_MESSAGE);
         }
     }

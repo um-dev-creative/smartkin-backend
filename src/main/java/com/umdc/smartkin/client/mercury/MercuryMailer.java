@@ -25,6 +25,8 @@ public class MercuryMailer {
     private static final String CHANNEL_EMAIL = "email";
     private static final String BODY = "verification";
     private static final String KEY_PREFIX = "REGISTER-CODE:";
+    private static final String RESEND_KEY_PREFIX = "RESEND-CODE:";
+    private static final long SECONDS_PER_MINUTE = 60;
     private static final int GROUP_BOUND = 10_000;
 
     private final MercuryClient mercuryClient;
@@ -66,10 +68,26 @@ public class MercuryMailer {
     /// @param fullName shown in the e-mail (`user_name`)
     /// @throws MailDeliveryException when mercury cannot be reached, refuses the token or does not accept the message
     public void sendVerificationCode(UUID userId, String email, String fullName) {
+        send(KEY_PREFIX + userId, userId, email, fullName);
+    }
+
+    /// Sends a new verification code to an existing account (the visitor lost the first one or spent its attempts); mercury expires the
+    /// pending code when the new one is created. The key repeats inside the same minute, so a double click sends one e-mail.
+    ///
+    /// @param userId   the user
+    /// @param email    where the code goes
+    /// @param fullName shown in the e-mail (`user_name`)
+    /// @throws MailDeliveryException when mercury cannot be reached, refuses the token or does not accept the message
+    public void resendVerificationCode(UUID userId, String email, String fullName) {
+        long minute = clock.instant().getEpochSecond() / SECONDS_PER_MINUTE;
+        send(RESEND_KEY_PREFIX + userId + ":" + minute, userId, email, fullName);
+    }
+
+    private void send(String idempotencyKey, UUID userId, String email, String fullName) {
         var request = new MercuryMessageRequest(CHANNEL_EMAIL, userId, email, templateDefinedId, applicationId, language, from, BODY,
                 LocalDateTime.now(clock.withZone(ZoneOffset.UTC)), Map.of("vc", newCode(), "user_name", fullName));
         try {
-            var response = mercuryTokens.withToken(token -> mercuryClient.sendMessage(token, KEY_PREFIX + userId, request));
+            var response = mercuryTokens.withToken(token -> mercuryClient.sendMessage(token, idempotencyKey, request));
             if (!response.getStatusCode().is2xxSuccessful()) {
                 throw new MailDeliveryException("mercury answered " + response.getStatusCode().value());
             }

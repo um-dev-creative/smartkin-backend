@@ -15,6 +15,12 @@ public final class SmartKinAppConstants {
     public static final String MESSAGE_ERROR_HEADER = "message-error";
     public static final String MESSAGE_HEADER = "message";
     public static final String USER_NOT_FOUND_MESSAGE = "User not found.";
+    public static final String OWN_ACCOUNT_ONLY_MESSAGE = "You can only do this on your own account.";
+    public static final String ROLES_NOT_CHANGEABLE_MESSAGE = "Roles cannot be changed through this operation.";
+    public static final String VERIFICATION_PENDING_MESSAGE = "Verify your e-mail to use SmartKin.";
+    public static final String ALREADY_VERIFIED_MESSAGE = "The e-mail is already verified.";
+    public static final String VERIFICATION_UNAVAILABLE_MESSAGE = "The verification service is not available, try again later.";
+    public static final String PROFILE_IMAGE_MISSING_MESSAGE = "The profile image is missing or empty.";
     public static final String HTTP_OK = "200";
     public static final String HTTP_FORBIDDEN = "403";
     public static final String HTTP_NOT_FOUND = "404";

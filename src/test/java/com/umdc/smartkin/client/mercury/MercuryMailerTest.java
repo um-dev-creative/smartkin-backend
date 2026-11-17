@@ -77,6 +77,18 @@ class MercuryMailerTest {
     }
 
     @Test
+    void aResendUsesItsOwnIdempotencyKeyPerMinute() {
+        runsCallsWithTheMercuryToken();
+        when(mercuryClient.sendMessage(eq(TOKEN), any(), any()))
+                .thenReturn(ResponseEntity.accepted().body(new MercuryMessageResponse(UUID.randomUUID(), "OPENED", null)));
+
+        mailer.resendVerificationCode(USER_ID, "ana@smartkin.test", "Ana Lopez");
+
+        long minute = Instant.parse("2026-11-15T12:30:00Z").getEpochSecond() / 60;
+        verify(mercuryClient).sendMessage(eq(TOKEN), eq("RESEND-CODE:" + USER_ID + ":" + minute), any());
+    }
+
+    @Test
     void failsWhenMercuryAnswersAnError() {
         runsCallsWithTheMercuryToken();
         when(mercuryClient.sendMessage(any(), any(), any())).thenThrow(feign(400));

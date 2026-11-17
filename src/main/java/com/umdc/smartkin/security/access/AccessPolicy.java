@@ -64,6 +64,24 @@ public class AccessPolicy {
         return asParent(callerId, childId);
     }
 
+    /// Decides whether the caller may read the account of a user: their own, or the account of a child linked to them.
+    ///
+    /// @param callerId the caller's user id
+    /// @param userId   the user whose account is read
+    /// @return `true` when the caller may read it
+    public boolean canViewUser(UUID callerId, UUID userId) {
+        return callerId.equals(userId) || viewChild(callerId, userId).allowed();
+    }
+
+    /// Decides whether the caller may change or delete the account of a user: only their own.
+    ///
+    /// @param callerId the caller's user id
+    /// @param userId   the user whose account is changed
+    /// @return `true` when it is the caller's own account
+    public boolean isSelf(UUID callerId, UUID userId) {
+        return callerId.equals(userId);
+    }
+
     private ChildAccess asParent(UUID callerId, UUID childId) {
         if (!isParent(callerId)) {
             return ChildAccess.denied(ChildAccessDecision.FORBIDDEN);

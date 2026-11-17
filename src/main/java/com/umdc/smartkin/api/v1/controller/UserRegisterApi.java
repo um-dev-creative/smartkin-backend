@@ -37,4 +37,22 @@ public interface UserRegisterApi {
     default ResponseEntity<Void> confirmCode(@RequestHeader("session-token-bkd") String sessionTokenBkd, @RequestBody ConfirmCodeRequest confirmCodeRequest){
         return getService().confirmCode(sessionTokenBkd, confirmCodeRequest);
     }
+
+    /// Sends a new verification code to the user's e-mail (the old one stops working).
+    ///
+    /// @param sessionTokenBkd the session token of the caller, who must be the user
+    /// @param userId the user who asks for a new code
+    /// @return 202 when handed to the mail service
+    @Operation(summary = "Resend the verification code", description = "Sends a new verification code to the e-mail of the caller; the pending code stops working.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "202", description = "The e-mail was handed to the mail service"),
+        @ApiResponse(responseCode = "403", description = "Not your account"),
+        @ApiResponse(responseCode = "409", description = "The e-mail is already verified"),
+        @ApiResponse(responseCode = "503", description = "The mail service did not take the message")
+    })
+    @PostMapping("/{userId}/resend")
+    default ResponseEntity<Void> resendCode(@RequestHeader("session-token-bkd") String sessionTokenBkd,
+                                            @org.springframework.web.bind.annotation.PathVariable java.util.UUID userId) {
+        return getService().resendCode(sessionTokenBkd, userId);
+    }
 }

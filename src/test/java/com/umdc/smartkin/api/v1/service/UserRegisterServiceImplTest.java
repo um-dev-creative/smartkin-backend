@@ -2,7 +2,9 @@ package com.umdc.smartkin.api.v1.service;
 
 import com.umdc.smartkin.api.v1.to.ConfirmCodeRequest;
 import com.umdc.smartkin.client.backbone.BackboneClient;
+import com.umdc.smartkin.client.mercury.MailDeliveryException;
 import com.umdc.smartkin.client.mercury.MercuryClient;
+import com.umdc.smartkin.client.mercury.MercuryMailer;
 import com.umdc.smartkin.client.mercury.MercuryTokens;
 import com.umdc.smartkin.client.mercury.to.VerificationCodeRequest;
 import com.umdc.smartkin.mapper.ConfirmCodeMapper;
@@ -25,6 +27,7 @@ import static com.umdc.smartkin.support.TestData.feign;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -33,7 +36,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class UserRegisterServiceImplTest {
 
-    private static final String SESSION_BKD = "bkd-token";
+    private static final String SESSION_BKD = com.umdc.smartkin.support.TestData.tokenFor(USER_ID);
     private static final String MERCURY_TOKEN = "mercury-token";
 
     @Mock
@@ -44,13 +47,15 @@ class UserRegisterServiceImplTest {
     private BackboneClient backboneClient;
     @Mock
     private ConfirmCodeMapper confirmCodeMapper;
+    @Mock
+    private MercuryMailer mercuryMailer;
 
     private UserRegisterServiceImpl service;
     private final ConfirmCodeRequest request = new ConfirmCodeRequest(USER_ID, "1234-5678");
 
     @BeforeEach
     void setUp() {
-        service = new UserRegisterServiceImpl(mercuryClient, mercuryTokens, backboneClient, confirmCodeMapper);
+        service = new UserRegisterServiceImpl(mercuryClient, mercuryTokens, backboneClient, confirmCodeMapper, mercuryMailer);
         ReflectionTestUtils.setField(service, "applicationId", APPLICATION_ID);
     }
 
@@ -144,5 +149,72 @@ class UserRegisterServiceImplTest {
         var response = service.confirmCode(SESSION_BKD, request);
 
         assertEquals(HttpStatus.BAD_GATEWAY, response.getStatusCode());
+    }
+
+    @Test
+    void refusesToConfirmTheCodeOfAnotherUser() {
+        var other = new ConfirmCodeRequest(java.util.UUID.randomUUID(), "1234-5678");
+
+        assertEquals(HttpStatus.FORBIDDEN, service.confirmCode(SESSION_BKD, other).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, service.confirmCode("garbage", request).getStatusCode());
+        verifyNoInteractions(mercuryClient, backboneClient);
+    }
+
+    @Test
+    void resendsANewCodeToTheEmailBackboneHolds() {
+        runsCallsWithTheMercuryToken();
+        when(mercuryClient.isVerificationCodeDone(MERCURY_TOKEN, USER_ID)).thenReturn(false);
+        when(backboneClient.findUserById(USER_ID)).thenReturn(com.umdc.smartkin.support.TestData.backboneUser(
+                com.umdc.smartkin.support.TestData.person("Phone"), List.of(), List.of()));
+
+        var response = service.resendCode(SESSION_BKD, USER_ID);
+
+        assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
+        verify(mercuryMailer).resendVerificationCode(USER_ID, "ana@smartkin.test", "Ana");
+    }
+
+    @Test
+    void resendTreatsAnUnknownStatusAsNotVerified() {
+        when(mercuryTokens.withToken(any())).thenThrow(feign(404));
+        when(backboneClient.findUserById(USER_ID)).thenReturn(com.umdc.smartkin.support.TestData.backboneUser(
+                com.umdc.smartkin.support.TestData.person("Phone"), List.of(), List.of()));
+
+        assertEquals(HttpStatus.ACCEPTED, service.resendCode(SESSION_BKD, USER_ID).getStatusCode());
+    }
+
+    @Test
+    void resendAnswersConflictWhenTheEmailIsAlreadyVerified() {
+        runsCallsWithTheMercuryToken();
+        when(mercuryClient.isVerificationCodeDone(MERCURY_TOKEN, USER_ID)).thenReturn(true);
+
+        assertEquals(HttpStatus.CONFLICT, service.resendCode(SESSION_BKD, USER_ID).getStatusCode());
+        verifyNoInteractions(mercuryMailer);
+    }
+
+    @Test
+    void resendIsRefusedForAnotherUser() {
+        assertEquals(HttpStatus.FORBIDDEN, service.resendCode(SESSION_BKD, java.util.UUID.randomUUID()).getStatusCode());
+        verifyNoInteractions(mercuryMailer, backboneClient);
+    }
+
+    @Test
+    void resendRelaysBackboneFailures() {
+        runsCallsWithTheMercuryToken();
+        when(mercuryClient.isVerificationCodeDone(MERCURY_TOKEN, USER_ID)).thenReturn(false);
+        when(backboneClient.findUserById(USER_ID)).thenThrow(feign(404)).thenThrow(feign(503));
+
+        assertEquals(HttpStatus.NOT_FOUND, service.resendCode(SESSION_BKD, USER_ID).getStatusCode());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, service.resendCode(SESSION_BKD, USER_ID).getStatusCode());
+    }
+
+    @Test
+    void resendAnswers503WhenMercuryDoesNotTakeTheMessage() {
+        runsCallsWithTheMercuryToken();
+        when(mercuryClient.isVerificationCodeDone(MERCURY_TOKEN, USER_ID)).thenReturn(false);
+        when(backboneClient.findUserById(USER_ID)).thenReturn(com.umdc.smartkin.support.TestData.backboneUser(
+                com.umdc.smartkin.support.TestData.person("Phone"), List.of(), List.of()));
+        doThrow(new MailDeliveryException("down")).when(mercuryMailer).resendVerificationCode(any(), any(), any());
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, service.resendCode(SESSION_BKD, USER_ID).getStatusCode());
     }
 }

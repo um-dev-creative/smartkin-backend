@@ -114,6 +114,15 @@ class AuthServiceImplTest {
         ArgumentCaptor<Map<String, String>> parameters = ArgumentCaptor.forClass(Map.class);
         verify(sessionJwtService).generateSessionToken(eq("alopez"), parameters.capture());
         assertEquals("false", parameters.getValue().get("vcCompleted"));
+        assertEquals(USER.toString(), parameters.getValue().get("uid"));
+    }
+
+    @Test
+    void refusesATokenWithoutAUserId() {
+        var response = service.token(new AuthRequest("alopez", "pwd"), "garbage");
+
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        verifyNoInteractions(mercuryClient, mercuryTokens);
     }
 
     @Test

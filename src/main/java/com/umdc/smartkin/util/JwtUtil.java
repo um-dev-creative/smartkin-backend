@@ -21,6 +21,23 @@ public final class JwtUtil {
      */
 
     public static UUID getUidFromToken(String token) {
+        var tempo = getClaim(token, "uid");
+        try {
+            return Objects.nonNull(tempo) ? UUID.fromString(tempo) : null;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Reads one claim of a JWT as text. The signature is not checked here: the session interceptor of the security library
+     * validates the token before any controller or interceptor of SmartKin reads it.
+     *
+     * @param token the JWT token
+     * @param name  the claim name
+     * @return the claim as text, or null when the token or the claim is missing or malformed
+     */
+    public static String getClaim(String token, String name) {
         if (token == null || token.isBlank()) {
             return null;
         }
@@ -30,10 +47,7 @@ public final class JwtUtil {
                 return null;
             }
             String payloadJson = new String(Base64.getUrlDecoder().decode(parts[1]));
-            JSONObject payload = new JSONObject(payloadJson);
-            var tempo = payload.optString("uid", null);
-
-            return Objects.nonNull(tempo) ? UUID.fromString(tempo) : null;
+            return new JSONObject(payloadJson).optString(name, null);
         } catch (Exception e) {
             return null;
         }
