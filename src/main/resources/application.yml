@@ -10,6 +10,11 @@
 # Properties of the com.umdc libraries (security-oauth, commons-services). They moved from the old `prx.*` names when the libraries
 # moved from com.prx to com.umdc; with the old names nothing binds and the context fails at start (AuthProperties.getClients() is null).
 umdc:
+  password-reset:
+    # template_defined id (mercury) of sk_password_reset_<es|en>.ftl, the e-mail with the code of "forgot my password". Empty = the reset e-mail
+    # is not sent (the endpoint still answers 202). Not a secret; set per environment (PRX_PASSWORD_RESET_TEMPLATE_ID in Vault).
+    template:
+      id: ${PRX_PASSWORD_RESET_TEMPLATE_ID:}
   bootstrap:
     server:
       port: ${BOOTSTRAP_SERVER_PORT:}  # optional: empty when BOOTSTRAP_SERVER_URI already carries host:port

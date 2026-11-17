@@ -1006,3 +1006,40 @@ The com.umdc libraries bind `umdc.*` properties, not the old `prx.*` ones: `umdc
 ### Mercury login (service, not user)
 
 `MercuryServiceLogin` obtains mercury's `session-token` with smartkin-backend's own login client (`MERCURY_LOGIN_ALIAS` / `MERCURY_LOGIN_PASSWORD`, else the `mercury` client's `MERCURY_USERNAME` / `MERCURY_PASSWORD`). `AuthServiceImpl.token(request, sessionTokenBkd)` uses it to ask whether the verification code is done, and `UserRegisterServiceImpl.confirmCode` to confirm it. The visitor's credentials are never sent to mercury. `MercuryFeignConfigurer` adds no `Authorization` bearer.
+
+## Password recovery
+
+Backbone proves nothing about a visitor who cannot sign in, so SmartKin does: it e-mails a single-use code through mercury and only a right code reaches backbone's password reset. Code: `PasswordRecoveryController`/`Api`, `PasswordRecoveryServiceImpl`, `MercuryMailer.sendPasswordResetCode`, `BackboneClient.lookupByEmail` and `resetPassword`.
+
+```mermaid
+sequenceDiagram
+    participant V as Visitor (BFF)
+    participant S as smartkin-backend
+    participant B as backbone-rest
+    participant M as mercury
+    V->>S: POST /password-recovery/forgot {email}
+    S->>B: POST /users/application/{app}/lookup-by-email
+    B-->>S: {id, displayName, active} or 404
+    S->>M: POST /messages (template sk_password_reset_*, vc = ####-####)
+    S-->>V: 202, always
+    V->>S: POST /password-recovery/reset {email, code, newPassword}
+    S->>B: lookup-by-email
+    S->>M: POST /verification-code (confirm)
+    M-->>S: 202, or 406 (wrong) / 404 (spent, expired)
+    S->>B: PUT /users/application/{app}/user/{id}/password
+    B-->>S: 204, or 422 (policy)
+    S-->>V: 204 / 406 / 422
+```
+
+Decisions:
+
+- **No enumeration.** `forgot` answers `202` for an unknown e-mail, an inactive account, a lookup failure and a mail failure. `reset` answers the same `406` + `message-error` for an unknown or inactive account, a wrong code, a spent code and an expired one, and never sends `Attempts-Remaining`.
+- **No recovery from "latest status".** `UserRegisterServiceImpl.confirmCode` treats a mercury `404` as success when the latest code was verified (it recovers a failed activation). A reset must never do that: it would let anyone reset the password of any account that ever verified its e-mail. A `404` is a `406`.
+- **Cooldown.** One code per e-mail (lower-cased) per minute, in memory (`PasswordRecoveryServiceImpl.COOLDOWN`); the table is bounded (10,000 entries, expired ones dropped when full). It is per instance: with several instances the limit is per instance, and mercury's `Idempotency-Key` (`RESET-CODE:<user>:<minute>`) is the second guard. Rate limiting by IP belongs to the proxy.
+- **The code is spent before the password is checked.** Backbone checks `umdc.password-policy` on `PUT .../password`, after mercury accepted the code, so a refused password (`422`) costs the code; the screen says so and the BFF/frontend pre-check the length. Pre-validating here would duplicate backbone's policy.
+- **Own template.** `umdc.password-reset.template.id` (`PRX_PASSWORD_RESET_TEMPLATE_ID`) is the `template_defined` id of `sk_password_reset_<es|en>.ftl`. It must be registered with mercury's **verification-code template type** (the same as `sk_verification_*`), otherwise mercury never keeps the code and every reset answers `406`. Empty = `sendPasswordResetCode` throws `MailDeliveryException`, which `forgot` logs and hides. Reference copies of the templates: `docs/mercury-templates/sk_password_reset_{es,en}.ftl` (params `vc`, `user_name`, optional `expiresInMinutes`); `docs/smartkin-mail-templates.md` of mercury explains how to register templates (`seed-templates.sql`).
+- **One code per user in mercury.** A pending verification code and a pending reset code of the same user replace each other (mercury expires the previous one).
+- The password travels in the body over TLS and is never logged (`ResetPasswordRequest` and `BackbonePasswordResetRequest` mask it in `toString`).
+
+Needs backbone-rest `POST /api/v1/users/application/{applicationId}/lookup-by-email` and `PUT /api/v1/users/application/{applicationId}/user/{userId}/password` (scope `users:manage`, the scope SmartKin's backbone client already has).
+Tests: `PasswordRecoveryServiceImplTest`, `PasswordRecoveryControllerTest`, `MercuryMailerTest`.
