@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A session whose e-mail is not verified is kept out of the API. New `VerifiedSessionInterceptor` (registered after the library's session interceptor): without `vcCompleted=true` in the token every operation answers `403` (`message-error: Verify your e-mail to use SmartKin.`) except sign-up, the code confirmation and resend, `/auth/**` and reading the own account. Switch off with `umdc.smartkin.verification.required=false` (accounts that predate the verification).
 
 ### Added
+- (These two operations are not in `docs/api/openapi-v1.yaml`: that contract does not define `/users` and `/user-register`, and `OpenApiContractTest` enforces it; they are documented in the technical guide.)
 - `POST /api/v1/user-register/{userId}/resend`: sends a new verification code (the pending one stops working in mercury). Answers `202`, `403` (not your account), `409` (already verified), `404`/`502` (backbone) or `503` (mercury did not take the message). The e-mail and the name come from backbone, never from the request. The idempotency key is per user and minute, so a double click sends one e-mail.
 - `POST /api/v1/profile/image` (multipart, part `imageData`): stores the profile image of the caller in backbone. The BFF already called it; the endpoint did not exist.
 
