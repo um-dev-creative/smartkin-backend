@@ -279,11 +279,11 @@ sequenceDiagram
     end
 ```
 
-`UserRegisterServiceImpl.confirmCode` activates the user in backbone after mercury accepts the code; a 404 from mercury is recovered when `latest-status` says the latest code was verified; a backbone failure answers 502 (`UpstreamFailure`). The template ids are different from mercury's `umdc.verification.code.template.id`, which is the template **type** id:
+`UserRegisterServiceImpl.confirmCode` activates the user in backbone after mercury accepts the code; a 404 from mercury is recovered when `latest-status` says the latest code was verified; a backbone failure answers 502 (`UpstreamFailure`). SmartKin does not configure the template ids (see "Template ids" below); mercury's own `umdc.verification.code.template.id` is the template **type** id:
 
 ```mermaid
 flowchart LR
-    S["smartkin-backend<br/>umdc.verification.code.template.id<br/>= template_defined id of sk_verification_es"] -->|POST /api/v1/messages| M[mercury]
+    S["smartkin-backend<br/>TemplateIdRegistry<br/>= template_defined id of sk_verification_es, asked to mercury"] -->|POST /api/v1/messages| M[mercury]
     M -->|template_defined, then template| F["sk_verification_es.ftl<br/>template type = verification code"]
     C["mercury umdc.verification.code.template.id<br/>= the template TYPE id"] -.->|keeps the code only if the type matches| F
     F --> E[SMTP]
@@ -1037,9 +1037,41 @@ Decisions:
 - **No recovery from "latest status".** `UserRegisterServiceImpl.confirmCode` treats a mercury `404` as success when the latest code was verified (it recovers a failed activation). A reset must never do that: it would let anyone reset the password of any account that ever verified its e-mail. A `404` is a `406`.
 - **Cooldown.** One code per e-mail (lower-cased) per minute, in memory (`PasswordRecoveryServiceImpl.COOLDOWN`); the table is bounded (10,000 entries, expired ones dropped when full). It is per instance: with several instances the limit is per instance, and mercury's `Idempotency-Key` (`RESET-CODE:<user>:<minute>`) is the second guard. Rate limiting by IP belongs to the proxy.
 - **The code is spent before the password is checked.** Backbone checks `umdc.password-policy` on `PUT .../password`, after mercury accepted the code, so a refused password (`422`) costs the code; the screen says so and the BFF/frontend pre-check the length. Pre-validating here would duplicate backbone's policy.
-- **Own template.** `umdc.password-reset.template.id` (`PRX_PASSWORD_RESET_TEMPLATE_ID`) is the `template_defined` id of `sk_password_reset_<es|en>.ftl`. It must be registered with mercury's **verification-code template type** (the same as `sk_verification_*`), otherwise mercury never keeps the code and every reset answers `406`. Empty = `sendPasswordResetCode` throws `MailDeliveryException`, which `forgot` logs and hides. Reference copies of the templates: `docs/mercury-templates/sk_password_reset_{es,en}.ftl` (params `vc`, `user_name`, optional `expiresInMinutes`); `docs/smartkin-mail-templates.md` of mercury explains how to register templates (`seed-templates.sql`).
+- **Own template.** `sk_password_reset_<es|en>.ftl` (params `vc`, `user_name`, optional `expiresInMinutes`) lives in the central `templates/smartkin/` folder and is registered in mercury like `sk_verification_*`, with mercury's **verification-code template type**, otherwise mercury never keeps the code and every reset answers `406`. SmartKin holds no id: see "Template ids" below. With no such template in mercury `sendPasswordResetCode` throws `MailDeliveryException`, which `forgot` logs and hides. `docs/smartkin-mail-templates.md` of mercury explains how to register templates (`seed-templates.sql`).
 - **One code per user in mercury.** A pending verification code and a pending reset code of the same user replace each other (mercury expires the previous one).
 - The password travels in the body over TLS and is never logged (`ResetPasswordRequest` and `BackbonePasswordResetRequest` mask it in `toString`).
 
 Needs backbone-rest `POST /api/v1/users/application/{applicationId}/lookup-by-email` and `PUT /api/v1/users/application/{applicationId}/user/{userId}/password` (scope `users:manage`, the scope SmartKin's backbone client already has).
 Tests: `PasswordRecoveryServiceImplTest`, `PasswordRecoveryControllerTest`, `MercuryMailerTest`.
+
+## Template ids (asked to mercury, in memory)
+
+The e-mails of SmartKin are rendered by mercury, and the templates are managed the way zerobound's are: the files live in the central `templates/smartkin/` folder (`sk_verification_{es,en}.ftl`, `sk_password_reset_{es,en}.ftl`), are registered in mercury (seed script or Iris) and **SmartKin keeps no copy of their ids**. `TemplateIdRegistry` asks mercury for the usable templates of SmartKin's application and keeps the answer in memory, so a template created, changed or switched off in mercury is seen with no deployment.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Mail as MercuryMailer
+    participant Reg as TemplateIdRegistry (memory)
+    participant ME as mercury
+    Mail->>Reg: idOf("password_reset", "es")
+    alt first use, list older than 5 min, or a miss not asked in the last 30 s
+        Reg->>ME: GET /api/v1/messages/template-definitions?applicationId=...
+        ME-->>Reg: [{templateDefinedId, location, language}]
+        Reg->>Reg: sk_<kind>_<language>.ftl -> kind; other files are ignored; keep the last good list on error
+    end
+    alt mercury has no such template
+        Reg-->>Mail: empty
+        Mail-->>Mail: verification: the optional umdc.verification.code.template.id, else MailDeliveryException
+    else found
+        Reg-->>Mail: template_defined id
+        Mail->>ME: POST /api/v1/messages {templateDefinedId, ...}
+    end
+```
+
+- The kind comes from the file name: `sk_<kind>_<language>.<ext>`, hyphens or underscores (`sk_verification_code_es` is also `verification`); `zb_*` and any other file are ignored. Two templates for the same kind and language: the first wins and a warning is logged.
+- The language is `umdc.smartkin.mail.language` (`es`). Tuning: `umdc.smartkin.mail.template-ids.refresh` (`5m`) and `miss-cooldown` (`30s`).
+- A mercury that cannot be asked keeps the last good list; if it was never read the e-mail is refused (`MailDeliveryException`), which `forgot` hides.
+- `PRX_PASSWORD_RESET_TEMPLATE_ID` does not exist; `PRX_VERIFICATION_CODE_TEMPLATE_ID` is optional and only a fallback for `sk_verification_<language>`.
+- Mercury must answer `template-definitions` to SmartKin's token for SmartKin's own application only (otherwise `403`).
+Tests: `TemplateIdRegistryTest`, `MercuryMailerTest`.

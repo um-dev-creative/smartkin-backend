@@ -2,6 +2,7 @@ package com.umdc.smartkin.client.mercury;
 
 import com.umdc.smartkin.client.mercury.to.MercuryMessageRequest;
 import com.umdc.smartkin.client.mercury.to.MercuryMessageResponse;
+import com.umdc.smartkin.client.mercury.to.MercuryTemplateDefinition;
 import com.umdc.smartkin.client.mercury.to.VerificationCodeRequest;
 import com.umdc.smartkin.interceptor.MercuryFeignConfigurer;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.util.List;
 import java.util.UUID;
 
 import static com.umdc.security.constant.ConstantApp.SESSION_TOKEN_KEY;
@@ -30,6 +32,16 @@ public interface MercuryClient {
     ResponseEntity<MercuryMessageResponse> sendMessage(@RequestHeader(SESSION_TOKEN_KEY) String sessionToken,
                                                        @RequestHeader("Idempotency-Key") String idempotencyKey,
                                                        MercuryMessageRequest request);
+
+    /// The usable templates of SmartKin's application with their definition ids (`GET /api/v1/messages/template-definitions`), so a template
+    /// created, changed or switched off in mercury is seen without copying ids into SmartKin's configuration ([TemplateIdRegistry]).
+    ///
+    /// @param sessionToken mercury's M2M token
+    /// @param applicationId SmartKin's application (it must be the caller's own)
+    /// @return the definitions
+    @GetMapping("/api/v1/messages/template-definitions")
+    List<MercuryTemplateDefinition> templateDefinitions(@RequestHeader(SESSION_TOKEN_KEY) String sessionToken,
+                                                        @RequestParam("applicationId") UUID applicationId);
 
     /// Sends a verification code to the specified phoneNumber number.
     ///

@@ -24,6 +24,8 @@ public class MercuryMailer {
     private static final Logger LOGGER = LoggerFactory.getLogger(MercuryMailer.class);
     private static final String CHANNEL_EMAIL = "email";
     private static final String BODY = "verification";
+    private static final String VERIFICATION = "verification";
+    private static final String PASSWORD_RESET = "password_reset";
     private static final String KEY_PREFIX = "REGISTER-CODE:";
     private static final String RESEND_KEY_PREFIX = "RESEND-CODE:";
     private static final String RESET_KEY_PREFIX = "RESET-CODE:";
@@ -33,8 +35,8 @@ public class MercuryMailer {
     private final MercuryClient mercuryClient;
     private final MercuryTokens mercuryTokens;
     private final UUID applicationId;
-    private final UUID templateDefinedId;
-    private final String passwordResetTemplate;
+    private final TemplateIdRegistry templates;
+    private final String verificationFallback;
     private final String language;
     private final String from;
     private final Clock clock;
@@ -44,24 +46,24 @@ public class MercuryMailer {
     ///
     /// @param mercuryClient     mercury's Feign client
     /// @param mercuryTokens     SmartKin's Mercury M2M token
+    /// @param templates         the template ids, asked to mercury by file name (`sk_verification_<language>`, `sk_password_reset_<language>`)
     /// @param clock             the clock `sendDate` is read from
     /// @param applicationId     SmartKin's application id
-    /// @param templateDefinedId the mercury template definition of the verification e-mail (`sk_verification_<language>`)
-    /// @param passwordResetTemplate the mercury template definition of the password reset e-mail (`sk_password_reset_<language>`); empty = not configured
-    /// @param language          language of that template
+    /// @param verificationFallback optional `template_defined` id used for the verification e-mail only while mercury does not list
+    ///                          `sk_verification_<language>` (the old `umdc.verification.code.template.id`); empty = none
+    /// @param language          language of the templates
     /// @param from              sender address
-    public MercuryMailer(MercuryClient mercuryClient, MercuryTokens mercuryTokens, Clock clock,
+    public MercuryMailer(MercuryClient mercuryClient, MercuryTokens mercuryTokens, TemplateIdRegistry templates, Clock clock,
                          @Value("${umdc.smartkin.application-id}") UUID applicationId,
-                         @Value("${umdc.verification.code.template.id}") UUID templateDefinedId,
-                         @Value("${umdc.password-reset.template.id:}") String passwordResetTemplate,
+                         @Value("${umdc.verification.code.template.id:}") String verificationFallback,
                          @Value("${umdc.smartkin.mail.language:es}") String language,
                          @Value("${umdc.smartkin.mail.from:support@latinhub.info}") String from) {
         this.mercuryClient = mercuryClient;
         this.mercuryTokens = mercuryTokens;
         this.clock = clock;
         this.applicationId = applicationId;
-        this.templateDefinedId = templateDefinedId;
-        this.passwordResetTemplate = passwordResetTemplate;
+        this.templates = templates;
+        this.verificationFallback = verificationFallback;
         this.language = language;
         this.from = from;
     }
@@ -73,7 +75,7 @@ public class MercuryMailer {
     /// @param fullName shown in the e-mail (`user_name`)
     /// @throws MailDeliveryException when mercury cannot be reached, refuses the token or does not accept the message
     public void sendVerificationCode(UUID userId, String email, String fullName) {
-        send(KEY_PREFIX + userId, userId, email, fullName);
+        send(KEY_PREFIX + userId, userId, email, fullName, VERIFICATION);
     }
 
     /// Sends a new verification code to an existing account (the visitor lost the first one or spent its attempts); mercury expires the
@@ -85,7 +87,7 @@ public class MercuryMailer {
     /// @throws MailDeliveryException when mercury cannot be reached, refuses the token or does not accept the message
     public void resendVerificationCode(UUID userId, String email, String fullName) {
         long minute = clock.instant().getEpochSecond() / SECONDS_PER_MINUTE;
-        send(RESEND_KEY_PREFIX + userId + ":" + minute, userId, email, fullName);
+        send(RESEND_KEY_PREFIX + userId + ":" + minute, userId, email, fullName, VERIFICATION);
     }
 
     /// Sends the code that lets the owner of an account choose a new password. It uses its own template, so the e-mail does not talk about
@@ -94,20 +96,26 @@ public class MercuryMailer {
     /// @param userId   the user
     /// @param email    where the code goes
     /// @param fullName shown in the e-mail (`user_name`)
-    /// @throws MailDeliveryException when the template is not configured, mercury cannot be reached, refuses the token or does not accept the message
+    /// @throws MailDeliveryException when mercury has no `sk_password_reset_<language>` template, cannot be reached, refuses the token or does not accept the message
     public void sendPasswordResetCode(UUID userId, String email, String fullName) {
-        if (passwordResetTemplate == null || passwordResetTemplate.isBlank()) {
-            throw new MailDeliveryException("the password reset template is not configured (PRX_PASSWORD_RESET_TEMPLATE_ID)");
-        }
         long minute = clock.instant().getEpochSecond() / SECONDS_PER_MINUTE;
-        send(RESET_KEY_PREFIX + userId + ":" + minute, userId, email, fullName, UUID.fromString(passwordResetTemplate.trim()));
+        send(RESET_KEY_PREFIX + userId + ":" + minute, userId, email, fullName, PASSWORD_RESET);
     }
 
-    private void send(String idempotencyKey, UUID userId, String email, String fullName) {
-        send(idempotencyKey, userId, email, fullName, templateDefinedId);
+    private UUID templateOf(String kind) {
+        var found = templates.idOf(kind, language);
+        if (found.isPresent()) {
+            return found.get();
+        }
+        if (VERIFICATION.equals(kind) && verificationFallback != null && !verificationFallback.isBlank()) {
+            LOGGER.warn("mercury lists no sk_{}_{} template; using the configured fallback id", kind, language);
+            return UUID.fromString(verificationFallback.trim());
+        }
+        throw new MailDeliveryException("mercury has no template sk_" + kind + "_" + language + " for SmartKin");
     }
 
-    private void send(String idempotencyKey, UUID userId, String email, String fullName, UUID template) {
+    private void send(String idempotencyKey, UUID userId, String email, String fullName, String kind) {
+        var template = templateOf(kind);
         var request = new MercuryMessageRequest(CHANNEL_EMAIL, userId, email, template, applicationId, language, from, BODY,
                 LocalDateTime.now(clock.withZone(ZoneOffset.UTC)), Map.of("vc", newCode(), "user_name", fullName));
         try {

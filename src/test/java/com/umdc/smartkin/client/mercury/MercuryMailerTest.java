@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,13 +41,17 @@ class MercuryMailerTest {
     private MercuryClient mercuryClient;
     @Mock
     private MercuryTokens mercuryTokens;
+    @Mock
+    private TemplateIdRegistry templates;
 
     private MercuryMailer mailer;
 
     @BeforeEach
     void setUp() {
         var clock = Clock.fixed(Instant.parse("2026-11-15T12:30:00Z"), ZoneOffset.UTC);
-        mailer = new MercuryMailer(mercuryClient, mercuryTokens, clock, APPLICATION_ID, TEMPLATE, RESET_TEMPLATE.toString(), "es", "support@smartkin.test");
+        mailer = new MercuryMailer(mercuryClient, mercuryTokens, templates, clock, APPLICATION_ID, "", "es", "support@smartkin.test");
+        lenient().when(templates.idOf("verification", "es")).thenReturn(Optional.of(TEMPLATE));
+        lenient().when(templates.idOf("password_reset", "es")).thenReturn(Optional.of(RESET_TEMPLATE));
     }
 
     @SuppressWarnings("unchecked")
@@ -140,13 +146,36 @@ class MercuryMailerTest {
     }
 
     @Test
-    void thePasswordResetEmailFailsWhenItsTemplateIsNotConfigured() {
-        var unconfigured = new MercuryMailer(mercuryClient, mercuryTokens,
-                Clock.fixed(Instant.parse("2026-11-15T12:30:00Z"), ZoneOffset.UTC), APPLICATION_ID, TEMPLATE, " ", "es", "support@smartkin.test");
+    void thePasswordResetEmailFailsWhenMercuryHasNoTemplateForIt() {
+        when(templates.idOf("password_reset", "es")).thenReturn(Optional.empty());
 
-        var failure = assertThrows(MailDeliveryException.class, () -> unconfigured.sendPasswordResetCode(USER_ID, "a@b.c", "Ana"));
+        var failure = assertThrows(MailDeliveryException.class, () -> mailer.sendPasswordResetCode(USER_ID, "a@b.c", "Ana"));
 
-        assertTrue(failure.getMessage().contains("PRX_PASSWORD_RESET_TEMPLATE_ID"));
+        assertTrue(failure.getMessage().contains("sk_password_reset_es"));
         org.mockito.Mockito.verifyNoInteractions(mercuryClient);
+    }
+
+    @Test
+    void theVerificationEmailFallsBackToTheConfiguredIdWhileMercuryListsNone() {
+        var fallback = UUID.randomUUID();
+        var withFallback = new MercuryMailer(mercuryClient, mercuryTokens, templates,
+                Clock.fixed(Instant.parse("2026-11-15T12:30:00Z"), ZoneOffset.UTC), APPLICATION_ID, " " + fallback + " ", "es", "support@smartkin.test");
+        when(templates.idOf("verification", "es")).thenReturn(Optional.empty());
+        runsCallsWithTheMercuryToken();
+        when(mercuryClient.sendMessage(eq(TOKEN), any(), any()))
+                .thenReturn(ResponseEntity.accepted().body(new MercuryMessageResponse(UUID.randomUUID(), "OPENED", null)));
+
+        withFallback.sendVerificationCode(USER_ID, "a@b.c", "Ana");
+
+        var request = ArgumentCaptor.forClass(MercuryMessageRequest.class);
+        verify(mercuryClient).sendMessage(eq(TOKEN), any(), request.capture());
+        assertEquals(fallback, request.getValue().templateDefinedId());
+    }
+
+    @Test
+    void theVerificationEmailFailsWithoutATemplateOrFallback() {
+        when(templates.idOf("verification", "es")).thenReturn(Optional.empty());
+
+        assertThrows(MailDeliveryException.class, () -> mailer.sendVerificationCode(USER_ID, "a@b.c", "Ana"));
     }
 }

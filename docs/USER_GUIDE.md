@@ -241,7 +241,7 @@ Three steps, in this order, before the first start of the service in QA or produ
 
 Both scripts are safe to run again, and both stop with a clear message when something is wrong.
 
-The verification e-mail of a new account is handed to mercury over HTTP (no Kafka) and sent by mercury with SmartKin's own template: make sure mercury has `sk_verification_es.ftl`, register the template in mercury's database with its seed script, and put the `template_defined_id` it prints in Vault as `PRX_VERIFICATION_CODE_TEMPLATE_ID` (not the same value as mercury's property of that name). The QA runbook, section 3, has the steps and what to look at when no mail arrives.
+The verification e-mail of a new account is handed to mercury over HTTP (no Kafka) and sent by mercury with SmartKin's own template: make sure mercury has the SmartKin templates (`sk_verification_es.ftl`, `sk_password_reset_es.ftl`, from the central `templates/smartkin/` folder) registered for SmartKin's application. SmartKin finds their ids by itself by asking mercury, by file name: there is no id to copy into Vault. The QA runbook, section 3, has the steps and what to look at when no mail arrives.
 
 The service itself also needs the Kafka connection settings, in Vault: for Aiven, `BOOTSTRAP_SECURITY_PROTOCOL=SSL`, the path of the CA (`BOOTSTRAP_SSL_TRUSTSTORE_LOCATION`) and of the client certificate and key (`BOOTSTRAP_SSL_KEYSTORE_CERT_LOCATION`, `BOOTSTRAP_SSL_KEYSTORE_KEY_LOCATION`), as seen inside the container (mount the files read-only). Without them the service connects without TLS and Aiven refuses it.
 
@@ -288,6 +288,8 @@ flowchart TD
     G -- sí --> H[Contraseña cambiada: inicia sesión]
     G -- no --> I[Pide un código nuevo]
 ```
+
+Plantillas: el correo del código usa la plantilla `sk_password_reset_es` (o `_en`), que se administra igual que las demás de SmartKin: el archivo está en `templates/smartkin/`, se registra en Mercury (o se edita desde Iris) y SmartKin la encuentra solo por el nombre del archivo; no hay ningún id que configurar. Si Mercury no la tiene, no sale ningún correo.
 
 Qué decirle a quien escribe a soporte:
 
