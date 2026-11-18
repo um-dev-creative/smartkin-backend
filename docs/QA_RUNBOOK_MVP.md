@@ -67,7 +67,7 @@ Nothing below goes in `config/local.env`: an environment variable shadows the Va
 | MongoDB | `SMARTKIN_MONGO_HOST`, `_USERNAME`, `_PASSWORD`, `_DATABASE` |
 | Redis | `REVOCATION_REDIS_URL` (token revocation), `CACHE_REDIS_URL` (lesson cache; empty = no cache) |
 | Kafka | `umdc.bootstrap.server.url` / `.port`, plus, for a secured cluster such as Aiven: `BOOTSTRAP_SECURITY_PROTOCOL` (`SSL`), `BOOTSTRAP_SSL_TRUSTSTORE_LOCATION` (the CA), `BOOTSTRAP_SSL_KEYSTORE_CERT_LOCATION` and `BOOTSTRAP_SSL_KEYSTORE_KEY_LOCATION` (the client certificate and key; paths inside the container, mount the files read-only). Optional: `KAFKA_CONSUMER_*` |
-| Mercury e-mail | `PRX_VERIFICATION_CODE_TEMPLATE_ID` (the `template_defined_id` of `sk_verification_es.ftl`, see below) |
+| Mercury e-mail | none: SmartKin asks mercury for the ids of `sk_verification_<es|en>` and `sk_password_reset_<es|en>` by file name (`PRX_VERIFICATION_CODE_TEMPLATE_ID` is an optional fallback only, see below) |
 | Platform | `VAULT_TOKEN`, `VAULT_SERVER_URL`, `CNFS_URI`, `CNFS_PORT`, `SPRING_BOOT_PROFILE_ACTIVE`, `APP_PORT` |
 
 ### The verification e-mail (mercury)
@@ -76,7 +76,7 @@ SmartKin sends one e-mail, the verification code of a new account, and mercury r
 
 1. **Mercury has the templates.** The files `sk_verification_es.ftl` and `sk_verification_en.ftl` live in mercury's template storage (`TEMPLATE_STORAGE`).
 2. **Register them in mercury's database** with mercury's `scripts/smartkin/seed-templates.sql` (idempotent; try it on a copy first). It needs five ids: `app_id` (SmartKin's row in `general.application`, the same value as `APPLICATION_ID` here), `owner_id`, `verification_type_id` (the template type id mercury has as `PRX_VERIFICATION_CODE_TEMPLATE_ID`), `severity_id` and `frequency_id`. It prints the `template_defined_id` of each template.
-3. **Point SmartKin at the Spanish template.** In Vault set `PRX_VERIFICATION_CODE_TEMPLATE_ID` to the `template_defined_id` of `sk_verification_es.ftl`. Careful: mercury has a property of the same name that holds the template **type** id; the two are different values.
+3. **Nothing to point.** SmartKin asks mercury (`GET /api/v1/messages/template-definitions`) for the ids by file name (`sk_verification_es`, `sk_password_reset_es`; language `umdc.smartkin.mail.language`), like zerobound. Register `sk_password_reset_{es,en}.ftl` (in `templates/smartkin/`) the same way as the verification ones, with the verification-code type. `PRX_VERIFICATION_CODE_TEMPLATE_ID` is optional and only used while mercury lists no `sk_verification_<language>`; mercury's property of that name is the template **type** id, a different value.
 4. **Mercury is reached over HTTP.** SmartKin posts the e-mail to mercury's `POST /api/v1/messages` with its Backbone managed client (`MERCURY_M2M_CLIENT_ID`/`_SECRET`, scopes `mercury:message:read` and `:write`); no Kafka topic is involved for e-mails.
 5. **Check.** Register a user (step 6): the mail arrives with SmartKin's text and the code as `####-####`, and confirming it answers 200.
 
@@ -129,7 +129,7 @@ To verify the alert: repeat the failure of step 7 and confirm `SmartKinEventDead
 - [ ] Flyway shows V1 to V6 applied and `smartkin_app` can log in (BE-2, BE-3).
 - [ ] The four topics exist (BE-3).
 - [ ] `scripts/qa-smoke.sh` ends with `failed 0`, including the S-1 section (S-1, X-4).
-- [ ] The SmartKin verification templates are deployed in mercury, registered in its database, and `PRX_VERIFICATION_CODE_TEMPLATE_ID` holds the `template_defined_id` of `sk_verification_es.ftl`.
+- [ ] The SmartKin verification templates are deployed in mercury, registered in its database, and `GET /api/v1/messages/template-definitions` lists `sk_verification_es.ftl` and `sk_password_reset_es.ftl` for SmartKin.
 - [ ] Registration, verification and login work through the BFF (X-1): the e-mail arrives with SmartKin's text and the code confirms.
 - [ ] The end-to-end flow works with the frontend and a failed event reaches the error topic (X-4).
 - [ ] The Vault token of commit `2eb6965` in smartkin-frontend was rotated (FE-2, S-4).
