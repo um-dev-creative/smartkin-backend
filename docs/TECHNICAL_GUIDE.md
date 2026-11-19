@@ -252,7 +252,7 @@ Domain events go through `SmartKinEventPublisher` to the topics below. **E-mails
 
 ## Notifications through mercury (HTTP)
 
-`UserServiceImpl.create` creates the user in backbone and then calls `MercuryMailer.sendVerificationCode(userId, email, fullName)`. `MercuryMailer` builds a `MercuryMessageRequest` and sends it with `MercuryClient.sendMessage` (`POST /api/v1/messages`) inside `MercuryTokens.withToken` (M2M token, one retry with fresh tokens on 401). Fields: `channel=email`, `userId`, `target` (the address), `templateDefinedId` = `umdc.verification.code.template.id`, `applicationId`, `language` (`umdc.smartkin.mail.language`, default `es`), `from` (`umdc.smartkin.mail.from`), `body` (a placeholder, the template renders the real one), `sendDate` (UTC) and `params` `vc` (`####-####`, `SecureRandom`) and `user_name`. No subject: it belongs to the template. The header `Idempotency-Key` is `REGISTER-CODE:<userId>`, so a retry never produces a second e-mail. Mercury answers 202 with state `OPENED` and delivers asynchronously; SmartKin keeps no queue. Failures (unreachable, token refused, non-2xx, managed client not configured) become `MailDeliveryException`; `create` then removes the new backbone user and answers 503 (`message-error: Verification e-mail could not be sent`). Neither the address nor the code is ever logged (`MercuryMessageRequest.toString`).
+`UserServiceImpl.create` creates the user in backbone and then calls `MercuryMailer.sendVerificationCode(userId, email, fullName)`. `MercuryMailer` builds a `MercuryMessageRequest` and sends it with `MercuryClient.sendMessage` (`POST /api/v1/messages`) inside `MercuryTokens.withToken` (M2M token, one retry with fresh tokens on 401). Fields: `channel=email`, `userId`, `target` (the address), `templateDefinedId` = the id of `sk_verification_<language>` that `TemplateIdRegistry` asks mercury for (no id in SmartKin's configuration), `applicationId`, `language` (`umdc.smartkin.mail.language`, default `es`), `from` (`umdc.smartkin.mail.from`), `body` (a placeholder, the template renders the real one), `sendDate` (UTC) and `params` `vc` (`####-####`, `SecureRandom`) and `user_name`. No subject: it belongs to the template. The header `Idempotency-Key` is `REGISTER-CODE:<userId>`, so a retry never produces a second e-mail. Mercury answers 202 with state `OPENED` and delivers asynchronously; SmartKin keeps no queue. Failures (unreachable, token refused, non-2xx, managed client not configured) become `MailDeliveryException`; `create` then removes the new backbone user and answers 503 (`message-error: Verification e-mail could not be sent`). Neither the address nor the code is ever logged (`MercuryMessageRequest.toString`).
 
 ```mermaid
 sequenceDiagram
@@ -1062,7 +1062,7 @@ sequenceDiagram
     end
     alt mercury has no such template
         Reg-->>Mail: empty
-        Mail-->>Mail: verification: the optional umdc.verification.code.template.id, else MailDeliveryException
+        Mail-->>Mail: MailDeliveryException (no fallback id: the log of TemplateIdRegistry says if mercury could not be read)
     else found
         Reg-->>Mail: template_defined id
         Mail->>ME: POST /api/v1/messages {templateDefinedId, ...}
@@ -1072,6 +1072,6 @@ sequenceDiagram
 - The kind comes from the file name: `sk_<kind>_<language>.<ext>`, hyphens or underscores (`sk_verification_code_es` is also `verification`); `zb_*` and any other file are ignored. Two templates for the same kind and language: the first wins and a warning is logged.
 - The language is `umdc.smartkin.mail.language` (`es`). Tuning: `umdc.smartkin.mail.template-ids.refresh` (`5m`) and `miss-cooldown` (`30s`).
 - A mercury that cannot be asked keeps the last good list; if it was never read the e-mail is refused (`MailDeliveryException`), which `forgot` hides.
-- `PRX_PASSWORD_RESET_TEMPLATE_ID` does not exist; `PRX_VERIFICATION_CODE_TEMPLATE_ID` is optional and only a fallback for `sk_verification_<language>`.
+- `PRX_PASSWORD_RESET_TEMPLATE_ID` and `PRX_VERIFICATION_CODE_TEMPLATE_ID` (`umdc.verification.code.template.id`) do not exist: the fallback was removed, so a mercury that lists no `sk_verification_<language>` makes the e-mail fail with `MailDeliveryException` instead of silently using a stale id. A mercury that cannot be reached is now visible in the log: `TemplateIdRegistry` and `MercuryMailer` print the exception class and message (for example `RetryableException: Connection refused executing GET https://host/...`), never the address, the code or a token.
 - Mercury must answer `template-definitions` to SmartKin's token for SmartKin's own application only (otherwise `403`).
 Tests: `TemplateIdRegistryTest`, `MercuryMailerTest`.

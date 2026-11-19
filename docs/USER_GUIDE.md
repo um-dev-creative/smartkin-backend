@@ -9,7 +9,7 @@ OpenAPI UI (springdoc) when the service is running.
 
 | Operation | Method and path | Notes |
 | --- | --- | --- |
-| Create a user | `POST /api/v1/users` | Returns 201 and mercury sends the verification e-mail; 409 when alias or email already exists; 503 (and the user is not kept) when mercury does not take the e-mail |
+| Create a user | `POST /api/v1/users` | Returns 201 and mercury sends the verification e-mail; 409 when alias or email already exists; 503 (and the user is not kept, so you can register again with the same e-mail) when mercury does not take the e-mail; the verification template is always the one mercury lists for SmartKin, there is no template id to configure |
 | Get a user | `GET /api/v1/users/{id}` | |
 | Update a user | `PUT /api/v1/users/{userId}` | |
 | Delete a user | `DELETE /api/v1/users/{userId}` | |
