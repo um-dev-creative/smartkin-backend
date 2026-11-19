@@ -49,7 +49,7 @@ class MercuryMailerTest {
     @BeforeEach
     void setUp() {
         var clock = Clock.fixed(Instant.parse("2026-11-15T12:30:00Z"), ZoneOffset.UTC);
-        mailer = new MercuryMailer(mercuryClient, mercuryTokens, templates, clock, APPLICATION_ID, "", "es", "support@smartkin.test");
+        mailer = new MercuryMailer(mercuryClient, mercuryTokens, templates, clock, APPLICATION_ID, "es", "support@smartkin.test");
         lenient().when(templates.idOf("verification", "es")).thenReturn(Optional.of(TEMPLATE));
         lenient().when(templates.idOf("password_reset", "es")).thenReturn(Optional.of(RESET_TEMPLATE));
     }
@@ -156,24 +156,7 @@ class MercuryMailerTest {
     }
 
     @Test
-    void theVerificationEmailFallsBackToTheConfiguredIdWhileMercuryListsNone() {
-        var fallback = UUID.randomUUID();
-        var withFallback = new MercuryMailer(mercuryClient, mercuryTokens, templates,
-                Clock.fixed(Instant.parse("2026-11-15T12:30:00Z"), ZoneOffset.UTC), APPLICATION_ID, " " + fallback + " ", "es", "support@smartkin.test");
-        when(templates.idOf("verification", "es")).thenReturn(Optional.empty());
-        runsCallsWithTheMercuryToken();
-        when(mercuryClient.sendMessage(eq(TOKEN), any(), any()))
-                .thenReturn(ResponseEntity.accepted().body(new MercuryMessageResponse(UUID.randomUUID(), "OPENED", null)));
-
-        withFallback.sendVerificationCode(USER_ID, "a@b.c", "Ana");
-
-        var request = ArgumentCaptor.forClass(MercuryMessageRequest.class);
-        verify(mercuryClient).sendMessage(eq(TOKEN), any(), request.capture());
-        assertEquals(fallback, request.getValue().templateDefinedId());
-    }
-
-    @Test
-    void theVerificationEmailFailsWithoutATemplateOrFallback() {
+    void theVerificationEmailFailsWhenMercuryListsNoTemplateForIt() {
         when(templates.idOf("verification", "es")).thenReturn(Optional.empty());
 
         assertThrows(MailDeliveryException.class, () -> mailer.sendVerificationCode(USER_ID, "a@b.c", "Ana"));

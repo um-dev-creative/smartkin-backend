@@ -104,7 +104,7 @@ public class TemplateIdRegistry {
                 }
             }
         } catch (FeignException | IllegalStateException e) {
-            LOGGER.warn("mercury's templates could not be read ({}); keeping the last ones", e.getClass().getSimpleName());
+            LOGGER.warn("mercury's templates could not be read ({}: {}); keeping the last ones", e.getClass().getSimpleName(), e.getMessage());
             return;
         }
         var before = ids.getAndSet(Map.copyOf(read));

@@ -36,7 +36,6 @@ public class MercuryMailer {
     private final MercuryTokens mercuryTokens;
     private final UUID applicationId;
     private final TemplateIdRegistry templates;
-    private final String verificationFallback;
     private final String language;
     private final String from;
     private final Clock clock;
@@ -49,13 +48,10 @@ public class MercuryMailer {
     /// @param templates         the template ids, asked to mercury by file name (`sk_verification_<language>`, `sk_password_reset_<language>`)
     /// @param clock             the clock `sendDate` is read from
     /// @param applicationId     SmartKin's application id
-    /// @param verificationFallback optional `template_defined` id used for the verification e-mail only while mercury does not list
-    ///                          `sk_verification_<language>` (the old `umdc.verification.code.template.id`); empty = none
     /// @param language          language of the templates
     /// @param from              sender address
     public MercuryMailer(MercuryClient mercuryClient, MercuryTokens mercuryTokens, TemplateIdRegistry templates, Clock clock,
                          @Value("${umdc.smartkin.application-id}") UUID applicationId,
-                         @Value("${umdc.verification.code.template.id:}") String verificationFallback,
                          @Value("${umdc.smartkin.mail.language:es}") String language,
                          @Value("${umdc.smartkin.mail.from:support@latinhub.info}") String from) {
         this.mercuryClient = mercuryClient;
@@ -63,7 +59,6 @@ public class MercuryMailer {
         this.clock = clock;
         this.applicationId = applicationId;
         this.templates = templates;
-        this.verificationFallback = verificationFallback;
         this.language = language;
         this.from = from;
     }
@@ -107,11 +102,7 @@ public class MercuryMailer {
         if (found.isPresent()) {
             return found.get();
         }
-        if (VERIFICATION.equals(kind) && verificationFallback != null && !verificationFallback.isBlank()) {
-            LOGGER.warn("mercury lists no sk_{}_{} template; using the configured fallback id", kind, language);
-            return UUID.fromString(verificationFallback.trim());
-        }
-        throw new MailDeliveryException("mercury has no template sk_" + kind + "_" + language + " for SmartKin");
+        throw new MailDeliveryException("mercury lists no template sk_" + kind + "_" + language + " for SmartKin (if the log says its templates could not be read, mercury was not reachable)");
     }
 
     private void send(String idempotencyKey, UUID userId, String email, String fullName, String kind) {
@@ -125,7 +116,8 @@ public class MercuryMailer {
             }
             LOGGER.info("E-mail with a code for user {} queued in mercury", userId);
         } catch (FeignException e) {
-            throw new MailDeliveryException("mercury did not take the verification e-mail (status " + e.status() + ")", e);
+            throw new MailDeliveryException("mercury did not take the verification e-mail (status " + e.status() + ", "
+                    + e.getClass().getSimpleName() + ": " + e.getMessage() + ")", e);
         } catch (IllegalStateException e) {
             throw new MailDeliveryException("mercury is not configured: " + e.getMessage(), e);
         }

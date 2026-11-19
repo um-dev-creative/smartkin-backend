@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- `PRX_VERIFICATION_CODE_TEMPLATE_ID` / `umdc.verification.code.template.id` (the optional fallback id of the verification e-mail) and its `UMDC_VERIFICATION_CODE_TEMPLATE_ID` line in `config/native.env`. The template id of every e-mail now comes only from mercury (`TemplateIdRegistry`, by file name `sk_<kind>_<language>`). With no `sk_verification_<language>` listed, `MercuryMailer` throws `MailDeliveryException` instead of using a stale configured id. Mercury's own property of that name (the template type id) is unaffected.
+
+### Fixed
+- A mercury that could not be reached was invisible in the log: `TemplateIdRegistry` printed only the exception class and the fallback id hid the failure. The warning now carries the exception class and message, and the `MailDeliveryException` of a failed hand-over includes them too (no address, code or token).
+
 ### Changed
 - **Mail templates are managed like zerobound's.** SmartKin no longer holds template ids in its configuration: `TemplateIdRegistry` asks mercury (`GET /api/v1/messages/template-definitions?applicationId=`) and keeps the answer in memory (refreshed after 5 minutes and, at most every 30 seconds, on a miss), and reads what each template is for from its file name, `sk_<kind>_<language>.ftl` (`sk_verification_es`, `sk_password_reset_en`). A template created, changed or switched off in mercury (or edited from Iris) is seen with no deployment. The language is `umdc.smartkin.mail.language` (`es`). The reference files live in the central `templates/smartkin/` folder (`docs/mercury-templates/` is gone). `PRX_PASSWORD_RESET_TEMPLATE_ID` / `umdc.password-reset.template.id` is **removed** (it never reached a release); `PRX_VERIFICATION_CODE_TEMPLATE_ID` / `umdc.verification.code.template.id` is now **optional**, used only while mercury lists no `sk_verification_<language>`. Mercury must have a template for the application (its caller's own) of each kind, or the e-mail is refused with `MailDeliveryException`.
 
