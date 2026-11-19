@@ -204,3 +204,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit tests for `EmailMessageProducerServiceImpl` (100% line and branch coverage).
 - `CHANGELOG.md`, `docs/USER_GUIDE.md` and `docs/TECHNICAL_GUIDE.md`.
 - `CLAUDE.md` with build commands and architecture notes.
+
+### Documentation
+- Delivery workflow fixed in `CLAUDE.md`, which said branches "merge into `development`": changes are made on a branch derived from `development`, pushed to the remote and integrated through a PR to `development`; nothing is merged locally. The same flow is now described in the "Delivery workflow" section of the technical guide (Mermaid) and in the user guide.

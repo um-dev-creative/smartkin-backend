@@ -296,3 +296,7 @@ Qué decirle a quien escribe a soporte:
 - **No llega el correo**: debe revisar el spam y esperar un minuto; solo se envía un código por minuto. Si su cuenta nunca se verificó, primero debe verificar el correo.
 - **"El código no es válido o venció"**: pidió otro código y el anterior dejó de servir, se acabaron los 3 intentos, o ya lo usó. Que pida uno nuevo.
 - **"La contraseña no cumple la política"**: el código ya se gastó; debe pedir uno nuevo y elegir otra contraseña (con letras y números).
+
+## Cómo se entrega un cambio
+
+Los cambios se hacen en una rama derivada de `development` (`sak-<n>-<descripción>`), se suben al remoto y se integran mediante un PR hacia `development`. Nunca se fusiona en local: la fusión ocurre en el remoto, a través del PR. El PR lleva pruebas, una entrada en `CHANGELOG.md` y la actualización de esta guía y de la guía técnica (la sección «Delivery workflow» de esa guía tiene el diagrama).
