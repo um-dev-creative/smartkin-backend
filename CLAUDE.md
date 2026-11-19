@@ -13,7 +13,7 @@ SmartKin backend: a Spring Boot 4.1 / Java 25 REST API (Maven, package `com.umdc
 - Single test: `mvn test -Dtest=ClassName#method`
 - Docker image is built from the pre-built jar in `target/` (`Dockerfile`, exposes 8166, imports several `.crt` files from `src/main/resources` into the JVM cacerts)
 
-Task rules: branch from `development`, 85% coverage on touched code, update `CHANGELOG.md`, `docs/USER_GUIDE.md` and `docs/TECHNICAL_GUIDE.md`. PMD uses the `sonar.exclusions` property in `pom.xml`; JaCoCo has its own class-pattern exclusions (config, entities, repositories, generated mapper implementations, Application). Integration tests need Docker (Testcontainers).
+Task rules: changes are made on a branch derived from `development`, pushed to the remote and integrated through a PR to `development`; never merged locally (see "Delivery workflow" in `docs/TECHNICAL_GUIDE.md`). 85% coverage on touched code, update `CHANGELOG.md`, `docs/USER_GUIDE.md` and `docs/TECHNICAL_GUIDE.md`. PMD uses the `sonar.exclusions` property in `pom.xml`; JaCoCo has its own class-pattern exclusions (config, entities, repositories, generated mapper implementations, Application). Integration tests need Docker (Testcontainers).
 
 ## Configuration
 
@@ -38,4 +38,4 @@ Feign error handling convention: catch `FeignException` and relay `e.status()` p
 
 ## Style
 
-Javadoc is written in both `/** */` and Markdown `///` styles; each package has a `package-info.java`. Branches follow `sak-<n>-<description>` and merge into `development`.
+Javadoc is written in both `/** */` and Markdown `///` styles; each package has a `package-info.java`. Branches follow `sak-<n>-<description>`; changes are made on a branch derived from `development`, pushed to the remote and integrated through a PR to `development`. Never merged locally.

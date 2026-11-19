@@ -1075,3 +1075,20 @@ sequenceDiagram
 - `PRX_PASSWORD_RESET_TEMPLATE_ID` does not exist; `PRX_VERIFICATION_CODE_TEMPLATE_ID` is optional and only a fallback for `sk_verification_<language>`.
 - Mercury must answer `template-definitions` to SmartKin's token for SmartKin's own application only (otherwise `403`).
 Tests: `TemplateIdRegistryTest`, `MercuryMailerTest`.
+
+## Delivery workflow
+
+Every change, however small, follows the same path. Nothing is ever merged locally: the work ends when the branch is pushed and a PR to `development` is open; the merge happens on the remote through that PR.
+
+```mermaid
+flowchart LR
+    A["git fetch + git pull --ff-only on development"] --> B["new branch from development<br/>(sak-n-description)"]
+    B --> C["change + tests + CHANGELOG + both guides"]
+    C --> D["mvn test: full suite, PMD, CPD, JaCoCo METHOD >= 85%"]
+    D --> E["signed commits, no secrets"]
+    E --> F["git push -u origin branch"]
+    F --> G["gh pr create --base development"]
+    G --> H["merge on the remote, through the PR"]
+```
+
+Forbidden: `git merge` into `development` locally (also `--no-ff`, `--squash`, fast-forward), `git checkout development` to integrate, pushing to `development` directly and committing on it. Check before reporting: `git branch --show-current` is the working branch and `git log origin/development..development` is empty. Stage only the files of the change.
