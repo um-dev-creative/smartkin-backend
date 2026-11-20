@@ -300,3 +300,7 @@ Qué decirle a quien escribe a soporte:
 ## Cómo se entrega un cambio
 
 Los cambios se hacen en una rama derivada de `development` (`sak-<n>-<descripción>`), se suben al remoto y se integran mediante un PR hacia `development`. Nunca se fusiona en local: la fusión ocurre en el remoto, a través del PR. El PR lleva pruebas, una entrada en `CHANGELOG.md` y la actualización de esta guía y de la guía técnica (la sección «Delivery workflow» de esa guía tiene el diagrama).
+
+## Imagen nativa (Dockerfile.native)
+
+La imagen nativa se ejecuta con el usuario `jvapps` (uid y gid `10001`). Si al construirla ves el error «user and group names can't be resolved when used with --link», actualiza a la versión que usa ids numéricos en `--chown`; el resto de la construcción no cambia.

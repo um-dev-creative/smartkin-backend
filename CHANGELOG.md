@@ -207,3 +207,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 - Delivery workflow fixed in `CLAUDE.md`, which said branches "merge into `development`": changes are made on a branch derived from `development`, pushed to the remote and integrated through a PR to `development`; nothing is merged locally. The same flow is now described in the "Delivery workflow" section of the technical guide (Mermaid) and in the user guide.
+
+### Fixed
+- `Dockerfile.native` did not build: `COPY --link --chown=jvapps:appmng` failed with "user and group names can't be resolved when used with --link". The runtime user `jvapps` and group `appmng` are now created with fixed ids (`10001:10001`) and both `COPY --link` lines use `--chown=10001:10001`. The user that runs the process is the same (`jvapps:appmng`).
