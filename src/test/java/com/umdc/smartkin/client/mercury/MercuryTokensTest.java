@@ -71,6 +71,17 @@ class MercuryTokensTest {
     }
 
     @Test
+    void aBackboneRefusalIsRethrownAndNothingIsCached() {
+        when(backbone.token(any())).thenThrow(feign(400)).thenReturn(new ManagedClientToken("backbone-token", 300));
+        when(mercury.exchange("Bearer backbone-token")).thenReturn(new PrxTokenString("mercury-token"));
+
+        assertThrows(feign.FeignException.class, () -> tokens.token());
+        assertEquals("mercury-token", tokens.token());
+
+        verify(backbone, times(2)).token(any());
+    }
+
+    @Test
     void keepsMercurysTokenUntilAMinuteBeforeItExpires() {
         var mercuryToken = jwtExpiringAt(NOW.plus(Duration.ofMinutes(10)));
         when(backbone.token(any())).thenReturn(new ManagedClientToken("b", 3600));

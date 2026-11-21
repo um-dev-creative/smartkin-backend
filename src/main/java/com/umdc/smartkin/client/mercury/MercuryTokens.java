@@ -1,6 +1,7 @@
 package com.umdc.smartkin.client.mercury;
 
 import com.umdc.smartkin.client.backbone.BackboneManagedClient;
+import com.umdc.smartkin.client.backbone.to.ManagedClientToken;
 import com.umdc.smartkin.client.backbone.to.ManagedClientTokenRequest;
 import feign.FeignException;
 import org.slf4j.Logger;
@@ -109,7 +110,15 @@ public class MercuryTokens {
         if (clientId.isBlank() || clientSecret.isBlank()) {
             throw new IllegalStateException("SmartKin's Backbone managed client is not configured: set MERCURY_M2M_CLIENT_ID and MERCURY_M2M_CLIENT_SECRET");
         }
-        var issued = backbone.token(new ManagedClientTokenRequest(UUID.fromString(clientId), clientSecret, scopes));
+        LOGGER.info("Asking backbone for the mercury M2M token: clientId={}, scopes={}", clientId, scopes);
+        ManagedClientToken issued;
+        try {
+            issued = backbone.token(new ManagedClientTokenRequest(UUID.fromString(clientId), clientSecret, scopes));
+        } catch (FeignException e) {
+            LOGGER.error("Backbone did not issue the mercury M2M token (status {}) for clientId={}, scopes={}: {}", e.status(), clientId, scopes,
+                    e.getMessage());
+            throw e;
+        }
         var life = issued.expiresIn() > 0 ? Duration.ofSeconds(issued.expiresIn()).minus(MARGIN) : FALLBACK;
         backboneToken = new Cached(issued.accessToken(), now.plus(life.isNegative() ? Duration.ZERO : life));
         return issued.accessToken();
