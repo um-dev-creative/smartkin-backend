@@ -290,4 +290,27 @@ class FeignConfigurersTest {
 
         assertEquals(List.of("Bearer abc123"), List.copyOf(template.headers().get("Authorization")));
     }
+
+    @Test
+    void theTokenClientsTrustTheInternalCaWithoutAddingABearer() {
+        var bundles = new org.springframework.boot.ssl.DefaultSslBundleRegistry();
+        bundles.registerBundle("smartkin-security", org.springframework.boot.ssl.SslBundle.of(org.springframework.boot.ssl.SslStoreBundle.NONE));
+        var configurer = new TrustedFeignConfigurer();
+        ReflectionTestUtils.setField(configurer, "sslBundles", bundles);
+
+        assertNotNull(configurer.feignHttpClient());
+        assertNotNull(new TrustedFeignConfigurer().feignHttpClient());
+        assertTrue(TrustedFeignConfigurer.class.getDeclaredMethods().length > 0
+                && java.util.Arrays.stream(TrustedFeignConfigurer.class.getDeclaredMethods())
+                .noneMatch(m -> m.getReturnType().equals(feign.RequestInterceptor.class)));
+    }
+
+    @Test
+    void bothTokenClientsNameTheTrustedConfiguration() {
+        for (Class<?> client : List.of(com.umdc.smartkin.client.backbone.BackboneManagedClient.class,
+                com.umdc.smartkin.client.mercury.MercuryAuthClient.class)) {
+            var feign = client.getAnnotation(org.springframework.cloud.openfeign.FeignClient.class);
+            assertTrue(List.of(feign.configuration()).contains(TrustedFeignConfigurer.class), client.getSimpleName());
+        }
+    }
 }

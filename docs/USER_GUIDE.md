@@ -304,3 +304,7 @@ Los cambios se hacen en una rama derivada de `development` (`sak-<n>-<descripci�
 ## Imagen nativa (Dockerfile.native)
 
 La imagen nativa se ejecuta con el usuario `jvapps` (uid y gid `10001`). Si al construirla ves el error «user and group names can't be resolved when used with --link», actualiza a la versión que usa ids numéricos en `--chown`; el resto de la construcción no cambia.
+
+## Registro que responde 503 («Verification e-mail could not be sent»)
+
+Si el registro responde 503 y el usuario no queda creado, el backend no pudo entregar el correo a mercury. Una causa era que las dos llamadas que piden el token de mercury no confiaban en la CA interna (`PKIX path building failed` en el log); desde esta versión usan el mismo certificado de confianza (`smartkin-security`) que el resto de las llamadas. Si sigue pasando, el log del backend muestra la excepción completa en la línea `mercury's templates could not be read (...)`.

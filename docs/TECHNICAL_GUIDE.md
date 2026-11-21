@@ -90,6 +90,16 @@ flowchart LR
 SmartKin is a *client application* of mercury. It no longer has an alias and a password in mercury (the login clients were removed there);
 it exchanges the Backbone M2M token of its managed client for mercury's own M2M token.
 
+**TLS of the two token calls.** Both clients that obtain the token, `BackboneManagedClient` and `MercuryAuthClient`, name `TrustedFeignConfigurer` as their Feign `configuration`. It supplies only the HTTP client that trusts the `smartkin-security` SSL bundle (the internal CA of `*.umdc-qa.tst`) and no interceptor, so no OAuth bearer is added. Without it Feign uses its default client, which trusts only the JVM trust store, and the call fails with `PKIX path building failed`, mercury looks unreachable and sign-up rolls back with `503`. `BackendFeignConfigurer` extends it, so the clients with a bearer share the same transport.
+
+```mermaid
+flowchart LR
+    M["MercuryTokens"] --> B["BackboneManagedClient<br/>TrustedFeignConfigurer"]
+    M --> A["MercuryAuthClient<br/>TrustedFeignConfigurer"]
+    B -->|"smartkin-security bundle"| N["nginx api.umdc-qa.tst"]
+    A -->|"smartkin-security bundle"| N
+```
+
 ```mermaid
 sequenceDiagram
     participant S as SmartKin (MercuryTokens)
