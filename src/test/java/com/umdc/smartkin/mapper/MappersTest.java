@@ -24,6 +24,7 @@ import static com.umdc.smartkin.support.TestData.person;
 import static com.umdc.smartkin.support.TestData.role;
 import static com.umdc.smartkin.support.TestData.userCreateRequest;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -55,7 +56,7 @@ class MappersTest {
     void userCreateMapperCreatesTheUserActiveSoItCanSignInToVerifyTheCode() {
         var request = userCreateMapper.toBackbone(userCreateRequest("Lopez", "+15550100"), APPLICATION_ID, ROLE_ID, "alopez");
 
-        assertTrue(request.active());
+        assertFalse(request.active());
     }
 
     @Test

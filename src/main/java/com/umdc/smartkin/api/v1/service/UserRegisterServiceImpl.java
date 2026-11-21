@@ -1,7 +1,11 @@
 package com.umdc.smartkin.api.v1.service;
 
 import com.umdc.smartkin.api.v1.to.ConfirmCodeRequest;
+import com.umdc.smartkin.api.v1.to.ResendVerificationRequest;
+import com.umdc.smartkin.api.v1.to.VerifyEmailRequest;
 import com.umdc.smartkin.client.backbone.BackboneClient;
+import com.umdc.smartkin.client.backbone.to.BackboneEmailLookupRequest;
+import com.umdc.smartkin.client.backbone.to.BackboneEmailLookupResponse;
 import com.umdc.smartkin.client.mercury.MailDeliveryException;
 import com.umdc.smartkin.client.mercury.MercuryClient;
 import com.umdc.smartkin.client.mercury.MercuryMailer;
@@ -9,6 +13,7 @@ import com.umdc.smartkin.client.mercury.MercuryTokens;
 import com.umdc.smartkin.mapper.ConfirmCodeMapper;
 import feign.FeignException;
 import org.springframework.beans.factory.annotation.Value;
+import com.umdc.smartkin.util.EmailCooldown;
 import com.umdc.smartkin.util.UpstreamFailure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +21,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -34,6 +42,8 @@ public class UserRegisterServiceImpl implements UserRegisterService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UserRegisterServiceImpl.class);
     private static final String ATTEMPTS_REMAINING = "Attempts-Remaining";
+    static final Duration RESEND_COOLDOWN = Duration.ofMinutes(1);
+    static final String CODE_NOT_VALID_MESSAGE = "The code is not valid or has expired, ask for a new one.";
     private static final String ACTIVATION_FAILED = "The code is right but the account could not be activated, try again";
 
     @Value("${umdc.smartkin.application-id}")
@@ -44,6 +54,7 @@ public class UserRegisterServiceImpl implements UserRegisterService {
     private final BackboneClient backboneClient;
     private final ConfirmCodeMapper confirmCodeMapper;
     private final MercuryMailer mercuryMailer;
+    private final EmailCooldown resendCooldown;
 
     /// Constructs a new UserRegisterServiceImpl.
     ///
@@ -52,9 +63,11 @@ public class UserRegisterServiceImpl implements UserRegisterService {
     /// @param backboneClient the client that activates the user once mercury accepts the code
     /// @param confirmCodeMapper the mapper used to map confirmation codes
     /// @param mercuryMailer hands the new code of a resend to mercury
+    /// @param clock the clock the cooldown of a resend by e-mail is measured with
     /// @see MercuryClient
     public UserRegisterServiceImpl(MercuryClient mercuryClient, MercuryTokens mercuryTokens, BackboneClient backboneClient,
-                                   ConfirmCodeMapper confirmCodeMapper, MercuryMailer mercuryMailer) {
+                                   ConfirmCodeMapper confirmCodeMapper, MercuryMailer mercuryMailer, Clock clock) {
+        this.resendCooldown = new EmailCooldown(clock, RESEND_COOLDOWN);
         this.mercuryMailer = mercuryMailer;
         this.mercuryClient = mercuryClient;
         this.mercuryTokens = mercuryTokens;
@@ -118,6 +131,89 @@ public class UserRegisterServiceImpl implements UserRegisterService {
             LOGGER.error("Mercury did not take the new code of user {}: {}", userId, e.getMessage());
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header(MESSAGE_ERROR_HEADER, VERIFICATION_UNAVAILABLE_MESSAGE).build();
         }
+    }
+
+    /// Confirms the e-mail of a new account, which is inactive until now: mercury checks the code and, when it is right, backbone activates the
+    /// user. The visitor has no session, so the account is named by its e-mail. An unknown e-mail and an account that is already active get the
+    /// same `406` as a wrong code, so the endpoint does not list who is registered. A code that mercury accepted but whose activation failed is
+    /// recovered on the next call (mercury then says "no code", but its latest one is verified).
+    ///
+    /// @param request the e-mail and the code
+    /// @return 200 when the account is active, 406 when the code is not valid (`Attempts-Remaining` for a pending account), 502/503 when
+    ///         backbone or mercury fails
+    @Override
+    public ResponseEntity<Void> verifyEmail(VerifyEmailRequest request) {
+        Optional<BackboneEmailLookupResponse> pending;
+        try {
+            pending = lookup(normalize(request.email())).filter(owner -> !Boolean.TRUE.equals(owner.active()));
+        } catch (FeignException e) {
+            LOGGER.warn("The owner of an e-mail could not be looked up to verify it (status {})", e.status());
+            return unavailable(e);
+        }
+        if (pending.isEmpty()) {
+            return codeNotValid(null);
+        }
+        var userId = pending.get().id();
+        try {
+            var verificationRequest = confirmCodeMapper.toVerificationCodeRequest(new ConfirmCodeRequest(userId, request.verificationCode()), applicationId);
+            mercuryTokens.withToken(mercuryToken -> mercuryClient.confirmCode(mercuryToken, verificationRequest));
+            return activate(userId);
+        } catch (FeignException.NotFound _) {
+            return alreadyVerified(userId) ? activate(userId) : codeNotValid("0");
+        } catch (FeignException e) {
+            if (e.status() == HttpStatus.NOT_ACCEPTABLE.value()) {
+                return codeNotValid(Optional.ofNullable(e.responseHeaders().get(ATTEMPTS_REMAINING)).flatMap(values -> values.stream().findFirst()).orElse("0"));
+            }
+            LOGGER.error("Mercury could not check the verification code of user {} (status {})", userId, e.status());
+            return unavailable(e);
+        }
+    }
+
+    /// Sends a new code to the e-mail of an account that is not verified yet. One code per e-mail per minute; the answer is always 202.
+    ///
+    /// @param request the e-mail
+    /// @return always 202
+    @Override
+    public ResponseEntity<Void> resendVerification(ResendVerificationRequest request) {
+        var email = normalize(request.email());
+        if (!resendCooldown.takeTurn(email)) {
+            LOGGER.info("A verification code was asked again within the cooldown");
+            return ResponseEntity.accepted().build();
+        }
+        try {
+            lookup(email).filter(owner -> !Boolean.TRUE.equals(owner.active())).ifPresentOrElse(
+                    owner -> mercuryMailer.resendVerificationCode(owner.id(), owner.email(), owner.displayName()),
+                    () -> LOGGER.info("A verification code was asked for an e-mail without a pending account"));
+        } catch (FeignException e) {
+            LOGGER.warn("The owner of an e-mail could not be looked up to resend the code (status {})", e.status());
+        } catch (MailDeliveryException e) {
+            LOGGER.error("Mercury did not take the new verification code: {}", e.getMessage());
+        }
+        return ResponseEntity.accepted().build();
+    }
+
+    private Optional<BackboneEmailLookupResponse> lookup(String email) {
+        try {
+            return Optional.ofNullable(backboneClient.lookupByEmail(applicationId, new BackboneEmailLookupRequest(email)));
+        } catch (FeignException.NotFound _) {
+            return Optional.empty();
+        }
+    }
+
+    private static String normalize(String email) {
+        return email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static ResponseEntity<Void> codeNotValid(String attemptsRemaining) {
+        var response = ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).header(MESSAGE_ERROR_HEADER, CODE_NOT_VALID_MESSAGE);
+        if (attemptsRemaining != null) {
+            response.header(ATTEMPTS_REMAINING, attemptsRemaining);
+        }
+        return response.build();
+    }
+
+    private static ResponseEntity<Void> unavailable(FeignException e) {
+        return ResponseEntity.status(UpstreamFailure.statusToAnswer(e)).header(MESSAGE_ERROR_HEADER, VERIFICATION_UNAVAILABLE_MESSAGE).build();
     }
 
     private static ResponseEntity<Void> refuseOthers(String sessionTokenBkd, UUID userId) {

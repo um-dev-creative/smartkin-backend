@@ -1,6 +1,10 @@
 package com.umdc.smartkin.api.v1.service;
 
 import com.umdc.smartkin.api.v1.to.ConfirmCodeRequest;
+import com.umdc.smartkin.api.v1.to.ResendVerificationRequest;
+import com.umdc.smartkin.api.v1.to.VerifyEmailRequest;
+import com.umdc.smartkin.client.backbone.to.BackboneEmailLookupRequest;
+import com.umdc.smartkin.client.backbone.to.BackboneEmailLookupResponse;
 import com.umdc.smartkin.client.backbone.BackboneClient;
 import com.umdc.smartkin.client.mercury.MailDeliveryException;
 import com.umdc.smartkin.client.mercury.MercuryClient;
@@ -17,6 +21,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -29,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -51,11 +60,18 @@ class UserRegisterServiceImplTest {
     private MercuryMailer mercuryMailer;
 
     private UserRegisterServiceImpl service;
+    private Instant now;
     private final ConfirmCodeRequest request = new ConfirmCodeRequest(USER_ID, "1234-5678");
 
     @BeforeEach
     void setUp() {
-        service = new UserRegisterServiceImpl(mercuryClient, mercuryTokens, backboneClient, confirmCodeMapper, mercuryMailer);
+        now = Instant.parse("2026-11-21T22:00:00Z");
+        var clock = new Clock() {
+            @Override public java.time.ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(java.time.ZoneId zone) { return this; }
+            @Override public Instant instant() { return now; }
+        };
+        service = new UserRegisterServiceImpl(mercuryClient, mercuryTokens, backboneClient, confirmCodeMapper, mercuryMailer, clock);
         ReflectionTestUtils.setField(service, "applicationId", APPLICATION_ID);
     }
 
@@ -216,5 +232,169 @@ class UserRegisterServiceImplTest {
         doThrow(new MailDeliveryException("down")).when(mercuryMailer).resendVerificationCode(any(), any(), any());
 
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, service.resendCode(SESSION_BKD, USER_ID).getStatusCode());
+    }
+
+    private static final String EMAIL = "ana@smartkin.test";
+    private final VerifyEmailRequest verifyRequest = new VerifyEmailRequest(" Ana@SmartKin.test ", "1234-5678");
+
+    private void ownerIs(boolean active) {
+        org.mockito.Mockito.doReturn(new BackboneEmailLookupResponse(USER_ID, EMAIL, "Ana", active))
+                .when(backboneClient).lookupByEmail(APPLICATION_ID, new BackboneEmailLookupRequest(EMAIL));
+    }
+
+    @Test
+    void verifiesTheEmailOfAPendingAccountAndActivatesIt() {
+        ownerIs(false);
+        runsCallsWithTheMercuryToken();
+        when(confirmCodeMapper.toVerificationCodeRequest(new ConfirmCodeRequest(USER_ID, "1234-5678"), APPLICATION_ID)).thenReturn(mock(VerificationCodeRequest.class));
+        when(mercuryClient.confirmCode(any(), any())).thenReturn(ResponseEntity.accepted().build());
+
+        var response = service.verifyEmail(verifyRequest);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        verify(backboneClient).activateUser(APPLICATION_ID, USER_ID);
+    }
+
+    @Test
+    void verifyAnswersTheSameNotValidForAnUnknownEmailAndForAnActiveAccount() {
+        doThrow(feign(404)).when(backboneClient).lookupByEmail(any(), any());
+        var unknown = service.verifyEmail(verifyRequest);
+        ownerIs(true);
+        var active = service.verifyEmail(verifyRequest);
+
+        assertEquals(HttpStatus.NOT_ACCEPTABLE, unknown.getStatusCode());
+        assertEquals(HttpStatus.NOT_ACCEPTABLE, active.getStatusCode());
+        assertEquals(UserRegisterServiceImpl.CODE_NOT_VALID_MESSAGE, unknown.getHeaders().getFirst("message-error"));
+        assertNull(unknown.getHeaders().getFirst("Attempts-Remaining"));
+        verifyNoInteractions(mercuryClient);
+        verify(backboneClient, never()).activateUser(any(), any());
+    }
+
+    @Test
+    void verifyTellsTheAttemptsLeftOfAWrongCode() {
+        ownerIs(false);
+        when(confirmCodeMapper.toVerificationCodeRequest(any(), any())).thenReturn(mock(VerificationCodeRequest.class));
+        when(mercuryTokens.withToken(any())).thenThrow(feign(406, Map.of("Attempts-Remaining", List.of("2"))));
+
+        var response = service.verifyEmail(verifyRequest);
+
+        assertEquals(HttpStatus.NOT_ACCEPTABLE, response.getStatusCode());
+        assertEquals("2", response.getHeaders().getFirst("Attempts-Remaining"));
+        verify(backboneClient, never()).activateUser(any(), any());
+    }
+
+    @Test
+    void verifyTellsZeroAttemptsWhenMercuryDoesNotSayHowManyAreLeft() {
+        ownerIs(false);
+        when(confirmCodeMapper.toVerificationCodeRequest(any(), any())).thenReturn(mock(VerificationCodeRequest.class));
+        when(mercuryTokens.withToken(any())).thenThrow(feign(406));
+
+        assertEquals("0", service.verifyEmail(verifyRequest).getHeaders().getFirst("Attempts-Remaining"));
+    }
+
+    @Test
+    void verifyRecoversAnActivationThatFailedAfterARightCode() {
+        ownerIs(false);
+        runsCallsWithTheMercuryToken();
+        when(confirmCodeMapper.toVerificationCodeRequest(any(), any())).thenReturn(mock(VerificationCodeRequest.class));
+        when(mercuryClient.confirmCode(any(), any())).thenThrow(feign(404));
+        when(mercuryClient.isVerificationCodeDone(MERCURY_TOKEN, USER_ID)).thenReturn(true);
+
+        assertEquals(HttpStatus.OK, service.verifyEmail(verifyRequest).getStatusCode());
+        verify(backboneClient).activateUser(APPLICATION_ID, USER_ID);
+    }
+
+    @Test
+    void verifyAnswersNotValidWhenThereIsNoCodeAndNothingWasVerified() {
+        ownerIs(false);
+        runsCallsWithTheMercuryToken();
+        when(confirmCodeMapper.toVerificationCodeRequest(any(), any())).thenReturn(mock(VerificationCodeRequest.class));
+        when(mercuryClient.confirmCode(any(), any())).thenThrow(feign(404));
+        when(mercuryClient.isVerificationCodeDone(MERCURY_TOKEN, USER_ID)).thenReturn(false);
+
+        var response = service.verifyEmail(verifyRequest);
+
+        assertEquals(HttpStatus.NOT_ACCEPTABLE, response.getStatusCode());
+        assertEquals("0", response.getHeaders().getFirst("Attempts-Remaining"));
+        verify(backboneClient, never()).activateUser(any(), any());
+    }
+
+    @Test
+    void verifyAnswersBadGatewayWhenMercuryFails() {
+        ownerIs(false);
+        when(confirmCodeMapper.toVerificationCodeRequest(any(), any())).thenReturn(mock(VerificationCodeRequest.class));
+        when(mercuryTokens.withToken(any())).thenThrow(feign(403));
+
+        var response = service.verifyEmail(verifyRequest);
+
+        assertEquals(HttpStatus.BAD_GATEWAY, response.getStatusCode());
+        assertEquals(com.umdc.smartkin.constant.SmartKinAppConstants.VERIFICATION_UNAVAILABLE_MESSAGE, response.getHeaders().getFirst("message-error"));
+    }
+
+    @Test
+    void verifyAnswersBadGatewayWhenBackboneCannotBeAskedWhoOwnsTheEmail() {
+        when(backboneClient.lookupByEmail(any(), any())).thenThrow(feign(403));
+
+        assertEquals(HttpStatus.BAD_GATEWAY, service.verifyEmail(verifyRequest).getStatusCode());
+        verifyNoInteractions(mercuryClient);
+    }
+
+    @Test
+    void verifyAnswersBadGatewayWhenBackboneCannotActivateAfterARightCode() {
+        ownerIs(false);
+        runsCallsWithTheMercuryToken();
+        when(confirmCodeMapper.toVerificationCodeRequest(any(), any())).thenReturn(mock(VerificationCodeRequest.class));
+        when(mercuryClient.confirmCode(any(), any())).thenReturn(ResponseEntity.accepted().build());
+        when(backboneClient.activateUser(APPLICATION_ID, USER_ID)).thenThrow(feign(403));
+
+        assertEquals(HttpStatus.BAD_GATEWAY, service.verifyEmail(verifyRequest).getStatusCode());
+    }
+
+    @Test
+    void resendByEmailSendsANewCodeToAPendingAccount() {
+        ownerIs(false);
+
+        var response = service.resendVerification(new ResendVerificationRequest(" Ana@SmartKin.test "));
+
+        assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
+        verify(mercuryMailer).resendVerificationCode(USER_ID, EMAIL, "Ana");
+    }
+
+    @Test
+    void resendByEmailAnswers202WithoutSendingForAnUnknownEmailAnActiveAccountOrAFailure() {
+        var request = new ResendVerificationRequest(EMAIL);
+        doThrow(feign(404)).when(backboneClient).lookupByEmail(any(), any());
+        assertEquals(HttpStatus.ACCEPTED, service.resendVerification(request).getStatusCode());
+
+        now = now.plus(Duration.ofMinutes(2));
+        ownerIs(true);
+        assertEquals(HttpStatus.ACCEPTED, service.resendVerification(request).getStatusCode());
+
+        now = now.plus(Duration.ofMinutes(2));
+        doThrow(feign(500)).when(backboneClient).lookupByEmail(any(), any());
+        assertEquals(HttpStatus.ACCEPTED, service.resendVerification(request).getStatusCode());
+        verifyNoInteractions(mercuryMailer);
+    }
+
+    @Test
+    void resendByEmailAnswers202WhenMercuryDoesNotTakeTheMessage() {
+        ownerIs(false);
+        doThrow(new MailDeliveryException("down")).when(mercuryMailer).resendVerificationCode(USER_ID, EMAIL, "Ana");
+
+        assertEquals(HttpStatus.ACCEPTED, service.resendVerification(new ResendVerificationRequest(EMAIL)).getStatusCode());
+    }
+
+    @Test
+    void resendByEmailSendsOneCodePerEmailPerMinute() {
+        ownerIs(false);
+        var request = new ResendVerificationRequest(EMAIL);
+
+        service.resendVerification(request);
+        service.resendVerification(request);
+        verify(mercuryMailer, org.mockito.Mockito.times(1)).resendVerificationCode(USER_ID, EMAIL, "Ana");
+
+        now = now.plus(UserRegisterServiceImpl.RESEND_COOLDOWN);
+        service.resendVerification(request);
+        verify(mercuryMailer, org.mockito.Mockito.times(2)).resendVerificationCode(USER_ID, EMAIL, "Ana");
     }
 }
