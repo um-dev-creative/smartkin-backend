@@ -1104,3 +1104,25 @@ flowchart LR
 ```
 
 Forbidden: `git merge` into `development` locally (also `--no-ff`, `--squash`, fast-forward), `git checkout development` to integrate, pushing to `development` directly and committing on it. Check before reporting: `git branch --show-current` is the working branch and `git log origin/development..development` is empty. Stage only the files of the change.
+
+## Purging a user or an application (`scripts/purge-backbone-user.sh`)
+
+Backbone owns `general.*` (entities in `com.umdc:persistence`) and mercury owns `mercury.verification_codes`; when the two live in the same database one script cleans a test user (for example a sign-up that was rolled back half-way) or a whole application. Everything runs in one transaction; without `--apply` it is rolled back, so the output is a dry run.
+
+```mermaid
+flowchart TD
+    A["--user id  /  --application id"] --> B["t_users: the user, or every user of the application"]
+    B --> C["t_persons: their persons, minus any person another user still uses"]
+    C --> D["mercury.verification_codes"]
+    D --> E["general.federated_identity"]
+    E --> F["general.application_role_user"]
+    F --> G["general.contact (by person and by owner)"]
+    G --> H["general.address, general.identification_document"]
+    H --> I["general.user"]
+    I --> J["general.person"]
+    J --> K{"--apply?"}
+    K -- yes --> L["COMMIT"]
+    K -- no --> M["ROLLBACK (dry run)"]
+```
+
+The order follows the foreign keys: dependents first, then `user`, then `person` (a person is referenced by `user.person_id`, by `contact`, `address` and `identification_document`). A person shared by two users of different applications (`uq_user_person_application` allows it) is never deleted while the other user exists. A user id that no longer exists in backbone still has its `verification_codes` and owned contacts removed (the leftovers of a sign-up that was rolled back). Optional tables are checked with `to_regclass`, so the script also runs where `mercury` lives in another database (the codes are then skipped with a notice). `scripts/purge-backbone-user.test.sh` seeds a throwaway PostgreSQL in Docker and checks each case.

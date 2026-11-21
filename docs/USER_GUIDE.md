@@ -312,3 +312,16 @@ Si el registro responde 503 y el usuario no queda creado, el backend no pudo ent
 ## Qué cliente y scopes usa smartkin con mercury (log)
 
 Al pedir el token de mercury, el backend registra en INFO `Asking backbone for the mercury M2M token: clientId=…, scopes=[…]`. Si backbone lo rechaza, registra en ERROR el estado, el mismo `clientId` y los `scopes`, y la respuesta (por ejemplo `invalid_scope`). Compara ese `clientId` y esos scopes con los que el cliente tiene registrados en Backbone. El secreto nunca se imprime.
+
+## Borrar un usuario de prueba o una aplicación completa
+
+`scripts/purge-backbone-user.sh` borra, en una sola transacción, todo lo que Backbone y mercury guardan de un usuario o de todos los usuarios de una aplicación: códigos de verificación, roles (`application_role_user`), contactos, usuario y persona. Sin `--apply` solo muestra cuántas filas borraría (no cambia nada).
+
+```
+export PGHOST=... PGUSER=... PGPASSWORD=...   # PGDATABASE por defecto umdevc
+scripts/purge-backbone-user.sh --user <uuid-del-usuario>                 # simulación
+scripts/purge-backbone-user.sh --user <uuid-del-usuario> --apply         # pide escribir el id para confirmar
+scripts/purge-backbone-user.sh --application <uuid-de-la-aplicacion> --apply --yes
+```
+
+Una persona que otro usuario (de otra aplicación) todavía usa no se borra. Las tablas del esquema `smartkin` no se tocan. Es irreversible: prueba primero sin `--apply`, y no lo uses en producción sin una copia de seguridad.
