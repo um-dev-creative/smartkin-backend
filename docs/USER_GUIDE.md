@@ -301,7 +301,7 @@ Qué decirle a quien escribe a soporte:
 
 Son sentencias `DELETE` simples, una por tabla (no se crea nada en la base), que borran por el id del usuario: sus códigos de verificación (`mercury.verification_codes`), sus roles (`application_role_user`), sus contactos (`contact`), la fila de `general."user"` y su persona (`person`).
 
-1. Con «buscar y reemplazar» cambia `00000000-0000-0000-0000-000000000000` por el id del usuario en todo el archivo.
+1. Con «reemplazar todo» cambia `00000000-0000-0000-0000-000000000000` por el id del usuario en TODO el archivo (aparece en cada sentencia). Si cambias el id solo en algunas, las demás no borran nada y la última falla con «violates foreign key constraint … still referenced from table application_role_user». La primera sentencia (`SELECT`) debe devolver una fila con el alias y el correo del usuario: compruébalo antes de borrar.
 2. Ejecuta las sentencias en orden (modo script en DBeaver/pgAdmin, o `psql -f`). Cada una es independiente: si una tabla no existe en tu base (por ejemplo mercury está en otra), esa sentencia falla y puedes seguir con las demás.
 3. Para verlo antes, ejecútalas entre `BEGIN;` y `ROLLBACK;` (cambia `ROLLBACK;` por `COMMIT;` para conservar el cambio).
 

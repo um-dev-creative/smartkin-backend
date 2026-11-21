@@ -38,8 +38,8 @@ ORPHAN=cccccccc-0000-0000-0000-000000000009
 sql -v ON_ERROR_STOP=1 <<SQL
 CREATE SCHEMA general; CREATE SCHEMA mercury;
 CREATE TABLE general.person (id uuid PRIMARY KEY);
-CREATE TABLE general."user" (id uuid PRIMARY KEY, person_id uuid REFERENCES general.person(id), application_id uuid NOT NULL);
-CREATE TABLE general.application_role_user (user_id uuid REFERENCES general."user"(id), role_id uuid, application_id uuid);
+CREATE TABLE general."user" (id uuid PRIMARY KEY, person_id uuid REFERENCES general.person(id), application_id uuid NOT NULL, alias text, email_account text, active boolean);
+CREATE TABLE general.application_role_user (user_id uuid REFERENCES general."user"(id), role_id uuid, application_id uuid, creator_id uuid REFERENCES general."user"(id));
 CREATE TABLE general.contact (id uuid PRIMARY KEY, person_id uuid REFERENCES general.person(id), owner_id uuid);
 CREATE TABLE general.address (id uuid PRIMARY KEY, person_id uuid REFERENCES general.person(id));
 CREATE TABLE general.identification_document (id uuid PRIMARY KEY, person_id uuid REFERENCES general.person(id));
@@ -47,7 +47,7 @@ CREATE TABLE general.federated_identity (id uuid PRIMARY KEY, user_id uuid REFER
 CREATE TABLE mercury.verification_codes (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, application_id uuid);
 INSERT INTO general.person VALUES ('$P1'), ('$P2'), ('$P3');
 INSERT INTO general."user" VALUES ('$U1', '$P1', '$A1'), ('$U2', '$P2', '$A1'), ('$U3', '$P1', '$A2');
-INSERT INTO general.application_role_user VALUES ('$U1', gen_random_uuid(), '$A1'), ('$U2', gen_random_uuid(), '$A1'), ('$U3', gen_random_uuid(), '$A2');
+INSERT INTO general.application_role_user VALUES ('$U1', gen_random_uuid(), '$A1', '$U2'), ('$U2', gen_random_uuid(), '$A1', NULL), ('$U3', gen_random_uuid(), '$A2', NULL);
 INSERT INTO general.contact VALUES (gen_random_uuid(), '$P1', NULL), (gen_random_uuid(), '$P2', NULL), (gen_random_uuid(), NULL, '$U2');
 INSERT INTO general.address VALUES (gen_random_uuid(), '$P2');
 INSERT INTO general.identification_document VALUES (gen_random_uuid(), '$P2');
@@ -65,7 +65,8 @@ echo "--- one user"
 run "$U2" apply
 check "user U2 deleted" 0 "$(count "general.\"user\" WHERE id = '$U2'")"
 check "other users kept" 2 "$(count 'general."user"')"
-check "its role deleted" 2 "$(count general.application_role_user)"
+check "its role deleted, the link it created for U1 kept" 2 "$(count general.application_role_user)"
+check "the creator of that link is cleared" 0 "$(count "general.application_role_user WHERE creator_id = '$U2'")"
 check "its person deleted" 0 "$(count "general.person WHERE id = '$P2'")"
 check "its contacts deleted (by person and by owner)" 1 "$(count general.contact)"
 check "its address and document deleted" 00 "$(count general.address)$(count general.identification_document)"
