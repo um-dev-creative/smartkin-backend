@@ -312,3 +312,7 @@ Si el registro responde 503 y el usuario no queda creado, el backend no pudo ent
 ## Qué cliente y scopes usa smartkin con mercury (log)
 
 Al pedir el token de mercury, el backend registra en INFO `Asking backbone for the mercury M2M token: clientId=…, scopes=[…]`. Si backbone lo rechaza, registra en ERROR el estado, el mismo `clientId` y los `scopes`, y la respuesta (por ejemplo `invalid_scope`). Compara ese `clientId` y esos scopes con los que el cliente tiene registrados en Backbone. El secreto nunca se imprime.
+
+## Después de registrarse: la página de verificación del código
+
+El usuario nuevo se crea activo y el frontend inicia sesión con él para llevarlo a la página del código. Mientras no confirme el código, su sesión lleva `vcCompleted=false` y el backend solo le deja usar la verificación del código (y pedir uno nuevo); el resto de la API responde 403. Los usuarios creados antes de este cambio siguen inactivos: actívalos con `PUT /api/v1/users/application/{applicationId}/user/{userId}/activate` o bórralos y vuelve a registrarlos.

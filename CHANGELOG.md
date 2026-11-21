@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- After signing up the visitor never reached the verification-code page. Sign-up created the user inactive (`active=false`), backbone answers `401` (empty body) to the session of an inactive user, and the front end only goes to `/veracode` after it logs the new user in. The user is now created **active** (`UserCreateMapper`, `active` = `true`). What keeps an unverified user out of the API is unchanged and already in place: the session token carries `vcCompleted=false` and `VerifiedSessionInterceptor` refuses everything but the verification endpoints until mercury accepts the code. `confirmCode` still calls backbone's idempotent `activate` afterwards. Users created before this change stay inactive: activate them with `PUT /api/v1/users/application/{applicationId}/user/{userId}/activate` (scope `users:manage`) or delete them.
+
 ### Removed
 - `PRX_VERIFICATION_CODE_TEMPLATE_ID` / `umdc.verification.code.template.id` (the optional fallback id of the verification e-mail) and its `UMDC_VERIFICATION_CODE_TEMPLATE_ID` line in `config/native.env`. The template id of every e-mail now comes only from mercury (`TemplateIdRegistry`, by file name `sk_<kind>_<language>`). With no `sk_verification_<language>` listed, `MercuryMailer` throws `MailDeliveryException` instead of using a stale configured id. Mercury's own property of that name (the template type id) is unaffected.
 
