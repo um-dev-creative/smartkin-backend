@@ -1088,6 +1088,19 @@ sequenceDiagram
 - Mercury must answer `template-definitions` to SmartKin's token for SmartKin's own application only (otherwise `403`).
 Tests: `TemplateIdRegistryTest`, `MercuryMailerTest`.
 
+## Purging a user or an application in plain SQL (`scripts/purge-backbone-user.sql`)
+
+The same deletion as the shell script, for a SQL client. It is a single anonymous `DO` block, so it is atomic by construction; the three parameters are PL/pgSQL variables at its top (`v_mode`, `v_id`, `v_apply`). The dry run is implemented by raising an exception after the deletes: the error rolls the whole block back and its message carries the report of rows per table. With `v_apply = true` the block ends with a notice and commits normally. The order of the deletes and the rule for shared persons are the ones of the "Purging a user or an application" section above (`user_id`/`owner_id` arrays are collected first, then dependents, then `user`, then `person`). `scripts/purge-backbone-user-sql.test.sh` rewrites the three parameters with `sed` and checks every case against a throwaway PostgreSQL in Docker.
+
+```mermaid
+flowchart TD
+    A["set v_mode, v_id, v_apply and run"] --> B["collect user ids and the persons nobody else uses"]
+    B --> C["delete codes, federated identity, roles, contacts, address, documents, user, person"]
+    C --> D{"v_apply?"}
+    D -- "true" --> E["NOTICE with the rows per table, block commits"]
+    D -- "false" --> F["RAISE EXCEPTION 'DRY RUN' with the rows: everything rolls back"]
+```
+
 ## Delivery workflow
 
 Every change, however small, follows the same path. Nothing is ever merged locally: the work ends when the branch is pushed and a PR to `development` is open; the merge happens on the remote through that PR.

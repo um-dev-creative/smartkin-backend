@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `scripts/purge-backbone-user.sql`: the same purge as `scripts/purge-backbone-user.sh`, as plain SQL (one `DO` block, no psql meta-commands) for psql, DBeaver, pgAdmin or the Supabase editor. Set `v_mode` (`'user'` or `'application'`), `v_id` and `v_apply` at the top. By default (`v_apply = false`) it is a dry run: it deletes, reports the rows per table and rolls back with the error `DRY RUN, rolled back`; with `v_apply = true` it deletes `mercury.verification_codes`, `general.application_role_user`, `general.contact`, `general."user"` and `general.person` (plus the FK dependents `federated_identity`, `address`, `identification_document`), keeps a person another user still uses, and removes orphan verification codes. `scripts/purge-backbone-user-sql.test.sh` tests it against a throwaway PostgreSQL in Docker.
+
 ### Removed
 - `PRX_VERIFICATION_CODE_TEMPLATE_ID` / `umdc.verification.code.template.id` (the optional fallback id of the verification e-mail) and its `UMDC_VERIFICATION_CODE_TEMPLATE_ID` line in `config/native.env`. The template id of every e-mail now comes only from mercury (`TemplateIdRegistry`, by file name `sk_<kind>_<language>`). With no `sk_verification_<language>` listed, `MercuryMailer` throws `MailDeliveryException` instead of using a stale configured id. Mercury's own property of that name (the template type id) is unaffected.
 

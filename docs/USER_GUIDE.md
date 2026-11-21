@@ -297,6 +297,18 @@ Qué decirle a quien escribe a soporte:
 - **"El código no es válido o venció"**: pidió otro código y el anterior dejó de servir, se acabaron los 3 intentos, o ya lo usó. Que pida uno nuevo.
 - **"La contraseña no cumple la política"**: el código ya se gastó; debe pedir uno nuevo y elegir otra contraseña (con letras y números).
 
+## Borrar un usuario o una aplicación con SQL (`scripts/purge-backbone-user.sql`)
+
+Es lo mismo que el script de shell, pero como SQL para pegar en psql, DBeaver, pgAdmin o el editor de Supabase. Abre el archivo, cambia las tres líneas de «PARAMETERS» y ejecuta todo el script:
+
+```
+v_mode  text    := 'user';                                    -- 'user' o 'application'
+v_id    uuid    := 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';    -- el id del usuario o de la aplicación
+v_apply boolean := false;                                     -- false = simulación, true = borra de verdad
+```
+
+Con `v_apply = false` (lo normal la primera vez) termina con el error «DRY RUN, rolled back» y, en el mensaje, cuántas filas borraría de cada tabla (`verification_codes`, `application_role_user`, `contact`, `user`, `person` y las tablas dependientes); no se borra nada. Con `v_apply = true` borra de verdad y muestra el mismo conteo. Si pones `'application'` se borran todos los usuarios de esa aplicación. Una persona que otro usuario (de otra aplicación) todavía usa no se borra. Es irreversible: haz una copia de seguridad antes de usarlo con `true`.
+
 ## Cómo se entrega un cambio
 
 Los cambios se hacen en una rama derivada de `development` (`sak-<n>-<descripción>`), se suben al remoto y se integran mediante un PR hacia `development`. Nunca se fusiona en local: la fusión ocurre en el remoto, a través del PR. El PR lleva pruebas, una entrada en `CHANGELOG.md` y la actualización de esta guía y de la guía técnica (la sección «Delivery workflow» de esa guía tiene el diagrama).
