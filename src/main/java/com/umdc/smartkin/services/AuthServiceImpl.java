@@ -101,6 +101,13 @@ public class AuthServiceImpl implements AuthService {
             logger.info("Token verification code not found for user {}:{}", userId, authRequest.alias());
             parameters.put("vcCompleted", FALSE);
             parameters.put("uid", userId.toString());
+        } catch (FeignException | IllegalStateException e) {
+            // Mercury could not say (down, refused, no M2M client): the session is issued as unverified, so the user lands on the
+            // verification page and VerifiedSessionInterceptor keeps the API closed. Failing here would leave the sign-in with a 500.
+            logger.warn("The verification status of user {} could not be read from mercury ({}: {}); the session is issued unverified",
+                    userId, e.getClass().getSimpleName(), e.getMessage());
+            parameters.put("vcCompleted", FALSE);
+            parameters.put("uid", userId.toString());
         }
         var authResponse = new AuthResponse(sessionJwtService.generateSessionToken(authRequest.alias(), parameters));
         if (authResponse.token().isBlank()) {

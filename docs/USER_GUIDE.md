@@ -340,3 +340,7 @@ Una persona que otro usuario (de otra aplicación) todavía usa no se borra. Las
 
 El usuario nuevo se crea activo y el frontend inicia sesión con él para llevarlo a la página del código. Mientras no confirme el código, su sesión lleva `vcCompleted=false` y el backend solo le deja usar la verificación del código (y pedir uno nuevo); el resto de la API responde 403. Los usuarios creados antes de este cambio siguen inactivos: actívalos con `PUT /api/v1/users/application/{applicationId}/user/{userId}/activate` o bórralos y vuelve a registrarlos.
 
+
+## Iniciar sesión cuando mercury no responde
+
+Si mercury no puede decir si el código ya fue confirmado (está caído, rechazó la llamada o falta su cliente M2M), el inicio de sesión ya no falla con un 500: la sesión se emite como **no verificada** (`vcCompleted=false`). El usuario recién registrado llega así a la página de verificación del código y, mientras no lo confirme, el resto de la API le responde 403.

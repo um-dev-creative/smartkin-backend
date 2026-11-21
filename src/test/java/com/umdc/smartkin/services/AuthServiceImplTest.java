@@ -118,6 +118,32 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void issuesAnUnverifiedSessionWhenMercuryCannotAnswer() {
+        runsCallsWithTheMercuryToken();
+        when(mercuryClient.isVerificationCodeDone("mercury", USER)).thenThrow(feign(500));
+        when(sessionJwtService.generateSessionToken(eq("alopez"), any())).thenReturn("jwt");
+
+        var response = service.token(new AuthRequest("alopez", "pwd"), backboneToken);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> parameters = ArgumentCaptor.forClass(Map.class);
+        verify(sessionJwtService).generateSessionToken(eq("alopez"), parameters.capture());
+        assertEquals("false", parameters.getValue().get("vcCompleted"));
+        assertEquals(USER.toString(), parameters.getValue().get("uid"));
+    }
+
+    @Test
+    void issuesAnUnverifiedSessionWhenNoMercuryClientIsConfigured() {
+        when(mercuryTokens.withToken(any())).thenThrow(new IllegalStateException("not configured"));
+        when(sessionJwtService.generateSessionToken(eq("alopez"), any())).thenReturn("jwt");
+
+        var response = service.token(new AuthRequest("alopez", "pwd"), backboneToken);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+    }
+
+    @Test
     void refusesATokenWithoutAUserId() {
         var response = service.token(new AuthRequest("alopez", "pwd"), "garbage");
 

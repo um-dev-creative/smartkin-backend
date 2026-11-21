@@ -1139,3 +1139,18 @@ flowchart TD
 ```
 
 The order follows the foreign keys: dependents first, then `user`, then `person` (a person is referenced by `user.person_id`, by `contact`, `address` and `identification_document`). A person shared by two users of different applications (`uq_user_person_application` allows it) is never deleted while the other user exists. A user id that no longer exists in backbone still has its `verification_codes` and owned contacts removed (the leftovers of a sign-up that was rolled back). Optional tables are checked with `to_regclass`, so the script also runs where `mercury` lives in another database (the codes are then skipped with a notice). `scripts/purge-backbone-user.test.sh` seeds a throwaway PostgreSQL in Docker and checks each case.
+
+## Session token when mercury cannot answer
+
+`AuthServiceImpl.token(request, sessionTokenBkd)` asks mercury `GET /api/v1/verification-code/latest-status` to set the `vcCompleted` claim. A `404` (no code yet) was already `false`; any other `FeignException` (mercury down or refusing, token exchange failure) or `IllegalStateException` (no M2M client configured) used to escape as a `500`, which made the BFF fail the login that follows sign-up. They now also give `vcCompleted=false` and a warning log (status/class and message, no secrets). It fails closed: `VerifiedSessionInterceptor` keeps everything but the verification endpoints at `403` until mercury confirms the code.
+
+```mermaid
+flowchart LR
+    A[session-token request] --> B{mercury latest-status}
+    B -->|200| C[vcCompleted = answer]
+    B -->|404| D[vcCompleted = false]
+    B -->|other error| E[warn log, vcCompleted = false]
+    C --> F[session issued]
+    D --> F
+    E --> F
+```
