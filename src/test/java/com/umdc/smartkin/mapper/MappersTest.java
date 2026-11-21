@@ -52,6 +52,13 @@ class MappersTest {
     }
 
     @Test
+    void userCreateMapperCreatesTheUserActiveSoItCanSignInToVerifyTheCode() {
+        var request = userCreateMapper.toBackbone(userCreateRequest("Lopez", "+15550100"), APPLICATION_ID, ROLE_ID, "alopez");
+
+        assertTrue(request.active());
+    }
+
+    @Test
     void userCreateMapperNeverSendsNullBooleansBecauseBackboneAnswers400() {
         var withoutChoices = new com.umdc.smartkin.api.v1.to.UserCreateRequest("secret", "ana@smartkin.test", "Ana", "Lopez",
                 java.time.LocalDate.of(2010, 5, 20), "+15550100", "Ana", null, null, null);

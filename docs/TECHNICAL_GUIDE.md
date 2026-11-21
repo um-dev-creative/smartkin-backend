@@ -273,7 +273,7 @@ sequenceDiagram
     participant B as backbone-rest
     participant M as mercury
     U->>S: POST /api/v1/users
-    S->>B: checkEmail, create user (inactive)
+    S->>B: checkEmail, create user (active, e-mail not verified: vcCompleted=false)
     S->>M: POST /api/v1/messages (session-token, Idempotency-Key)
     M-->>S: 202 OPENED
     S-->>U: 201
@@ -291,7 +291,7 @@ sequenceDiagram
     end
 ```
 
-`UserRegisterServiceImpl.confirmCode` activates the user in backbone after mercury accepts the code; a 404 from mercury is recovered when `latest-status` says the latest code was verified; a backbone failure answers 502 (`UpstreamFailure`). SmartKin does not configure the template ids (see "Template ids" below); mercury's own `umdc.verification.code.template.id` is the template **type** id:
+The user is created **active** in backbone (`UserCreateMapper`, `active=true`): backbone answers `401` to the session of an inactive user, and the sign-up logs the new user in to show the verification-code page, so an inactive user could never reach it. The e-mail check is not the active flag but the `vcCompleted` claim of the smartkin session token, which `VerifiedSessionInterceptor` enforces. `UserRegisterServiceImpl.confirmCode` calls backbone's idempotent `activate` after mercury accepts the code (it only matters for users created before this change); a 404 from mercury is recovered when `latest-status` says the latest code was verified; a backbone failure answers 502 (`UpstreamFailure`). SmartKin does not configure the template ids (see "Template ids" below); mercury's own `umdc.verification.code.template.id` is the template **type** id:
 
 ```mermaid
 flowchart LR
@@ -1087,6 +1087,19 @@ sequenceDiagram
 - `PRX_PASSWORD_RESET_TEMPLATE_ID` and `PRX_VERIFICATION_CODE_TEMPLATE_ID` (`umdc.verification.code.template.id`) do not exist: the fallback was removed, so a mercury that lists no `sk_verification_<language>` makes the e-mail fail with `MailDeliveryException` instead of silently using a stale id. A mercury that cannot be reached is now visible in the log: `TemplateIdRegistry` and `MercuryMailer` print the exception class and message (for example `RetryableException: Connection refused executing GET https://host/...`), never the address, the code or a token.
 - Mercury must answer `template-definitions` to SmartKin's token for SmartKin's own application only (otherwise `403`).
 Tests: `TemplateIdRegistryTest`, `MercuryMailerTest`.
+
+## Purging a user by id in plain SQL (`scripts/purge-backbone-user.sql`)
+
+Plain `DELETE` statements, one per table, run in the order of the foreign keys: `mercury.verification_codes`, `general.application_role_user`, `general.contact`, then `general."user"` and `general.person` in one statement (`WITH deleted AS (DELETE FROM general."user" ... RETURNING person_id) DELETE FROM general.person ...`, so the person id is still known when the user row is gone, and the foreign key is checked at the end of that statement). A person is shared when another user (another application; `uq_user_person_application` allows it) points to it: the person and its contacts, addresses and documents are then kept (`NOT EXISTS` over the other users). The user id is a session variable: the first statement stores it with `set_config('purge.user_id', '<uuid>', false)` and every statement reads `current_setting('purge.user_id')::uuid`, so the id is typed once (plain PostgreSQL, valid in any client; it needs one session, so not a transaction-mode pooler). A missing setting raises `unrecognized configuration parameter` instead of deleting anything. Statements are independent on purpose, so a table that does not exist in the database (mercury in another database) fails alone. The tables that only block the delete when they have rows (`federated_identity`, `address`, `identification_document`) are in lines prefixed `--opt `. `scripts/purge-backbone-user-sql.test.sh` builds a fixture in a disposable PostgreSQL container (the only place with `CREATE TABLE`) and checks each case; it found that deleting the contacts of a shared person was wrong.
+
+```mermaid
+flowchart TD
+    A["user id"] --> B["mercury.verification_codes"]
+    B --> C["general.application_role_user"]
+    C --> D["general.contact: owned, and of the person unless shared"]
+    D --> E["general.user DELETE ... RETURNING person_id"]
+    E --> F["general.person unless another user shares it"]
+```
 
 ## Delivery workflow
 
