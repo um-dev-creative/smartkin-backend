@@ -116,13 +116,15 @@ LABEL org.opencontainers.image.revision="${BUILD_COMMIT}" org.opencontainers.ima
 LABEL version="0.0.1-native"
 LABEL description="SmartKin Backend API (GraalVM native image)"
 LABEL maintainer="Luis Mata luis.antonio.mata@gmail.com"
+# The ids are fixed and numeric because `COPY --link --chown` cannot resolve user names (BuildKit: "user and group names can't be resolved
+# when used with --link"), so the COPY lines below use 10001:10001, the uid:gid of jvapps:appmng created here.
 # curl serves the health probe; zlib1g is the runtime library native-image links against.
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates zlib1g \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system appmng && useradd --system --gid appmng --no-create-home jvapps
+    && groupadd --system --gid 10001 appmng && useradd --system --uid 10001 --gid 10001 --no-create-home jvapps
 WORKDIR /usr/local/runme
-COPY --link --from=builder --chown=jvapps:appmng --chmod=750 /build/target/smartkin-backend /usr/local/runme/smartkin-backend
-COPY --link --from=builder --chown=jvapps:appmng /staging-certs/ /usr/local/runme/certs/smartkin/
+COPY --link --from=builder --chown=10001:10001 --chmod=750 /build/target/smartkin-backend /usr/local/runme/smartkin-backend
+COPY --link --from=builder --chown=10001:10001 /staging-certs/ /usr/local/runme/certs/smartkin/
 USER jvapps:appmng
 EXPOSE 8166
 # Liveness over the loopback; the certificate is not verified because it only reaches this process.
