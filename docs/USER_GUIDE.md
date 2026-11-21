@@ -38,7 +38,9 @@ A parent writes the family contract once (family name, the rules they agree on a
 
 ## Verifying your e-mail (for families)
 
-After signing up you get an e-mail with a code (`1234-5678`). Until you enter it you cannot use SmartKin: every other screen answers "Verify your e-mail to use SmartKin". If the code does not arrive, expired or you used up your three attempts, ask for a new one (**Resend code**): the old code stops working. You can only verify, resend, read, change or delete **your own** account; a parent can read the account of their own children, nobody else's. You cannot change your own roles.
+After signing up you get an e-mail with a code (`1234-5678`) and the account stays **inactive** until you enter it: you cannot sign in before that. On the verification page you type the code with your e-mail; when it is right the account is activated and you go to sign in. If the code does not arrive, expired or you used up your three attempts, ask for a new one (**Resend code**, at most one per minute): the old code stops working. If you closed the page, open "Verify your e-mail" on the sign-in screen and enter the e-mail you registered with. The answer is the same for an e-mail that is not registered, so nobody can find out who has an account.
+
+Accounts that were already active and not verified (created by an earlier version) can still sign in and verify from the page they land on, with the session. In that case you can only verify, resend, read, change or delete **your own** account; a parent can read the account of their own children, nobody else's. You cannot change your own roles.
 
 For operators: `umdc.smartkin.verification.required=false` switches the verification gate off (accounts created before it existed). The profile image goes to `POST /api/v1/profile/image`.
 
@@ -338,8 +340,9 @@ Una persona que otro usuario (de otra aplicación) todavía usa no se borra. Las
 
 ## Después de registrarse: la página de verificación del código
 
-El usuario nuevo se crea activo y el frontend inicia sesión con él para llevarlo a la página del código. Mientras no confirme el código, su sesión lleva `vcCompleted=false` y el backend solo le deja usar la verificación del código (y pedir uno nuevo); el resto de la API responde 403. Los usuarios creados antes de este cambio siguen inactivos: actívalos con `PUT /api/v1/users/application/{applicationId}/user/{userId}/activate` o bórralos y vuelve a registrarlos.
+El usuario nuevo se crea **inactivo** y no inicia sesión hasta confirmar el código (como en zerobound). El frontend lo lleva a la página del código sin sesión; el usuario escribe el código con su correo y `POST /api/v1/user-register/verify` lo confirma con mercury y activa la cuenta en backbone; después inicia sesión. Si no llegó el código, `POST /api/v1/user-register/resend` envía otro (uno por correo y minuto; siempre `202`). Los usuarios creados activos y sin verificar por la versión anterior siguen pudiendo iniciar sesión y verificar con la sesión (`vcCompleted=false`); los que quedaron inactivos desde antes se activan verificándolos con el endpoint nuevo, con `PUT /api/v1/users/application/{applicationId}/user/{userId}/activate` o se borran y se vuelven a registrar.
 
+**Si el registro funciona pero iniciar sesión falla con 502** (el BFF no llega a backbone), la verificación ya no depende de eso: revisa en el equipo del frontend `BACKBONE_BASE_URL` (debe resolver desde ese equipo, p. ej. `https://api.umdc-qa.tst/backbone`), `NODE_EXTRA_CA_CERTS` (la CA interna), `BACKBONE_APPLICATION_ID`, `BACKBONE_CLIENT_ID` y `BACKBONE_CLIENT_SECRET`.
 
 ## Iniciar sesión cuando mercury no responde
 

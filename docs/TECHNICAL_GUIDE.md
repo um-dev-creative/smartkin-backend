@@ -273,16 +273,17 @@ sequenceDiagram
     participant B as backbone-rest
     participant M as mercury
     U->>S: POST /api/v1/users
-    S->>B: checkEmail, create user (active, e-mail not verified: vcCompleted=false)
+    S->>B: checkEmail, create user (INACTIVE until the code is confirmed)
     S->>M: POST /api/v1/messages (session-token, Idempotency-Key)
     M-->>S: 202 OPENED
     S-->>U: 201
     M->>U: e-mail with the code (sk_verification_es)
-    U->>S: POST /api/v1/users/confirm-code
+    U->>S: POST /api/v1/user-register/verify {email, verificationCode} (no session)
+    S->>B: lookup-by-email (pending = inactive)
     S->>M: POST /api/v1/verification-code
     alt 202 right code
         S->>B: PUT .../user/{id}/activate
-        S-->>U: 200
+        S-->>U: 200 (then the visitor signs in)
     else 406 wrong
         S-->>U: 406 + Attempts-Remaining
     else 404 none left
@@ -291,7 +292,7 @@ sequenceDiagram
     end
 ```
 
-The user is created **active** in backbone (`UserCreateMapper`, `active=true`): backbone answers `401` to the session of an inactive user, and the sign-up logs the new user in to show the verification-code page, so an inactive user could never reach it. The e-mail check is not the active flag but the `vcCompleted` claim of the smartkin session token, which `VerifiedSessionInterceptor` enforces. `UserRegisterServiceImpl.confirmCode` calls backbone's idempotent `activate` after mercury accepts the code (it only matters for users created before this change); a 404 from mercury is recovered when `latest-status` says the latest code was verified; a backbone failure answers 502 (`UpstreamFailure`). SmartKin does not configure the template ids (see "Template ids" below); mercury's own `umdc.verification.code.template.id` is the template **type** id:
+The user is created **inactive** in backbone (`UserCreateMapper`, `active=false`), as zerobound-rest does (`RegistrationService.createInactive`): backbone answers `401` to the session of an inactive user, so nobody gets in before confirming the e-mail, and the verification no longer needs a session. A previous attempt (sak-56) created the user active so the BFF could sign in first and verify with a session (`vcCompleted`); it made the verification depend on the BFF-to-backbone sign-in, which was the step that failed in QA, and left an active unverified account. `UserRegisterServiceImpl.verifyEmail` names the account by its e-mail (`BackboneClient.lookupByEmail`, which also finds inactive users), asks mercury to confirm the code, and on `202` calls backbone's idempotent `activate`; a 404 from mercury is recovered when `latest-status` says the latest code was verified (so an activation that failed after a right code is retried); a backbone failure answers 502 (`UpstreamFailure`). The old session-based `confirmCode`/`resendCode` and the `vcCompleted` gate remain only for accounts created active and not verified by that earlier attempt. SmartKin does not configure the template ids (see "Template ids" below); mercury's own `umdc.verification.code.template.id` is the template **type** id:
 
 ```mermaid
 flowchart LR
@@ -1100,6 +1101,40 @@ flowchart TD
     D --> E["general.user DELETE ... RETURNING person_id"]
     E --> F["general.person unless another user shares it"]
 ```
+
+## Verifying a new account by e-mail (no session)
+
+A new account is inactive, so it cannot sign in and has no session. Verification is therefore public and names the account by its e-mail, the way `PasswordRecoveryServiceImpl` does for a visitor who cannot sign in. Code: `UserRegisterApi`/`Controller` (`verifyEmail`, `resendVerification`, both `@SkipSessionValidation`), `UserRegisterServiceImpl`, `EmailCooldown`, `VerifyEmailRequest`, `ResendVerificationRequest`.
+
+```mermaid
+sequenceDiagram
+    participant V as Visitor (BFF)
+    participant S as smartkin-backend
+    participant B as backbone-rest
+    participant M as mercury
+    V->>S: POST /user-register/resend {email}
+    S->>B: lookup-by-email
+    S->>M: POST /messages (new code, replaces the pending one)
+    S-->>V: 202, always
+    V->>S: POST /user-register/verify {email, verificationCode}
+    S->>B: lookup-by-email (must exist and be inactive)
+    S->>M: POST /verification-code (confirm)
+    M-->>S: 202, or 406 (wrong, Attempts-Remaining) / 404 (spent, expired)
+    S->>B: PUT /users/application/{app}/user/{id}/activate
+    S-->>V: 200 / 406 / 502
+```
+
+Decisions:
+
+- **No enumeration of accounts.** `resend` always answers `202`. `verify` answers the same `406` + `message-error` for an unknown e-mail and for an account that is already active, and sends no `Attempts-Remaining` then; for a pending account a wrong code carries `Attempts-Remaining` (the visitor needs it). An attacker can tell a pending account from an unknown one only by spending attempts, which mercury counts (3 per code).
+- **Cooldown.** One code per e-mail (lower-cased) per minute, in memory (`EmailCooldown`, `UserRegisterServiceImpl.RESEND_COOLDOWN`, bounded at 10,000 entries); per instance, mercury's `Idempotency-Key` (`RESEND-CODE:<user>:<minute>`) is the second guard. Rate limiting by IP belongs to the proxy.
+- **Recovery.** Unlike a password reset, a mercury `404` is not final: `latest-status` is read and, when the latest code was verified, the activation is retried. It only activates an account that is still inactive, so it cannot be used on active ones.
+- **Never-verified accounts** stay inactive and keep their e-mail (a second sign-up with it answers `409`): the owner verifies them with `resend` + `verify`. Zerobound has a periodic cleanup of pending registrations; SmartKin does not yet (known gap).
+- **Tests:** `UserRegisterServiceImplTest` (verify, recovery, enumeration, cooldown, failures), `UserRegisterPublicEndpointsTest` (routes, validation, `@SkipSessionValidation`), `EmailCooldownTest`, `MappersTest` (`active=false`).
+
+### Why the front end must reach backbone only to sign in
+
+Sign-in is `BFF -> backbone /session/token` with the BFF's own managed client (`BACKBONE_BASE_URL`, `BACKBONE_APPLICATION_ID`, `BACKBONE_CLIENT_ID/SECRET`, `NODE_EXTRA_CA_CERTS`). A `502 Authentication service unavailable` on `POST /skb/api/v1/auth/access-token` for any credentials means the BFF gets no answer from backbone (unresolvable host, untrusted CA, client refused): fix the BFF environment in the host that runs it. Registration and verification go BFF -> smartkin-backend only and do not need it.
 
 ## Delivery workflow
 
