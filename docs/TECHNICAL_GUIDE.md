@@ -90,6 +90,8 @@ flowchart LR
 SmartKin is a *client application* of mercury. It no longer has an alias and a password in mercury (the login clients were removed there);
 it exchanges the Backbone M2M token of its managed client for mercury's own M2M token.
 
+**What is logged.** When `MercuryTokens` has to ask backbone for a new token it logs, at INFO, `Asking backbone for the mercury M2M token: clientId=<uuid>, scopes=[...]`; if backbone refuses it logs, at ERROR, `Backbone did not issue the mercury M2M token (status <n>) for clientId=<uuid>, scopes=[...]: <answer>` and rethrows. Only the client id and scopes appear, never the secret. An `invalid_scope` (`400`) means those scopes are not all registered for that client in backbone.
+
 **TLS of the two token calls.** Both clients that obtain the token, `BackboneManagedClient` and `MercuryAuthClient`, name `TrustedFeignConfigurer` as their Feign `configuration`. It supplies only the HTTP client that trusts the `smartkin-security` SSL bundle (the internal CA of `*.umdc-qa.tst`) and no interceptor, so no OAuth bearer is added. Without it Feign uses its default client, which trusts only the JVM trust store, and the call fails with `PKIX path building failed`, mercury looks unreachable and sign-up rolls back with `503`. `BackendFeignConfigurer` extends it, so the clients with a bearer share the same transport.
 
 ```mermaid
