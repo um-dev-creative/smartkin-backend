@@ -207,3 +207,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 - Delivery workflow fixed in `CLAUDE.md`, which said branches "merge into `development`": changes are made on a branch derived from `development`, pushed to the remote and integrated through a PR to `development`; nothing is merged locally. The same flow is now described in the "Delivery workflow" section of the technical guide (Mermaid) and in the user guide.
+
+### Fixed
+- Sign-up answered `503` and rolled the user back because mercury could not be reached: `BackboneManagedClient` (`POST /api/v1/managed-clients/token`) and `MercuryAuthClient` (`POST /api/v1/auth/token`), the two calls that obtain mercury's M2M token, had no Feign `configuration`, so they used Feign's default HTTP client, which trusts only the JVM trust store and failed with `PKIX path building failed: unable to find valid certification path` against `api.umdc-qa.tst` (the internal CA). New `TrustedFeignConfigurer` (the `smartkin-security` bundle as the client's trust, no interceptor, so no `Authorization` bearer is added); both clients name it as their `configuration`, and `BackendFeignConfigurer` now extends it instead of repeating the client. Found with the log added in the previous release (`RetryableException: (certificate_unknown) PKIX path building failed ...`).

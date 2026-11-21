@@ -1,15 +1,17 @@
 package com.umdc.smartkin.client.mercury;
 
 import com.umdc.smartkin.client.backbone.to.PrxTokenString;
+import com.umdc.smartkin.interceptor.TrustedFeignConfigurer;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 
-/// Feign client of Mercury's token exchange. No `configuration`: the `Authorization` header here is the Backbone M2M token passed by
-/// the caller, so the OAuth Bearer that [MercuryClient] adds to its calls must not be added as well.
-@FeignClient(name = "mercuryAuthClient", url = "${umdc.clients.mercury.url}")
+/// Feign client of Mercury's token exchange. Its `configuration` is [TrustedFeignConfigurer], which only makes the client trust the
+/// internal CA and adds no interceptor: the `Authorization` header here is the Backbone M2M token passed by the caller, so the OAuth
+/// Bearer that [MercuryClient] adds to its calls must not be added as well.
+@FeignClient(name = "mercuryAuthClient", url = "${umdc.clients.mercury.url}", configuration = TrustedFeignConfigurer.class)
 public interface MercuryAuthClient {
 
     /// Trades SmartKin's Backbone M2M token for Mercury's own M2M token.

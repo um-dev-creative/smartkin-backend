@@ -300,3 +300,7 @@ Qué decirle a quien escribe a soporte:
 ## Cómo se entrega un cambio
 
 Los cambios se hacen en una rama derivada de `development` (`sak-<n>-<descripción>`), se suben al remoto y se integran mediante un PR hacia `development`. Nunca se fusiona en local: la fusión ocurre en el remoto, a través del PR. El PR lleva pruebas, una entrada en `CHANGELOG.md` y la actualización de esta guía y de la guía técnica (la sección «Delivery workflow» de esa guía tiene el diagrama).
+
+## Registro que responde 503 («Verification e-mail could not be sent»)
+
+Si el registro responde 503 y el usuario no queda creado, el backend no pudo entregar el correo a mercury. Una causa era que las dos llamadas que piden el token de mercury no confiaban en la CA interna (`PKIX path building failed` en el log); desde esta versión usan el mismo certificado de confianza (`smartkin-security`) que el resto de las llamadas. Si sigue pasando, el log del backend muestra la excepción completa en la línea `mercury's templates could not be read (...)`.
