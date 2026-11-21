@@ -297,6 +297,16 @@ Qué decirle a quien escribe a soporte:
 - **"El código no es válido o venció"**: pidió otro código y el anterior dejó de servir, se acabaron los 3 intentos, o ya lo usó. Que pida uno nuevo.
 - **"La contraseña no cumple la política"**: el código ya se gastó; debe pedir uno nuevo y elegir otra contraseña (con letras y números).
 
+## Borrar un usuario por su id con SQL (`scripts/purge-backbone-user.sql`)
+
+Son sentencias `DELETE` simples, una por tabla (no se crea nada en la base), que borran por el id del usuario: sus códigos de verificación (`mercury.verification_codes`), sus roles (`application_role_user`), sus contactos (`contact`), la fila de `general."user"` y su persona (`person`).
+
+1. El id del usuario se escribe en UN solo lugar: la primera sentencia, `SELECT set_config('purge.user_id', '00000000-0000-0000-0000-000000000000', false);`. Cambia ese UUID por el del usuario. Todas las demás sentencias lo leen con `current_setting('purge.user_id')`, así que no hay que repetirlo. El valor vive en tu sesión de base de datos: ejecuta todo en la misma sesión (la misma consola o ejecución del script) y con conexión directa, no con un pooler en modo transacción (puerto 6543). Si falta, las sentencias fallan con «unrecognized configuration parameter» y no borran nada. La segunda sentencia (`SELECT`) debe devolver una fila con el alias y el correo del usuario: compruébalo antes de borrar.
+2. Ejecuta las sentencias en orden (modo script en DBeaver/pgAdmin, o `psql -f`). Cada una es independiente: si una tabla no existe en tu base (por ejemplo mercury está en otra), esa sentencia falla y puedes seguir con las demás.
+3. Para verlo antes, ejecútalas entre `BEGIN;` y `ROLLBACK;` (cambia `ROLLBACK;` por `COMMIT;` para conservar el cambio).
+
+Las líneas que empiezan con `--opt ` (`federated_identity`, `address`, `identification_document`) solo se necesitan si esas tablas tienen filas del usuario: si la última sentencia falla por una clave foránea, quita el `--opt ` y ejecútalas antes. Una persona que otro usuario (de otra aplicación) todavía usa no se borra, ni sus contactos. Es irreversible: haz una copia de seguridad antes.
+
 ## Cómo se entrega un cambio
 
 Los cambios se hacen en una rama derivada de `development` (`sak-<n>-<descripción>`), se suben al remoto y se integran mediante un PR hacia `development`. Nunca se fusiona en local: la fusión ocurre en el remoto, a través del PR. El PR lleva pruebas, una entrada en `CHANGELOG.md` y la actualización de esta guía y de la guía técnica (la sección «Delivery workflow» de esa guía tiene el diagrama).
@@ -312,3 +322,21 @@ Si el registro responde 503 y el usuario no queda creado, el backend no pudo ent
 ## Qué cliente y scopes usa smartkin con mercury (log)
 
 Al pedir el token de mercury, el backend registra en INFO `Asking backbone for the mercury M2M token: clientId=…, scopes=[…]`. Si backbone lo rechaza, registra en ERROR el estado, el mismo `clientId` y los `scopes`, y la respuesta (por ejemplo `invalid_scope`). Compara ese `clientId` y esos scopes con los que el cliente tiene registrados en Backbone. El secreto nunca se imprime.
+
+## Borrar un usuario de prueba o una aplicación completa
+
+`scripts/purge-backbone-user.sh` borra, en una sola transacción, todo lo que Backbone y mercury guardan de un usuario o de todos los usuarios de una aplicación: códigos de verificación, roles (`application_role_user`), contactos, usuario y persona. Sin `--apply` solo muestra cuántas filas borraría (no cambia nada).
+
+```
+export PGHOST=... PGUSER=... PGPASSWORD=...   # PGDATABASE por defecto umdevc
+scripts/purge-backbone-user.sh --user <uuid-del-usuario>                 # simulación
+scripts/purge-backbone-user.sh --user <uuid-del-usuario> --apply         # pide escribir el id para confirmar
+scripts/purge-backbone-user.sh --application <uuid-de-la-aplicacion> --apply --yes
+```
+
+Una persona que otro usuario (de otra aplicación) todavía usa no se borra. Las tablas del esquema `smartkin` no se tocan. Es irreversible: prueba primero sin `--apply`, y no lo uses en producción sin una copia de seguridad.
+
+## Después de registrarse: la página de verificación del código
+
+El usuario nuevo se crea activo y el frontend inicia sesión con él para llevarlo a la página del código. Mientras no confirme el código, su sesión lleva `vcCompleted=false` y el backend solo le deja usar la verificación del código (y pedir uno nuevo); el resto de la API responde 403. Los usuarios creados antes de este cambio siguen inactivos: actívalos con `PUT /api/v1/users/application/{applicationId}/user/{userId}/activate` o bórralos y vuelve a registrarlos.
+
