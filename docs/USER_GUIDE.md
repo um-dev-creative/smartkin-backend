@@ -297,20 +297,15 @@ Qué decirle a quien escribe a soporte:
 - **"El código no es válido o venció"**: pidió otro código y el anterior dejó de servir, se acabaron los 3 intentos, o ya lo usó. Que pida uno nuevo.
 - **"La contraseña no cumple la política"**: el código ya se gastó; debe pedir uno nuevo y elegir otra contraseña (con letras y números).
 
-## Borrar un usuario o una aplicación con SQL (`scripts/purge-backbone-user.sql`)
+## Borrar un usuario por su id con SQL (`scripts/purge-backbone-user.sql`)
 
-Es UNA sentencia SQL (no crea tablas ni nada en la base) que borra los registros de `verification_codes`, `application_role_user`, `contact`, `user` y `person` de un usuario o de todos los usuarios de una aplicación; también las tablas que apuntan a ellos y bloquearían el borrado (`federated_identity`, `address`, `identification_document`). Pégala en psql, DBeaver, pgAdmin o el editor de Supabase.
+Son sentencias `DELETE` simples, una por tabla (no se crea nada en la base), que borran por el id del usuario: sus códigos de verificación (`mercury.verification_codes`), sus roles (`application_role_user`), sus contactos (`contact`), la fila de `general."user"` y su persona (`person`).
 
-1. En el primer bloque (`params`) cambia dos valores: `'user'` o `'application'`, y el UUID (el id del usuario o el de la aplicación).
-2. Pruébala primero sin borrar, dentro de una transacción que se revierte; la última fila muestra cuántos registros perdería cada tabla:
-   ```sql
-   BEGIN;
-   -- la sentencia
-   ROLLBACK;
-   ```
-3. Para borrar de verdad ejecútala sola (auto-commit) o termina con `COMMIT;` en vez de `ROLLBACK;`.
+1. Con «buscar y reemplazar» cambia `00000000-0000-0000-0000-000000000000` por el id del usuario en todo el archivo.
+2. Ejecuta las sentencias en orden (modo script en DBeaver/pgAdmin, o `psql -f`). Cada una es independiente: si una tabla no existe en tu base (por ejemplo mercury está en otra), esa sentencia falla y puedes seguir con las demás.
+3. Para verlo antes, ejecútalas entre `BEGIN;` y `ROLLBACK;` (cambia `ROLLBACK;` por `COMMIT;` para conservar el cambio).
 
-Con `'application'` se borran todos los usuarios de esa aplicación. Una persona que otro usuario (de otra aplicación) todavía usa no se borra. Es irreversible: haz una copia de seguridad antes de borrar de verdad.
+Las líneas que empiezan con `--opt ` (`federated_identity`, `address`, `identification_document`) solo se necesitan si esas tablas tienen filas del usuario: si la última sentencia falla por una clave foránea, quita el `--opt ` y ejecútalas antes. Una persona que otro usuario (de otra aplicación) todavía usa no se borra, ni sus contactos. Es irreversible: haz una copia de seguridad antes.
 
 ## Cómo se entrega un cambio
 

@@ -1088,19 +1088,17 @@ sequenceDiagram
 - Mercury must answer `template-definitions` to SmartKin's token for SmartKin's own application only (otherwise `403`).
 Tests: `TemplateIdRegistryTest`, `MercuryMailerTest`.
 
-## Purging a user or an application in plain SQL (`scripts/purge-backbone-user.sql`)
+## Purging a user by id in plain SQL (`scripts/purge-backbone-user.sql`)
 
-The same deletion as the shell script, as ONE SQL statement a SQL client can run: a chain of data-modifying CTEs (`params`, `users`, `persons`, then one `DELETE ... RETURNING 1` per table) and a final `SELECT` that counts the rows each `DELETE` returned. Nothing is created in the database. All the deletes belong to the same statement, and PostgreSQL checks foreign keys when the statement ends, so the order of the CTEs does not matter and `user` and `person` can go together; every CTE sees the same snapshot, which is why the persons of the users can still be read while the users are being deleted. The dry run is the caller's transaction: `BEGIN; <statement>; ROLLBACK;`. The rule for shared persons (`uq_user_person_application` allows one person in two applications) is a `NOT EXISTS` over the users that are not being deleted. `scripts/purge-backbone-user-sql.test.sh` builds a fixture in a disposable PostgreSQL container (the only place with `CREATE TABLE`) and checks each case.
+Plain `DELETE` statements, one per table, run in the order of the foreign keys: `mercury.verification_codes`, `general.application_role_user`, `general.contact`, then `general."user"` and `general.person` in one statement (`WITH deleted AS (DELETE FROM general."user" ... RETURNING person_id) DELETE FROM general.person ...`, so the person id is still known when the user row is gone, and the foreign key is checked at the end of that statement). A person is shared when another user (another application; `uq_user_person_application` allows it) points to it: the person and its contacts, addresses and documents are then kept (`NOT EXISTS` over the other users). Statements are independent on purpose, so a table that does not exist in the database (mercury in another database) fails alone. The tables that only block the delete when they have rows (`federated_identity`, `address`, `identification_document`) are in lines prefixed `--opt `. `scripts/purge-backbone-user-sql.test.sh` builds a fixture in a disposable PostgreSQL container (the only place with `CREATE TABLE`) and checks each case; it found that deleting the contacts of a shared person was wrong.
 
 ```mermaid
 flowchart TD
-    A["params: mode + id"] --> B["users: the user, or every user of the application"]
-    B --> C["persons: theirs, minus any person another user still uses"]
-    C --> D["one DELETE per table: codes, federated identity, roles, contacts, address, documents, user, person"]
-    D --> E["final SELECT: rows deleted per table"]
-    E --> F{"caller's transaction"}
-    F -- "BEGIN ... ROLLBACK" --> G["dry run: nothing stays deleted"]
-    F -- "auto-commit / COMMIT" --> H["deleted"]
+    A["user id"] --> B["mercury.verification_codes"]
+    B --> C["general.application_role_user"]
+    C --> D["general.contact: owned, and of the person unless shared"]
+    D --> E["general.user DELETE ... RETURNING person_id"]
+    E --> F["general.person unless another user shares it"]
 ```
 
 ## Delivery workflow

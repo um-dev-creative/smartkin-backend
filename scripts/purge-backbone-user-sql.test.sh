@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests scripts/purge-backbone-user.sql against a throwaway PostgreSQL in Docker (needs Docker; about 20 seconds). The CREATE TABLEs below
+# Tests scripts/purge-backbone-user.sql (delete by user id) against a throwaway PostgreSQL in Docker (needs Docker; about 20 seconds). The CREATE TABLEs below
 # build the fixture inside that disposable container only; the script itself creates nothing. It sets the two parameters with sed and checks:
 # a BEGIN ... ROLLBACK run changes nothing and reports the rows, 'user' deletes one user and its rows, a person shared with another
 # application survives, orphan verification codes go, 'application' deletes every user of the application, and an unknown id deletes nothing.
@@ -20,13 +20,13 @@ sleep 2
 
 sql() { docker exec -i "$db" psql -U postgres -d umdevc -X -q -t -A "$@"; }
 count() { sql -c "SELECT count(*) FROM $1"; }
-# runs the statement with mode and id set; with "dry" it is wrapped in BEGIN ... ROLLBACK. Prints the result row (counts per table)
-run() { # mode id dry|apply
+# runs the file for a user id; the "--opt " lines (tables that block the delete only when they have rows) are enabled because the fixture has
+# rows in them. With "dry" it is wrapped in BEGIN ... ROLLBACK.
+run() { # user-id dry|apply
   local body
-  body="$(sed -e "s/SELECT 'user'::text  /SELECT '$1'::text  /" \
-              -e "s/'00000000-0000-0000-0000-000000000000'::uuid/'$2'::uuid/" "$sqlfile")"
-  if [ "$3" = dry ]; then printf 'BEGIN;\n%s\nROLLBACK;\n' "$body" | sql -v ON_ERROR_STOP=1 -f - 2>&1 | grep -E '^[0-9]+\|'
-  else printf '%s\n' "$body" | sql -v ON_ERROR_STOP=1 -f - 2>&1 | grep -E '^[0-9]+\|'; fi
+  body="$(sed -e "s/^--opt //" -e "s/00000000-0000-0000-0000-000000000000/$1/g" "$sqlfile")"
+  if [ "$2" = dry ]; then printf 'BEGIN;\n%s\nROLLBACK;\n' "$body" | sql -v ON_ERROR_STOP=1 -f - >/dev/null
+  else printf '%s\n' "$body" | sql -v ON_ERROR_STOP=1 -f - >/dev/null; fi
 }
 check() { if [ "$2" = "$3" ]; then echo "ok   - $1"; else echo "FAIL - $1 (expected $2, got $3)"; fail=1; fi; }
 
@@ -56,14 +56,13 @@ INSERT INTO mercury.verification_codes (user_id, application_id) VALUES ('$U1', 
 SQL
 
 echo "--- dry run (BEGIN ... ROLLBACK)"
-out="$(run user "$U2" dry)"
-check "it reports the rows it would delete" "1|1|1|2|1|1|1|1" "$out"
+run "$U2" dry
 check "the rollback keeps the users" 3 "$(count 'general."user"')"
 check "the rollback keeps the codes" 4 "$(count mercury.verification_codes)"
+check "the rollback keeps the persons" 3 "$(count general.person)"
 
 echo "--- one user"
-out="$(run user "$U2" apply)"
-check "it reports the rows it deleted" "1|1|1|2|1|1|1|1" "$out"
+run "$U2" apply
 check "user U2 deleted" 0 "$(count "general.\"user\" WHERE id = '$U2'")"
 check "other users kept" 2 "$(count 'general."user"')"
 check "its role deleted" 2 "$(count general.application_role_user)"
@@ -74,26 +73,25 @@ check "its federated identity deleted" 0 "$(count general.federated_identity)"
 check "its code deleted, the rest kept" 3 "$(count mercury.verification_codes)"
 
 echo "--- a person shared with another application survives"
-run user "$U1" apply >/dev/null
+run "$U1" apply >/dev/null
 check "user U1 deleted" 0 "$(count "general.\"user\" WHERE id = '$U1'")"
 check "shared person P1 kept (U3 still uses it)" 1 "$(count "general.person WHERE id = '$P1'")"
 check "P1's contact kept" 1 "$(count general.contact)"
 
 echo "--- orphan code of a user that does not exist"
-run user "$ORPHAN" apply >/dev/null
+run "$ORPHAN" apply >/dev/null
 check "orphan code deleted" 0 "$(count "mercury.verification_codes WHERE user_id = '$ORPHAN'")"
 
-echo "--- whole application"
-run application "$A2" apply >/dev/null
-check "users of the application deleted" 0 "$(count 'general."user"')"
+echo "--- the last user: its person goes now (nobody shares it any more)"
+run "$U3" apply
+check "user U3 deleted" 0 "$(count 'general."user"')"
 check "now unshared person P1 deleted" 0 "$(count "general.person WHERE id = '$P1'")"
 check "no codes left" 0 "$(count mercury.verification_codes)"
 check "unrelated person P3 untouched" 1 "$(count "general.person WHERE id = '$P3'")"
 
 echo "--- an unknown id deletes nothing"
 before="$(count 'general.person')"
-out="$(run user 99999999-9999-9999-9999-999999999999 apply)"
-check "it reports zero rows" "0|0|0|0|0|0|0|0" "$out"
-check "nothing else changed" "$before" "$(count 'general.person')"
+run 99999999-9999-9999-9999-999999999999 apply
+check "nothing changed" "$before" "$(count 'general.person')"
 
 [ "$fail" = 0 ] && echo "ALL OK" || { echo "FAILED"; exit 1; }
