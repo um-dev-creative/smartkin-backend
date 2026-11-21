@@ -29,7 +29,10 @@ import static com.umdc.smartkin.constant.SmartKinAppConstants.PHONE_CONTACT_TYPE
 public interface UserCreateMapper {
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "active", ignore = true)
+    // active from the start: backbone answers 401 to the session of an inactive user, and the sign-up logs the new user in to take
+    // them to the verification-code page. What keeps an unverified user out of the API is the vcCompleted claim of the smartkin session
+    // token (VerifiedSessionInterceptor), not the active flag.
+    @Mapping(target = "active", constant = "true")
     @Mapping(target = "alias", source = "alias")
     @Mapping(target = "applicationId", source = "applicationId")
     @Mapping(target = "email", source = "userCreateRequest.email")

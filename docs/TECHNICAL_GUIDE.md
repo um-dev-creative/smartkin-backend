@@ -273,7 +273,7 @@ sequenceDiagram
     participant B as backbone-rest
     participant M as mercury
     U->>S: POST /api/v1/users
-    S->>B: checkEmail, create user (inactive)
+    S->>B: checkEmail, create user (active, e-mail not verified: vcCompleted=false)
     S->>M: POST /api/v1/messages (session-token, Idempotency-Key)
     M-->>S: 202 OPENED
     S-->>U: 201
@@ -291,7 +291,7 @@ sequenceDiagram
     end
 ```
 
-`UserRegisterServiceImpl.confirmCode` activates the user in backbone after mercury accepts the code; a 404 from mercury is recovered when `latest-status` says the latest code was verified; a backbone failure answers 502 (`UpstreamFailure`). SmartKin does not configure the template ids (see "Template ids" below); mercury's own `umdc.verification.code.template.id` is the template **type** id:
+The user is created **active** in backbone (`UserCreateMapper`, `active=true`): backbone answers `401` to the session of an inactive user, and the sign-up logs the new user in to show the verification-code page, so an inactive user could never reach it. The e-mail check is not the active flag but the `vcCompleted` claim of the smartkin session token, which `VerifiedSessionInterceptor` enforces. `UserRegisterServiceImpl.confirmCode` calls backbone's idempotent `activate` after mercury accepts the code (it only matters for users created before this change); a 404 from mercury is recovered when `latest-status` says the latest code was verified; a backbone failure answers 502 (`UpstreamFailure`). SmartKin does not configure the template ids (see "Template ids" below); mercury's own `umdc.verification.code.template.id` is the template **type** id:
 
 ```mermaid
 flowchart LR
