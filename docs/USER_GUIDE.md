@@ -299,15 +299,18 @@ Qué decirle a quien escribe a soporte:
 
 ## Borrar un usuario o una aplicación con SQL (`scripts/purge-backbone-user.sql`)
 
-Es lo mismo que el script de shell, pero como SQL para pegar en psql, DBeaver, pgAdmin o el editor de Supabase. Abre el archivo, cambia las tres líneas de «PARAMETERS» y ejecuta todo el script:
+Es UNA sentencia SQL (no crea tablas ni nada en la base) que borra los registros de `verification_codes`, `application_role_user`, `contact`, `user` y `person` de un usuario o de todos los usuarios de una aplicación; también las tablas que apuntan a ellos y bloquearían el borrado (`federated_identity`, `address`, `identification_document`). Pégala en psql, DBeaver, pgAdmin o el editor de Supabase.
 
-```
-v_mode  text    := 'user';                                    -- 'user' o 'application'
-v_id    uuid    := 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';    -- el id del usuario o de la aplicación
-v_apply boolean := false;                                     -- false = simulación, true = borra de verdad
-```
+1. En el primer bloque (`params`) cambia dos valores: `'user'` o `'application'`, y el UUID (el id del usuario o el de la aplicación).
+2. Pruébala primero sin borrar, dentro de una transacción que se revierte; la última fila muestra cuántos registros perdería cada tabla:
+   ```sql
+   BEGIN;
+   -- la sentencia
+   ROLLBACK;
+   ```
+3. Para borrar de verdad ejecútala sola (auto-commit) o termina con `COMMIT;` en vez de `ROLLBACK;`.
 
-Con `v_apply = false` (lo normal la primera vez) termina con el error «DRY RUN, rolled back» y, en el mensaje, cuántas filas borraría de cada tabla (`verification_codes`, `application_role_user`, `contact`, `user`, `person` y las tablas dependientes); no se borra nada. Con `v_apply = true` borra de verdad y muestra el mismo conteo. Si pones `'application'` se borran todos los usuarios de esa aplicación. Una persona que otro usuario (de otra aplicación) todavía usa no se borra. Es irreversible: haz una copia de seguridad antes de usarlo con `true`.
+Con `'application'` se borran todos los usuarios de esa aplicación. Una persona que otro usuario (de otra aplicación) todavía usa no se borra. Es irreversible: haz una copia de seguridad antes de borrar de verdad.
 
 ## Cómo se entrega un cambio
 

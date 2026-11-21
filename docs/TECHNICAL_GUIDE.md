@@ -1090,15 +1090,17 @@ Tests: `TemplateIdRegistryTest`, `MercuryMailerTest`.
 
 ## Purging a user or an application in plain SQL (`scripts/purge-backbone-user.sql`)
 
-The same deletion as the shell script, for a SQL client. It is a single anonymous `DO` block, so it is atomic by construction; the three parameters are PL/pgSQL variables at its top (`v_mode`, `v_id`, `v_apply`). The dry run is implemented by raising an exception after the deletes: the error rolls the whole block back and its message carries the report of rows per table. With `v_apply = true` the block ends with a notice and commits normally. The order of the deletes and the rule for shared persons are the ones of the "Purging a user or an application" section above (`user_id`/`owner_id` arrays are collected first, then dependents, then `user`, then `person`). `scripts/purge-backbone-user-sql.test.sh` rewrites the three parameters with `sed` and checks every case against a throwaway PostgreSQL in Docker.
+The same deletion as the shell script, as ONE SQL statement a SQL client can run: a chain of data-modifying CTEs (`params`, `users`, `persons`, then one `DELETE ... RETURNING 1` per table) and a final `SELECT` that counts the rows each `DELETE` returned. Nothing is created in the database. All the deletes belong to the same statement, and PostgreSQL checks foreign keys when the statement ends, so the order of the CTEs does not matter and `user` and `person` can go together; every CTE sees the same snapshot, which is why the persons of the users can still be read while the users are being deleted. The dry run is the caller's transaction: `BEGIN; <statement>; ROLLBACK;`. The rule for shared persons (`uq_user_person_application` allows one person in two applications) is a `NOT EXISTS` over the users that are not being deleted. `scripts/purge-backbone-user-sql.test.sh` builds a fixture in a disposable PostgreSQL container (the only place with `CREATE TABLE`) and checks each case.
 
 ```mermaid
 flowchart TD
-    A["set v_mode, v_id, v_apply and run"] --> B["collect user ids and the persons nobody else uses"]
-    B --> C["delete codes, federated identity, roles, contacts, address, documents, user, person"]
-    C --> D{"v_apply?"}
-    D -- "true" --> E["NOTICE with the rows per table, block commits"]
-    D -- "false" --> F["RAISE EXCEPTION 'DRY RUN' with the rows: everything rolls back"]
+    A["params: mode + id"] --> B["users: the user, or every user of the application"]
+    B --> C["persons: theirs, minus any person another user still uses"]
+    C --> D["one DELETE per table: codes, federated identity, roles, contacts, address, documents, user, person"]
+    D --> E["final SELECT: rows deleted per table"]
+    E --> F{"caller's transaction"}
+    F -- "BEGIN ... ROLLBACK" --> G["dry run: nothing stays deleted"]
+    F -- "auto-commit / COMMIT" --> H["deleted"]
 ```
 
 ## Delivery workflow
