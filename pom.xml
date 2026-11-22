@@ -294,6 +294,18 @@
         <resources>
             <resource>
                 <directory>src/main/resources</directory>
+                <excludes>
+                    <exclude>build-versions.properties</exclude>
+                </excludes>
+            </resource>
+            <!-- Versions printed in the startup banner (Spring Cloud and the UMDC libraries); only this file is filtered (@..@), as in
+                 backbone-rest: filtering the whole folder would corrupt files that contain @ or ${...}. -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>build-versions.properties</include>
+                </includes>
             </resource>
             <!-- The TLS bundle (spring.ssl.bundle.jks.smartkin-security in application.yml) reads classpath:${SSL_KEYSTORE_LOCATION}
                  and classpath:${SSL_TRUSTSTORE_LOCATION}. The real keystores live in certs/smartkin/ (git-ignored) and are copied onto

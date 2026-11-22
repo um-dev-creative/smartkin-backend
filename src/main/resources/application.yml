@@ -194,10 +194,12 @@ spring:
     # The name of the Spring Boot application, taken from the app.name property
     name: ${app.name}
   config:
-    # Property sources read before the application context exists, in this order: Vault, then the Config Server. A later import wins
-    # over an earlier one and both win over this file. `optional:` lets the service start (and tests run) when one is not reachable
-    # or is switched off (VAULT_ENABLED=false, SPRING_CLOUD_CONFIG_ENABLED=false).
-    import: "optional:vault://,optional:configserver:"
+    # Property sources read before the application context exists, in this order: the versions of the startup banner (filtered by Maven
+    # from pom.xml), Vault, then the Config Server. A later import wins over an earlier one and all win over this file. `optional:` lets
+    # the service start (and tests run) when one is missing or not reachable: build-versions.properties is absent from an IDE build
+    # without Maven filtering (the banner then prints n/a), Vault and the Config Server can be switched off (VAULT_ENABLED=false,
+    # SPRING_CLOUD_CONFIG_ENABLED=false).
+    import: "optional:classpath:build-versions.properties,optional:vault://,optional:configserver:"
   cloud:
     # The active profile for the Spring Boot application
     profile: ${SPRING_BOOT_PROFILE_ACTIVE:}
