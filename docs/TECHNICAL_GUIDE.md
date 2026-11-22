@@ -26,6 +26,20 @@ mvn test -Dtest=Class#method # single test
 The private Repsy repository needs `REPSY_ACCOUNT_USER` and `REPSY_ACCOUNT_PASSWORD`; the `com.umdc` libraries can also come
 from the local Maven cache.
 
+**PMD ruleset (`ruleset.xml`).** It names only current PMD 7 rules, so the build prints no "deprecated Rule name" warnings and keeps
+working on PMD 8. Four rules were renamed by PMD and are referenced by their new name (same check): `DefaultLabelNotLastInSwitchStmt` →
+`DefaultLabelNotLastInSwitch`, `SwitchStmtsShouldHaveDefault` → `NonExhaustiveSwitch`, `NonCaseLabelInSwitchStatement` →
+`NonCaseLabelInSwitch`, `TooFewBranchesForASwitchStatement` → `TooFewBranchesForSwitch`. Two rules that PMD 8 removes are gone:
+`UnnecessaryLocalBeforeReturn` and `UselessOperationOnImmutable`.
+
+```mermaid
+flowchart LR
+    R["ruleset.xml"] --> P["maven-pmd-plugin 3.28.0<br/>PMD 7.17.0"]
+    P -->|"pmd:check / cpd-check<br/>(test phase)"| B{"violations?"}
+    B -->|no| OK["build continues"]
+    B -->|yes| F["build fails"]
+```
+
 ## Configuration loading (`spring.config.import`)
 
 All configuration is in `src/main/resources/application.yml` (it used to be `bootstrap.yml`). Vault and the Config Server are not read by the legacy Spring Cloud bootstrap context any more: `spring-cloud-starter-bootstrap` is gone and `spring.config.import: "optional:vault://,optional:configserver:"` loads both before the application context exists, the way mercury, backbone-rest and zerobound-rest do. The reason is GraalVM: the bootstrap context starts a second, nested `SpringApplication`, Spring AOT captured that one instead of the real application, and the native binary stopped with `no ServletWebServerFactory bean defined in the context`. The `spring.cloud.vault.*` and `spring.cloud.config.*` properties are the same as before; only the loading mechanism changed.

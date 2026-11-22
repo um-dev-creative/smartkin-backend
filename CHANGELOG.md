@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **PMD ruleset without deprecated rules (sak-75).** `ruleset.xml` now uses the current names of the rules PMD renamed (`DefaultLabelNotLastInSwitchStmt` → `DefaultLabelNotLastInSwitch`, `SwitchStmtsShouldHaveDefault` → `NonExhaustiveSwitch`, `NonCaseLabelInSwitchStatement` → `NonCaseLabelInSwitch`, `TooFewBranchesForASwitchStatement` → `TooFewBranchesForSwitch`) and drops the two rules PMD 8 removes (`UnnecessaryLocalBeforeReturn`, `UselessOperationOnImmutable`). The build no longer prints the "deprecated Rule name" / "scheduled for removal" warnings; no new violations.
+
 ### Fixed
 - **smartkin-backend did not start: circular bean reference (sak-73).** `VerificationWebConfig` (a `WebMvcConfigurer`) took `VerificationStatus` in its constructor, which needs the Feign `MercuryClient`; creating that Feign client asks for the MVC infrastructure (`mvcResourceUrlProvider`), which is itself built from every `WebMvcConfigurer`. The loop `mvcResourceUrlProvider -> EnableWebMvcConfiguration -> verificationWebConfig -> verificationStatus -> MercuryClient -> mvcResourceUrlProvider` stopped the application at start with `BeanCurrentlyInCreationException` ("APPLICATION FAILED TO START ... form a cycle"). `VerificationWebConfig` now receives an `ObjectProvider<VerificationStatus>` and `VerifiedSessionInterceptor` a `Supplier<VerificationStatus>`, resolved on the first request that needs the check, never while the context starts. Behavior of the verification gate is unchanged. Tests: new `VerificationWiringTest` starts Spring MVC with the real Feign `MercuryClient`, `VerificationStatus` and `VerificationWebConfig` (it fails with the same error on the previous code); `VerifiedSessionInterceptorTest` checks the status is not resolved while the interceptor is registered and is resolved on the first request.
 

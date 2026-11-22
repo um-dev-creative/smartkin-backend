@@ -46,6 +46,8 @@ For operators: `umdc.smartkin.verification.required=false` switches the verifica
 
 ## What changed for operators in this release
 
+- The build no longer prints PMD "deprecated Rule name" warnings: `ruleset.xml` uses the current names of four renamed rules and
+  drops two rules that PMD 8 removes. Nothing changes at run time.
 - The service now runs on **Java 25** and **Spring Boot 4.1.1**. Hosts and containers need a Java 25 runtime; the Docker image
   `amazoncorretto:25.0.4-alpine3.24` already includes it.
 - The API contract (paths, request and response bodies) did not change.
