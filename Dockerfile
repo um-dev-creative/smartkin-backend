@@ -45,6 +45,19 @@ RUN addgroup -S appmng && adduser -S jvapps -G appmng \
 
 USER jvapps:appmng
 
+# Eureka client TLS. The Config Server builds eureka.client.tls.* as classpath:${SSL_JKS_SRMN_*_LOCATION}, and Vault stores those
+# locations as file:certs/smartkin/..., which gives classpath:file:certs/... and stops the container at start with "KeyStore not exists:
+# class path resource [file:certs/smartkin/umdc-truststore.jks]". These defaults name the stores this jar carries on its classpath; an
+# environment variable wins over Vault, and env_file / -e still override them. The passwords go with them because Vault's
+# SSL_JKS_SRMN_*_PASSWORD belong to its own stores and do not open these ("keystore password was incorrect"); "changeit" is the
+# placeholder password of the dev keystores, already versioned in config/local.env, not a secret. Override all six for real stores.
+ENV SSL_JKS_SRMN_TRUSTSTORE_LOCATION=umdc-truststore.jks \
+    SSL_JKS_SRMN_TRUSTSTORE_PASSWORD=changeit \
+    SSL_JKS_SRMN_TRUSTSTORE_TYPE=JKS \
+    SSL_JKS_SRMN_KEYSTORE_LOCATION=smartkin.jks \
+    SSL_JKS_SRMN_KEYSTORE_PASSWORD=changeit \
+    SSL_JKS_SRMN_KEYSTORE_TYPE=JKS
+
 EXPOSE 8166
 # Liveness over the container's own loopback; the certificate is not verified because it only reaches this process.
 # /actuator/health/liveness does not depend on Postgres, MongoDB, Redis or Kafka, so a cloud outage does not restart the container.

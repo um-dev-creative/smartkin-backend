@@ -46,6 +46,10 @@ For operators: `umdc.smartkin.verification.required=false` switches the verifica
 
 ## What changed for operators in this release
 
+- `config/local.env` now carries the Eureka client TLS settings (`SSL_JKS_SRMN_*`). Without them the service stopped at start with
+  `KeyStore not exists: class path resource [file:certs/smartkin/umdc-truststore.jks]`. Copy the new `config/local.env` to every machine
+  that runs the service (for example `apps2\config\local.env`) and restart it. An image built from the new `Dockerfile` carries the same
+  store names as defaults, so it starts even with an older `config/local.env`.
 - The service now runs on **Java 25** and **Spring Boot 4.1.1**. Hosts and containers need a Java 25 runtime; the Docker image
   `amazoncorretto:25.0.4-alpine3.24` already includes it.
 - The API contract (paths, request and response bodies) did not change.
