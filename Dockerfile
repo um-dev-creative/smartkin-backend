@@ -36,6 +36,12 @@ COPY --from=layers /workspace/extracted/dependencies/ ./
 COPY --from=layers /workspace/extracted/spring-boot-loader/ ./
 COPY --from=layers /workspace/extracted/snapshot-dependencies/ ./
 COPY --from=layers /workspace/extracted/application/ ./
+# The TLS material of certs/smartkin/ (git-ignored, the same folder pom.xml copies onto the classpath) is also laid out as files in the
+# working directory. Configuration that names it by path (config/local.env or Vault: SSL_KEYSTORE_URL / SSL_TRUSTSTORE_URL and the Kafka
+# client files umdc.kafka.security.ssl.* = file:certs/smartkin/...) then resolves here as in a run from the repository; before, the
+# image had only the classpath copies of the keystores and stopped at start with "Resource URL [file:certs/smartkin/...] does not exist"
+# or "Cannot read the Kafka TLS file". It holds private keys: push the image only to a private registry.
+COPY certs/smartkin/ ./certs/smartkin/
 COPY docker-entrypoint.sh docker-entrypoint.sh
 
 RUN addgroup -S appmng && adduser -S jvapps -G appmng \
