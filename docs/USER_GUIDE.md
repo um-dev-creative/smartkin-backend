@@ -49,6 +49,10 @@ For operators: `umdc.smartkin.verification.required=false` switches the verifica
 - The service now runs on **Java 25** and **Spring Boot 4.1.1**. Hosts and containers need a Java 25 runtime; the Docker image
   `amazoncorretto:25.0.4-alpine3.24` already includes it.
 - The API contract (paths, request and response bodies) did not change.
+- The JVM image (`Dockerfile`) now carries a copy of `certs/smartkin/` in `/usr/local/runme/certs/smartkin/`, so paths such as
+  `SSL_TRUSTSTORE_URL=file:certs/smartkin/umdc-truststore.jks` and the Kafka client files (`file:certs/smartkin/aiven-kafka-*.cert`) work in
+  it as in a run from the repository. Before, it stopped at start (`... does not exist`, `Cannot read the Kafka TLS file`). Build it on a
+  machine that has `certs/smartkin/`, and push it only to a private registry: it holds private keys. The native image (`Dockerfile.native`) did not change.
 - Configuration is unchanged, except for two optional variables: `BACKBONE_BASE_URL` and `MERCURY_BASE_URL` set the base URL of each service
   (default `https://api.umdc-qa.tst/backbone` and `https://api.umdc-qa.tst/mercury`). Set them per environment, for example in the
   Config Server or Vault.
