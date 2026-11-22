@@ -44,6 +44,19 @@ Accounts that were already active and not verified (created by an earlier versio
 
 For operators: `umdc.smartkin.verification.required=false` switches the verification gate off (accounts created before it existed). If smartkin-backend stops at start with "The dependencies of some of the beans in the application context form a cycle" naming `verificationWebConfig`, `verificationStatus` and `MercuryClient`, the image predates the fix of sak-73: rebuild it from `development`. The profile image goes to `POST /api/v1/profile/image`.
 
+## Startup banner (for operators)
+
+The first lines of the smartkin-backend log show which build is running, the same banner as backbone-rest and mercury:
+
+```
+<ASCII art "UM Dev Creative">
+smartkin-backend::<version>
+Powered by Spring Boot <version> | Spring Cloud <version> | UMDC libraries <version>
+```
+
+Compare the Spring Cloud and UMDC libraries versions with backbone-rest's when you debug an integration. If a version shows `n/a`, the
+application was built without Maven (for example from an IDE): it still starts; run `mvn compile` to see the real versions.
+
 ## What changed for operators in this release
 
 - The service now runs on **Java 25** and **Spring Boot 4.1.1**. Hosts and containers need a Java 25 runtime; the Docker image

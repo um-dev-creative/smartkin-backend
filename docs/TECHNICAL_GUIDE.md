@@ -28,7 +28,7 @@ from the local Maven cache.
 
 ## Configuration loading (`spring.config.import`)
 
-All configuration is in `src/main/resources/application.yml` (it used to be `bootstrap.yml`). Vault and the Config Server are not read by the legacy Spring Cloud bootstrap context any more: `spring-cloud-starter-bootstrap` is gone and `spring.config.import: "optional:vault://,optional:configserver:"` loads both before the application context exists, the way mercury, backbone-rest and zerobound-rest do. The reason is GraalVM: the bootstrap context starts a second, nested `SpringApplication`, Spring AOT captured that one instead of the real application, and the native binary stopped with `no ServletWebServerFactory bean defined in the context`. The `spring.cloud.vault.*` and `spring.cloud.config.*` properties are the same as before; only the loading mechanism changed.
+All configuration is in `src/main/resources/application.yml` (it used to be `bootstrap.yml`). Vault and the Config Server are not read by the legacy Spring Cloud bootstrap context any more: `spring-cloud-starter-bootstrap` is gone and `spring.config.import: "optional:classpath:build-versions.properties,optional:vault://,optional:configserver:"` loads both (after the versions of the startup banner, see Startup banner) before the application context exists, the way mercury, backbone-rest and zerobound-rest do. The reason is GraalVM: the bootstrap context starts a second, nested `SpringApplication`, Spring AOT captured that one instead of the real application, and the native binary stopped with `no ServletWebServerFactory bean defined in the context`. The `spring.cloud.vault.*` and `spring.cloud.config.*` properties are the same as before; only the loading mechanism changed.
 
 ```mermaid
 flowchart LR
@@ -363,6 +363,36 @@ flowchart LR
 | `BOOTSTRAP_SASL_MECHANISM`, `BOOTSTRAP_SASL_JAAS_CONFIG` | `SCRAM-SHA-256`, empty | for `SASL_*`; the JAAS line carries the user and password, so it belongs in Vault |
 
 Files are read from the file system (`file:` is optional) and never from the classpath: a GraalVM binary does not embed them and a private key does not belong in an image. A file that cannot be read stops the start with its path, never its content, and `toString()` of the properties hides every password and the JAAS line. Verified against a real Aiven service (read-only): an `AdminClient` built from these properties connected over TLS with the CA and the certificate and key in two files and listed the four SmartKin topics. Unit tests: `KafkaSecurityPropertiesTest` (12), `KafkaProducerConfigTest` and the consumer cases of `KafkaConsumerConfigTest`.
+
+## Startup banner
+
+Same banner as backbone-rest (`src/main/resources/banner.txt`): the UM Dev Creative ASCII art, the application name and version, and the
+Spring Boot, Spring Cloud and UMDC libraries versions.
+
+```mermaid
+flowchart LR
+    POM["pom.xml<br/>spring-cloud.version<br/>com.umdc.commons.version"] -->|"Maven resource filtering (@..@)"| BV["target/classes/build-versions.properties"]
+    BV -->|"spring.config.import: optional:classpath:build-versions.properties"| ENV["Spring Environment<br/>umdc.build.*"]
+    ENV -->|"${umdc.build.*:n/a}"| BAN["banner.txt"]
+    IDE["IDE build without Maven"] -.->|"file missing"| ENV
+    ENV -.->|"default"| NA["banner prints n/a"]
+```
+
+| Placeholder | Source |
+|---|---|
+| `${app.name}`, `${app.version}`, `${spring-boot.version}` | `app.*` in `application.yml` and Spring Boot |
+| `${umdc.build.spring-cloud-version:n/a}` | `spring-cloud.version` in `pom.xml`, through `build-versions.properties` |
+| `${umdc.build.umdc-libs-version:n/a}` | `com.umdc.commons.version` in `pom.xml`, through `build-versions.properties` |
+
+- **Only `build-versions.properties` is filtered.** `pom.xml` has two `<resource>` blocks over `src/main/resources`: one excludes the file,
+  the other filters only that file. Filtering the whole folder would corrupt files that contain `@` or `${...}`.
+- **The file holds no secrets**; nothing else should be added to it.
+- **The import is `optional:`**: an IDE build without Maven filtering has no `build-versions.properties` and the application still starts.
+- **The placeholders have a default (`n/a`)**, so a missing file prints `n/a` instead of the raw `${...}`.
+
+Tests: `BannerVersionsTest` (the filtered file has real versions without `@`; the banner has the placeholders with their default;
+`application.yml` imports the file as `optional:`). A new version in the banner needs a property in `build-versions.properties`, a placeholder
+with a default in `banner.txt` and a line in the test.
 
 ## Container images
 
