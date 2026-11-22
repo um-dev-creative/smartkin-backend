@@ -44,6 +44,19 @@ Accounts that were already active and not verified (created by an earlier versio
 
 For operators: `umdc.smartkin.verification.required=false` switches the verification gate off (accounts created before it existed). If smartkin-backend stops at start with "The dependencies of some of the beans in the application context form a cycle" naming `verificationWebConfig`, `verificationStatus` and `MercuryClient`, the image predates the fix of sak-73: rebuild it from `development`. The profile image goes to `POST /api/v1/profile/image`.
 
+## Startup banner (for operators)
+
+The first lines of the smartkin-backend log show which build is running, the same banner as backbone-rest and mercury:
+
+```
+<ASCII art "UM Dev Creative">
+smartkin-backend::<version>
+Powered by Spring Boot <version> | Spring Cloud <version> | UMDC libraries <version>
+```
+
+Compare the Spring Cloud and UMDC libraries versions with backbone-rest's when you debug an integration. If a version shows `n/a`, the
+application was built without Maven (for example from an IDE): it still starts; run `mvn compile` to see the real versions.
+
 ## What changed for operators in this release
 
 - The build no longer prints PMD "deprecated Rule name" warnings: `ruleset.xml` uses the current names of four renamed rules and
@@ -51,6 +64,10 @@ For operators: `umdc.smartkin.verification.required=false` switches the verifica
 - The service now runs on **Java 25** and **Spring Boot 4.1.1**. Hosts and containers need a Java 25 runtime; the Docker image
   `amazoncorretto:25.0.4-alpine3.24` already includes it.
 - The API contract (paths, request and response bodies) did not change.
+- The JVM image (`Dockerfile`) now carries a copy of `certs/smartkin/` in `/usr/local/runme/certs/smartkin/`, so paths such as
+  `SSL_TRUSTSTORE_URL=file:certs/smartkin/umdc-truststore.jks` and the Kafka client files (`file:certs/smartkin/aiven-kafka-*.cert`) work in
+  it as in a run from the repository. Before, it stopped at start (`... does not exist`, `Cannot read the Kafka TLS file`). Build it on a
+  machine that has `certs/smartkin/`, and push it only to a private registry: it holds private keys. The native image (`Dockerfile.native`) did not change.
 - Configuration is unchanged, except for two optional variables: `BACKBONE_BASE_URL` and `MERCURY_BASE_URL` set the base URL of each service
   (default `https://api.umdc-qa.tst/backbone` and `https://api.umdc-qa.tst/mercury`). Set them per environment, for example in the
   Config Server or Vault.

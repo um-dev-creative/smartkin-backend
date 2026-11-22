@@ -1,6 +1,7 @@
-# Context of the JVM image (Dockerfile): only the built jar and the entrypoint are read. Dockerfile.native has its own allowlist
+# Context of the JVM image (Dockerfile): only the built jar, the entrypoint and the TLS material of certs/smartkin/ are read. Dockerfile.native has its own allowlist
 # in Dockerfile.native.dockerignore.
 *
 
 !target/smartkin-backend.jar
 !docker-entrypoint.sh
+!certs/smartkin/
