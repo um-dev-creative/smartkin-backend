@@ -418,7 +418,7 @@ Same scheme as mercury, backbone-rest and zerobound-rest; the choices that diffe
 | `docker-entrypoint.sh` | `exec java` so the JVM is PID 1 and gets SIGTERM; `UseCompactObjectHeaders`, `MaxRAMPercentage=75`, `ExitOnOutOfMemoryError`, `-Dspring.cloud.vault.enabled=${VAULT_ENABLED}`, then `${JAVA_OPTS}` last so a deployment can override. |
 | `Dockerfile.native` | GraalVM Community 25 on Debian 12 (not the Oracle Linux image: its glibc needs x86-64-v3), Maven 3.9.14, native profile, runtime on `debian:12-slim` with `curl` for the probe. Secrets: `maven_settings` (Repsy credentials, optional) and `prx_internal_ca` (optional); build context `umdc-local` re-seeds the `com.umdc` artifacts when Repsy is down. Stages: `graalvm` and `maven` (toolchains, downloaded in parallel), `builder` (AOT + `native:compile`), runtime. Optional build args: `NATIVE_QUICK_BUILD`, `BUILD_COMMIT`, `BUILD_BRANCH`, `BUILD_TIME`. The runtime user is `jvapps:appmng` with fixed ids `10001:10001`, and the `COPY --link` lines use `--chown=10001:10001`: BuildKit cannot resolve user names with `--link`, so a name there fails the build. No `go-offline` layer on purpose: the `com.umdc` artifacts are purged before each build so a re-published `0.0.x` is never stale, and the cache mount already keeps the rest of the dependency tree. |
 | `config/native.env` | Dummy values for every `${VAR}` without default, so Spring AOT can refresh the context. `SPRING_BOOT_PROFILE_ACTIVE` is empty on purpose (AOT bakes active profiles into the binary). Never a deployment config. |
-| `config/local.env`, `secrets/local.env` | Versioned bootstrap identity vs. git-ignored `VAULT_TOKEN`. Do not add Vault-provided variables here: an environment variable shadows Vault. |
+| `config/local.env`, `secrets/local.env` | Versioned bootstrap identity vs. git-ignored `VAULT_TOKEN`. Do not add Vault-provided variables here: an environment variable shadows Vault. One deliberate exception: `SSL_JKS_SRMN_*` (Eureka client TLS), see below. |
 | `docker-compose.yml` | `smartkin-backend` (`443:8166`) and `smartkin-frontend` (`443:7003`, settings from `../smartkin-frontend/local.env`). Both use host port 443, so they run on different machines. The backend mounts `./certs/smartkin` read-only. Its `environment` (which wins over `env_file`) sets `SSL_KEYSTORE_URL`/`SSL_TRUSTSTORE_URL` to `file:/usr/local/runme/certs/smartkin/...`, so the JVM and the native image read the same keystores. `UMDC_GATEWAY_IP` defaults to the LAN nginx `192.168.50.49`. The backend has IP `172.22.0.12` (9 = backbone, 10 = mercury, 11 = zerobound), `extra_hosts` for the `*.umdc-qa.tst` names, `read_only` + `tmpfs /tmp`, `no-new-privileges`, `stop_grace_period: 30s`. |
 
 **TLS material.** `certs/smartkin/` is git-ignored and is copied onto the classpath by `pom.xml`, because the TLS bundle and the security library read `classpath:` names. The truststore must hold a trusted certificate entry; a keystore with only a private key is not a truststore. The `umdc.security.keystore`/`truststore` properties are gone: only the library's `SecurityConfig` read them (see Authentication), and it is no longer scanned. `SSL_KEYSTORE_URL` and `SSL_TRUSTSTORE_URL` (optional, with a scheme, e.g. `file:/usr/local/runme/certs/smartkin/smartkin.jks`) override the classpath names for the TLS bundle, Vault, the Config Server and Eureka. The JVM image has the TLS material both ways: the keystores on the classpath (inside the jar) and the whole `certs/smartkin/` folder (keystores, the internal CA and the Kafka client files `aiven-kafka-*.cert/.key/.pem`) as files in `/usr/local/runme/certs/smartkin/` (its working directory), so `SSL_*_LOCATION` names and `file:certs/smartkin/...` or `file:/usr/local/runme/certs/smartkin/...` paths all resolve, and a mounted volume on that path replaces them. The image therefore holds private keys: push it only to a private registry. The native binary (which does not embed the `.jks`) reads them from a mounted path.
@@ -433,6 +433,25 @@ flowchart LR
     C --> IMG
     IMG -->|"classpath: SSL_*_LOCATION"| APP[smartkin-backend]
     IMG -->|"file:certs/smartkin/... SSL_*_URL"| APP
+```
+
+**Eureka client TLS (`SSL_JKS_SRMN_*`).** The Config Server builds `eureka.client.tls.trust-store`/`key-store` as
+`classpath:${SSL_JKS_SRMN_*_LOCATION}`, and Vault stores those locations as `file:certs/smartkin/...`. Together they give
+`classpath:file:certs/...`, which never exists, and the application stops at start with `KeyStore not exists: class path resource
+[file:certs/smartkin/umdc-truststore.jks]` (bean `restClientDiscoveryClientOptionalArgs`). The versioned `config/local.env` therefore sets
+the six `SSL_JKS_SRMN_*` variables to the jar's own stores (`umdc-truststore.jks`, `smartkin.jks`, `JKS`, the `changeit` placeholder),
+which win over Vault. The JVM `Dockerfile` also sets the six variables as `ENV` defaults (with the `changeit` placeholder: Vault's
+`SSL_JKS_SRMN_*_PASSWORD` belong to its own stores and do not open the jar's, `keystore password was incorrect`), so a container started from that image works even with an older `config/local.env`; `env_file` and `-e` still override them.
+The failure only appeared in the container: a run from the repository used a local `config/local.env` that already had the overrides.
+`Dockerfile.native` is unchanged. `LocalEnvEurekaTlsTest` keeps the overrides in `config/local.env` and the defaults in the `Dockerfile`, as
+classpath names without a scheme.
+
+```mermaid
+flowchart LR
+    V["Vault: SSL_JKS_SRMN_TRUSTSTORE_LOCATION<br/>= file:certs/smartkin/umdc-truststore.jks"] --> CS["Config Server:<br/>eureka.client.tls.trust-store =<br/>classpath:${SSL_JKS_SRMN_TRUSTSTORE_LOCATION}"]
+    CS -->|"without the override"| X["classpath:file:certs/... → KeyStore not exists"]
+    E["config/local.env:<br/>SSL_JKS_SRMN_TRUSTSTORE_LOCATION=umdc-truststore.jks"] -->|"env wins over Vault"| CS
+    CS -->|"with the override"| OK["classpath:umdc-truststore.jks (inside the jar)"]
 ```
 
 **Health.** `management.endpoints.web.exposure.include: health` with probes enabled; the image and compose probe `/actuator/health/liveness`, which does not depend on Postgres, MongoDB, Redis or Kafka. `SessionTokenSecurityConfig` opens `/actuator/health/**` (see Authentication).
