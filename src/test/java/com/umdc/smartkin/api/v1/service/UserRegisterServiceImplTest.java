@@ -58,6 +58,8 @@ class UserRegisterServiceImplTest {
     private ConfirmCodeMapper confirmCodeMapper;
     @Mock
     private MercuryMailer mercuryMailer;
+    @Mock
+    private com.umdc.smartkin.security.verification.VerificationStatus verificationStatus;
 
     private UserRegisterServiceImpl service;
     private Instant now;
@@ -71,7 +73,7 @@ class UserRegisterServiceImplTest {
             @Override public Clock withZone(java.time.ZoneId zone) { return this; }
             @Override public Instant instant() { return now; }
         };
-        service = new UserRegisterServiceImpl(mercuryClient, mercuryTokens, backboneClient, confirmCodeMapper, mercuryMailer, clock);
+        service = new UserRegisterServiceImpl(mercuryClient, mercuryTokens, backboneClient, confirmCodeMapper, mercuryMailer, clock, verificationStatus);
         ReflectionTestUtils.setField(service, "applicationId", APPLICATION_ID);
     }
 
@@ -396,5 +398,23 @@ class UserRegisterServiceImplTest {
         now = now.plus(UserRegisterServiceImpl.RESEND_COOLDOWN);
         service.resendVerification(request);
         verify(mercuryMailer, org.mockito.Mockito.times(2)).resendVerificationCode(USER_ID, EMAIL, "Ana");
+    }
+
+    @Test
+    void theStatusSaysWhetherTheCallerVerified() {
+        when(verificationStatus.isVerified(USER_ID)).thenReturn(true);
+
+        var response = service.status(SESSION_BKD);
+
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals(true, response.getBody().verified());
+    }
+
+    @Test
+    void theStatusOfATokenWithoutUserIsRefused() {
+        var response = service.status("not-a-jwt");
+
+        assertEquals(403, response.getStatusCode().value());
+        verifyNoInteractions(verificationStatus);
     }
 }

@@ -2,6 +2,7 @@ package com.umdc.smartkin.api.v1.service;
 
 import com.umdc.smartkin.api.v1.to.ConfirmCodeRequest;
 import com.umdc.smartkin.api.v1.to.ResendVerificationRequest;
+import com.umdc.smartkin.api.v1.to.VerificationStatusResponse;
 import com.umdc.smartkin.api.v1.to.VerifyEmailRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,19 +11,19 @@ import org.springframework.http.ResponseEntity;
 public interface UserRegisterService {
 
     /// Confirms the verification code for the specified user.
-    /// @param sessionTokenBkd The Backbone session token
+    /// @param sessionToken the session token of the caller (backbone's)
     /// @param confirmCodeRequest the request object containing the user ID and verification code
     /// @return a ResponseEntity containing the response object and HTTP status
-    default ResponseEntity<Void> confirmCode(String sessionTokenBkd, ConfirmCodeRequest confirmCodeRequest) {
+    default ResponseEntity<Void> confirmCode(String sessionToken, ConfirmCodeRequest confirmCodeRequest) {
         return new ResponseEntity<>(HttpStatus.NOT_IMPLEMENTED);
     }
 
     /// Sends a new verification code to the e-mail of the user; the new code replaces the pending one.
-    /// @param sessionTokenBkd the session token of the caller, who must be the user
+    /// @param sessionToken the session token of the caller (backbone's), who must be the user
     /// @param userId the user who asks for a new code
     /// @return 202 when the e-mail was handed over, 403 for somebody else's account, 409 when the e-mail is already verified, 502/503 when
     ///         the identity or the mail service fails
-    default ResponseEntity<Void> resendCode(String sessionTokenBkd, java.util.UUID userId) {
+    default ResponseEntity<Void> resendCode(String sessionToken, java.util.UUID userId) {
         return new ResponseEntity<>(HttpStatus.NOT_IMPLEMENTED);
     }
 
@@ -42,4 +43,10 @@ public interface UserRegisterService {
         return new ResponseEntity<>(HttpStatus.NOT_IMPLEMENTED);
     }
 
+    /// Whether the signed-in user confirmed the e-mail code.
+    /// @param sessionToken the session token of the caller (backbone's)
+    /// @return 200 with the status, 403 when the token names no user, 503 when mercury cannot say
+    default ResponseEntity<VerificationStatusResponse> status(String sessionToken) {
+        return new ResponseEntity<>(HttpStatus.NOT_IMPLEMENTED);
+    }
 }

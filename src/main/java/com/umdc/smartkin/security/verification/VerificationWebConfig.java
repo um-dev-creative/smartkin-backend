@@ -7,24 +7,28 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /// Registers [VerifiedSessionInterceptor] on the whole API, after the session interceptor of the security library (which validates the
-/// token) so that the claim is only read from a genuine token. `umdc.smartkin.verification.required=false` switches it off.
+/// token) so that the `uid` is only read from a genuine token. `umdc.smartkin.verification.required=false` switches it off.
 @Configuration(proxyBeanMethods = false)
 public class VerificationWebConfig implements WebMvcConfigurer {
 
     private final String apiPath;
     private final boolean required;
+    private final VerificationStatus verificationStatus;
 
-    /// @param apiPath  the base path of the API (`umdc.api.endpoint`)
-    /// @param required whether an unverified session is refused
+    /// @param apiPath            the base path of the API (`umdc.api.endpoint`)
+    /// @param required           whether an unverified session is refused
+    /// @param verificationStatus whether a user confirmed the e-mail code (mercury)
     public VerificationWebConfig(@Value("${umdc.api.endpoint}") String apiPath,
-                                 @Value("${umdc.smartkin.verification.required:true}") boolean required) {
+                                 @Value("${umdc.smartkin.verification.required:true}") boolean required,
+                                 VerificationStatus verificationStatus) {
         this.apiPath = apiPath;
         this.required = required;
+        this.verificationStatus = verificationStatus;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(new VerifiedSessionInterceptor(apiPath, required)).addPathPatterns(apiPath + "/**")
+        registry.addInterceptor(new VerifiedSessionInterceptor(apiPath, required, verificationStatus)).addPathPatterns(apiPath + "/**")
                 .order(Ordered.LOWEST_PRECEDENCE);
     }
 }

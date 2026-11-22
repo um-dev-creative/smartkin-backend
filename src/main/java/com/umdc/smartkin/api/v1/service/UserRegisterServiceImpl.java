@@ -2,6 +2,7 @@ package com.umdc.smartkin.api.v1.service;
 
 import com.umdc.smartkin.api.v1.to.ConfirmCodeRequest;
 import com.umdc.smartkin.api.v1.to.ResendVerificationRequest;
+import com.umdc.smartkin.api.v1.to.VerificationStatusResponse;
 import com.umdc.smartkin.api.v1.to.VerifyEmailRequest;
 import com.umdc.smartkin.client.backbone.BackboneClient;
 import com.umdc.smartkin.client.backbone.to.BackboneEmailLookupRequest;
@@ -11,6 +12,7 @@ import com.umdc.smartkin.client.mercury.MercuryClient;
 import com.umdc.smartkin.client.mercury.MercuryMailer;
 import com.umdc.smartkin.client.mercury.MercuryTokens;
 import com.umdc.smartkin.mapper.ConfirmCodeMapper;
+import com.umdc.smartkin.security.verification.VerificationStatus;
 import feign.FeignException;
 import org.springframework.beans.factory.annotation.Value;
 import com.umdc.smartkin.util.EmailCooldown;
@@ -55,6 +57,7 @@ public class UserRegisterServiceImpl implements UserRegisterService {
     private final ConfirmCodeMapper confirmCodeMapper;
     private final MercuryMailer mercuryMailer;
     private final EmailCooldown resendCooldown;
+    private final VerificationStatus verificationStatus;
 
     /// Constructs a new UserRegisterServiceImpl.
     ///
@@ -64,9 +67,12 @@ public class UserRegisterServiceImpl implements UserRegisterService {
     /// @param confirmCodeMapper the mapper used to map confirmation codes
     /// @param mercuryMailer hands the new code of a resend to mercury
     /// @param clock the clock the cooldown of a resend by e-mail is measured with
+    /// @param verificationStatus whether a user confirmed the e-mail code (mercury, cached once confirmed)
     /// @see MercuryClient
     public UserRegisterServiceImpl(MercuryClient mercuryClient, MercuryTokens mercuryTokens, BackboneClient backboneClient,
-                                   ConfirmCodeMapper confirmCodeMapper, MercuryMailer mercuryMailer, Clock clock) {
+                                   ConfirmCodeMapper confirmCodeMapper, MercuryMailer mercuryMailer, Clock clock,
+                                   VerificationStatus verificationStatus) {
+        this.verificationStatus = verificationStatus;
         this.resendCooldown = new EmailCooldown(clock, RESEND_COOLDOWN);
         this.mercuryMailer = mercuryMailer;
         this.mercuryClient = mercuryClient;
@@ -79,13 +85,13 @@ public class UserRegisterServiceImpl implements UserRegisterService {
     /// an inactive user). Mercury answers 202 for a right code, 406 for a wrong one (with `Attempts-Remaining`) and 404 when there is no
     /// code left to confirm; on a 404 the latest code is looked up, so an activation that failed after a right code is recovered by asking again.
     ///
-    /// @param sessionTokenBkd the backbone token session
+    /// @param sessionToken the session token of the caller (backbone's)
     /// @param confirmCodeRequest the request object containing the user ID and verification code
     /// @return 200 when the user is active, otherwise mercury's status and headers (or 502 when backbone cannot activate)
     @Override
-    public ResponseEntity<Void> confirmCode(String sessionTokenBkd, ConfirmCodeRequest confirmCodeRequest) {
+    public ResponseEntity<Void> confirmCode(String sessionToken, ConfirmCodeRequest confirmCodeRequest) {
         var userId = confirmCodeRequest.userId();
-        var denied = refuseOthers(sessionTokenBkd, userId);
+        var denied = refuseOthers(sessionToken, userId);
         if (denied != null) {
             return denied;
         }
@@ -105,12 +111,12 @@ public class UserRegisterServiceImpl implements UserRegisterService {
 
     /// Sends a new code to the e-mail of the caller. The e-mail and the name come from backbone, never from the request.
     ///
-    /// @param sessionTokenBkd the session token of the caller, who must be the user
+    /// @param sessionToken the session token of the caller, who must be the user
     /// @param userId the user who asks for a new code
     /// @return 202 when mercury took the message
     @Override
-    public ResponseEntity<Void> resendCode(String sessionTokenBkd, UUID userId) {
-        var denied = refuseOthers(sessionTokenBkd, userId);
+    public ResponseEntity<Void> resendCode(String sessionToken, UUID userId) {
+        var denied = refuseOthers(sessionToken, userId);
         if (denied != null) {
             return denied;
         }
@@ -204,6 +210,19 @@ public class UserRegisterServiceImpl implements UserRegisterService {
         return email.trim().toLowerCase(Locale.ROOT);
     }
 
+    /// Whether the caller confirmed the e-mail code. The token was validated by the session interceptor before this runs.
+    ///
+    /// @param sessionToken the session token of the caller (backbone's)
+    /// @return 200 with the status, 403 when the token names no user; a 503 when mercury cannot say (`SessionValidationExceptionHandler`)
+    @Override
+    public ResponseEntity<VerificationStatusResponse> status(String sessionToken) {
+        var callerId = JwtUtil.getUidFromToken(sessionToken);
+        if (callerId == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).header(MESSAGE_ERROR_HEADER, CALLER_UNKNOWN_MESSAGE).build();
+        }
+        return ResponseEntity.ok(new VerificationStatusResponse(verificationStatus.isVerified(callerId)));
+    }
+
     private static ResponseEntity<Void> codeNotValid(String attemptsRemaining) {
         var response = ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).header(MESSAGE_ERROR_HEADER, CODE_NOT_VALID_MESSAGE);
         if (attemptsRemaining != null) {
@@ -216,8 +235,8 @@ public class UserRegisterServiceImpl implements UserRegisterService {
         return ResponseEntity.status(UpstreamFailure.statusToAnswer(e)).header(MESSAGE_ERROR_HEADER, VERIFICATION_UNAVAILABLE_MESSAGE).build();
     }
 
-    private static ResponseEntity<Void> refuseOthers(String sessionTokenBkd, UUID userId) {
-        var callerId = JwtUtil.getUidFromToken(sessionTokenBkd);
+    private static ResponseEntity<Void> refuseOthers(String sessionToken, UUID userId) {
+        var callerId = JwtUtil.getUidFromToken(sessionToken);
         if (callerId == null) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).header(MESSAGE_ERROR_HEADER, CALLER_UNKNOWN_MESSAGE).build();
         }

@@ -25,7 +25,11 @@ import org.springframework.context.annotation.FilterType;
         excludeFilters = {
                 @ComponentScan.Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
                 @ComponentScan.Filter(type = FilterType.CUSTOM, classes = AutoConfigurationExcludeFilter.class),
-                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "com\\.umdc\\.security\\.config\\.SecurityConfig")
+                // Left out of security-oauth, as in zerobound-rest: config.SecurityConfig (see above) and controller.*, introspection.*,
+                // client.*: the library's login (`/auth/token`, AuthApiController needs an AuthService) and M2M opaque-token introspection.
+                // SmartKin issues no sessions: sign-in, renewal and sign-out are backbone's, through the BFF.
+                @ComponentScan.Filter(type = FilterType.REGEX,
+                        pattern = "com\\.umdc\\.security\\.(config\\.SecurityConfig|controller\\..*|introspection\\..*|client\\..*)")
         }
 )
 public class SmartKinBackendApplication {
