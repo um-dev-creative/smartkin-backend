@@ -15,9 +15,6 @@ import static com.umdc.security.constant.ConstantApp.SESSION_TOKEN_KEY;
 @FeignClient(name = "backboneClient", url = "${umdc.clients.backbone.url}", configuration = BackboneFeignConfigurer.class)
 public interface BackboneClient {
 
-    @GetMapping("/api/v1/session/validate")
-    boolean validate(@RequestHeader(SESSION_TOKEN_KEY) String sessionToken);
-
     @GetMapping("/api/v1/users/check/alias/{alias}/application/{applicationId}")
     ResponseEntity<Void> checkAlias(@PathVariable String alias, @PathVariable UUID applicationId);
 

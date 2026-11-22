@@ -90,12 +90,14 @@ sequenceDiagram
     U->>F: alias + password
     F->>B: POST /session/token, Bearer M2M
     B-->>F: backbone session token
-    F->>S: POST /api/v1/auth/session-token<br/>session-token-bkd: backbone session
-    S->>M: mercury token (alias, password)
-    S-->>F: SmartKin session token (HS, own claims uid, vcCompleted)
-    F->>S: business calls, session-token: SmartKin session
-    Note over S: SessionJwtInterceptor: signature, type, exp, jti not revoked
+    F->>S: business calls, session-token: backbone session (as is)
+    Note over S: SessionJwtInterceptor: backbone signature, type, exp, jti, uid,<br/>aid = SmartKin, iss/aud, jti not revoked
+    S->>M: verification status of uid (only for an account created active, cached once verified)
 ```
+
+> **Since sak-61 the model is zerobound-rest's**: smartkin-backend issues no session of its own. Points 2 and 3 below describe the model
+> before sak-61 and are kept for history; findings F-6, F-8 and F-9 are resolved by it (see `docs/TECHNICAL_GUIDE.md`, "Authentication and
+> authorization like zerobound").
 
 1. **BFF login.** The BFF gets an OAuth bearer (`BACKBONE_AUTH_*` in its configuration), logs the user in to backbone with the
    application id and an AES-encrypted password, and keeps the backbone session (`user-session-store`).
@@ -158,10 +160,10 @@ Numbered so they can become tasks. None of them was changed here except where st
 | F-3 | `UserServiceImpl.create` turns **any** `FeignException` into `409 Email already exists`. A `401`/`403` from backbone (bad client, missing scope) or a `5xx` looks like a duplicate e-mail. | `UserServiceImpl.create` | Misleading errors; this is why the real cause stayed hidden. Map `409` only, relay the rest (the project convention is `e.status()` plus `MESSAGE_HEADER`) |
 | F-4 | Nothing activates the user after the verification code. D-10 creates the user `active=false` and calls `PUT .../activate` once mercury confirms the code. `UserCreateMapper` ignores `active` and `confirmCode` never calls activate. | `UserCreateMapper`, `UserRegisterServiceImpl` | **Superseded**: the user is now created `active=true` (the inactive user could not sign in, so it never reached the verification page); the unverified e-mail is enforced by the `vcCompleted` claim. `confirmCode` still calls the idempotent `activate`. Earlier: `confirmCode` calls `activate` after mercury accepts the code. Verified in backbone-rest: `SessionServiceImpl` answers `401` to the session of an inactive user, so before this nobody could sign in after registering. Users registered earlier stay inactive |
 | F-5 | `confirmCode` logs in to mercury with the **user's** `alias` and the `password` field read from `GET /users/user/{id}`. Mercury's token is a service login (`alias`/`password` of a calling service), not a user login. | `UserRegisterServiceImpl`, zerobound `docs/OPERATIONS.md` | A password (or hash) from backbone travels as a credential; **Not verified** whether backbone returns it |
-| F-6 | SmartKin's own session is not tied to an application: `isValid` checks signature, `type`, expiry, `jti`; backbone says a resource server **must** also require `aid == its application id`, because all services share `APP_TOKEN_SECRET`. | `SessionJwtServiceImpl.isValid`; backbone `CLAUDE.md` | If SmartKin's `APP_TOKEN_SECRET` equals backbone's, a backbone session of another application is accepted. **Not verified** whether the secrets are equal |
+| F-6 | **Resolved (sak-61): the session is backbone's token and `aid` must be the SmartKin application.** SmartKin's own session is not tied to an application: `isValid` checks signature, `type`, expiry, `jti`; backbone says a resource server **must** also require `aid == its application id`, because all services share `APP_TOKEN_SECRET`. | `SessionJwtServiceImpl.isValid`; backbone `CLAUDE.md` | If SmartKin's `APP_TOKEN_SECRET` equals backbone's, a backbone session of another application is accepted. **Not verified** whether the secrets are equal |
 | F-7 | `JwtUtil.getUidFromToken` reads `uid` from the backbone session by decoding the payload **without verifying the signature**. | `JwtUtil` | The value is trusted as given; it is safe only if something upstream already verified the token |
-| F-8 | `AuthServiceImpl.token(AuthRequest)` signs a session for any alias without a password. | `AuthServiceImpl` | **Not verified** whether it is reachable: `POST /api/v1/auth/session-token` answered `400` without `session-token-bkd` in the local container, and `/api/v1/auth/token` answered `400` as well. Needs a test that pins it down |
-| F-9 | Renew, refresh and logout are not exposed by SmartKin; the BFF renews against backbone. After a backbone logout the SmartKin token stays valid until the deny-list reflects its own `jti`. | `AuthApi`, `backbone.controller.js` | A logout in backbone does not end the SmartKin session unless SmartKin's `jti` is revoked too |
+| F-8 | **Resolved (sak-61): `AuthServiceImpl` and the library's `/auth` controllers are gone.** `AuthServiceImpl.token(AuthRequest)` signs a session for any alias without a password. | `AuthServiceImpl` | **Not verified** whether it is reachable: `POST /api/v1/auth/session-token` answered `400` without `session-token-bkd` in the local container, and `/api/v1/auth/token` answered `400` as well. Needs a test that pins it down |
+| F-9 | **Resolved (sak-61): there is no SmartKin token; a backbone logout revokes the very token SmartKin checks.** Renew, refresh and logout are not exposed by SmartKin; the BFF renews against backbone. After a backbone logout the SmartKin token stays valid until the deny-list reflects its own `jti`. | `AuthApi`, `backbone.controller.js` | A logout in backbone does not end the SmartKin session unless SmartKin's `jti` is revoked too |
 
 ## 6. Troubleshooting
 

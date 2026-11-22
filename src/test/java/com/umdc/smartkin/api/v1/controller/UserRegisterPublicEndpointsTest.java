@@ -3,6 +3,7 @@ package com.umdc.smartkin.api.v1.controller;
 import com.umdc.security.annotation.SkipSessionValidation;
 import com.umdc.smartkin.api.v1.service.UserRegisterService;
 import com.umdc.smartkin.api.v1.to.ResendVerificationRequest;
+import com.umdc.smartkin.api.v1.to.VerificationStatusResponse;
 import com.umdc.smartkin.api.v1.to.VerifyEmailRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /// The two endpoints a visitor uses to verify a new account: no session, the account is named by its e-mail.
@@ -92,5 +95,27 @@ class UserRegisterPublicEndpointsTest {
         assertEquals(HttpStatus.NOT_IMPLEMENTED, api.resendVerification(new ResendVerificationRequest("a@b.co")).getStatusCode());
         assertEquals(HttpStatus.NOT_IMPLEMENTED, empty.verifyEmail(null).getStatusCode());
         assertEquals(HttpStatus.NOT_IMPLEMENTED, empty.resendVerification(null).getStatusCode());
+    }
+
+    @Test
+    void theStatusReadsTheSessionTokenAndAnswersTheService() throws Exception {
+        when(service.status("tok")).thenReturn(ResponseEntity.ok(new VerificationStatusResponse(false)));
+
+        mvc.perform(get("/api/v1/user-register/status").header("session-token", "tok"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.verified").value(false));
+
+        verify(service).status("tok");
+    }
+
+    @Test
+    void confirmAndResendReadTheSingleSessionToken() throws Exception {
+        when(service.resendCode(org.mockito.ArgumentMatchers.eq("tok"), org.mockito.ArgumentMatchers.any())).thenReturn(ResponseEntity.accepted().build());
+        when(service.confirmCode(org.mockito.ArgumentMatchers.eq("tok"), org.mockito.ArgumentMatchers.any())).thenReturn(ResponseEntity.ok().build());
+
+        mvc.perform(post("/api/v1/user-register/11111111-1111-1111-1111-111111111111/resend").header("session-token", "tok"))
+                .andExpect(status().isAccepted());
+        mvc.perform(post("/api/v1/user-register").header("session-token", "tok").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"userId\":\"11111111-1111-1111-1111-111111111111\",\"verificationCode\":\"1234-5678\"}"))
+                .andExpect(status().isOk());
     }
 }

@@ -3,6 +3,7 @@ package com.umdc.smartkin.api.v1.controller;
 import com.umdc.security.annotation.SkipSessionValidation;
 import com.umdc.smartkin.api.v1.service.UserRegisterService;
 import com.umdc.smartkin.api.v1.to.ConfirmCodeRequest;
+import com.umdc.smartkin.api.v1.to.VerificationStatusResponse;
 import com.umdc.smartkin.api.v1.to.ResendVerificationRequest;
 import com.umdc.smartkin.api.v1.to.VerifyEmailRequest;
 import org.springframework.http.ResponseEntity;
@@ -20,13 +21,18 @@ public class UserRegisterController implements UserRegisterApi {
     }
 
     @Override
-    public ResponseEntity<Void> confirmCode(String sessionTokenBkd, ConfirmCodeRequest confirmCodeRequest) {
-        return userRegisterService.confirmCode(sessionTokenBkd, confirmCodeRequest);
+    public ResponseEntity<Void> confirmCode(String sessionToken, ConfirmCodeRequest confirmCodeRequest) {
+        return userRegisterService.confirmCode(sessionToken, confirmCodeRequest);
     }
 
     @Override
-    public ResponseEntity<Void> resendCode(String sessionTokenBkd, java.util.UUID userId) {
-        return userRegisterService.resendCode(sessionTokenBkd, userId);
+    public ResponseEntity<VerificationStatusResponse> status(String sessionToken) {
+        return userRegisterService.status(sessionToken);
+    }
+
+    @Override
+    public ResponseEntity<Void> resendCode(String sessionToken, java.util.UUID userId) {
+        return userRegisterService.resendCode(sessionToken, userId);
     }
 
     @Override

@@ -346,4 +346,18 @@ El usuario nuevo se crea **inactivo** y no inicia sesión hasta confirmar el có
 
 ## Iniciar sesión cuando mercury no responde
 
+> Desde sak-61 ya no aplica: SmartKin no emite su propia sesión. Si mercury no responde, la petición de una cuenta antigua sin verificar recibe un 503 (vuelve a intentarlo) en lugar de entrar como no verificada. Ver "Inicio de sesión igual que en zerobound".
+
 Si mercury no puede decir si el código ya fue confirmado (está caído, rechazó la llamada o falta su cliente M2M), el inicio de sesión ya no falla con un 500: la sesión se emite como **no verificada** (`vcCompleted=false`). El usuario recién registrado llega así a la página de verificación del código y, mientras no lo confirme, el resto de la API le responde 403.
+
+## Inicio de sesión igual que en zerobound (sak-61)
+
+Iniciar sesión, mantener la sesión y cerrarla funcionan igual que en zerobound:
+
+- Inicias sesión con tu usuario o correo y tu contraseña. Quien comprueba la contraseña es **backbone**, el servicio de identidad común; SmartKin no crea una sesión propia.
+- Tu sesión dura lo que backbone diga y se renueva sola mientras uses la aplicación. Al **cerrar sesión**, backbone la anula y deja de servir en todos los servicios a la vez.
+- Lo que puedes hacer dentro de SmartKin no cambia: un padre o tutor sigue viendo a sus hijos y un hijo solo lo suyo.
+- Una cuenta nueva no puede iniciar sesión hasta confirmar el código del correo. Si tu cuenta se creó antes y nunca confirmaste el correo, puedes entrar, pero la aplicación te lleva a confirmar el código antes de dejarte usar el resto.
+- Si ves un error 503 justo después de iniciar sesión con una cuenta antigua, el servicio que guarda los códigos no respondió: espera un momento y vuelve a intentarlo.
+
+**Para el equipo técnico:** smartkin-backend necesita el mismo `APP_TOKEN_SECRET` que backbone-rest y `umdc.smartkin.application-id` igual a la aplicación con la que el frontend inicia sesión. Si no coinciden, todas las llamadas responden 401.

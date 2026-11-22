@@ -131,7 +131,7 @@ SmartKin's.
 
 The old `MERCURY_CLIENT_*`/`MERCURY_USERNAME`/`MERCURY_PASSWORD` entries of `umdc.security.auth.clients` still feed `MercuryFeignConfigurer`'s
 Bearer; mercury ignores it on these paths. Tests: `MercuryTokensTest` (exchange, cache expiry, fallback, retry on 401, not configured),
-`UserRegisterServiceImplTest`, `AuthServiceImplTest`, `FeignClientUrlConfigTest`.
+`UserRegisterServiceImplTest`, `FeignClientUrlConfigTest`.
 
 ### Identity through backbone-rest
 
@@ -419,8 +419,8 @@ as environment variables for the private Repsy repository. The workflow does not
 
 | Test | What it covers |
 | --- | --- |
-| `UserServiceImplTest`, `UserRegisterServiceImplTest`, `AuthServiceImplTest` | Business flows with mocked Feign clients, mappers and `MercuryMailer` |
-| `SessionJwtServiceImplTest`, `JwtUtilTest` | Token signing, claims and parsing |
+| `UserServiceImplTest`, `UserRegisterServiceImplTest` | Business flows with mocked Feign clients, mappers and `MercuryMailer` |
+| `SessionJwtServiceImplTest`, `JwtUtilTest`, `VerificationStatusTest` | Backbone session validation (application, issuer, audience, revocation), claims and parsing, verification status |
 | `UserControllersTest` | Delegation, route mapping with MockMvc and the `*Api` default methods |
 | `MappersTest` | MapStruct mappings and their default methods |
 | `FeignConfigurersTest` | Bearer token interceptors against a local HTTP server that plays the token endpoint |
@@ -599,6 +599,8 @@ Tests: `AccessPolicyTest` covers every cell of the table, and `CrossFamilyAccess
 ## Account ownership and e-mail verification (P1 audit)
 
 **Ownership.** `GET/PUT/DELETE /api/v1/users/{id}`, `POST /api/v1/user-register` (confirm) and `POST /api/v1/user-register/{userId}/resend` compare the `uid` claim of the `session-token` with the user in the path. `AccessPolicy.canViewUser` (own account, or the account of a child linked to the caller) guards the read; `AccessPolicy.isSelf` guards change and delete. Anything else is `403` with `message-error` (`You can only do this on your own account.`); a token without `uid` is `403` too. `PUT /users/{id}` refuses `roleIds` with `403`. `UserService.deleteUser(userId)` has no caller check and exists only for the service's own clean-up (`ChildAccountServiceImpl` removes the account of a child whose profile failed); no endpoint calls it.
+
+> Since sak-61 the gate reads the `uid` of backbone's session and asks mercury (`VerificationStatus`); there is no `vcCompleted` claim. See "Authentication and authorization like zerobound".
 
 **Verification gate.** `AuthServiceImpl.token(request, backboneToken)` puts `vcCompleted` and `uid` in the session token (both branches). `VerifiedSessionInterceptor` is registered by `VerificationWebConfig` on `umdc.api.endpoint/**` with the lowest precedence, so it runs after the library's `SessionJwtInterceptor`, which has already validated the token; it reads the claim with `JwtUtil.getClaim`. Without `vcCompleted=true` it answers `403` (`Verify your e-mail to use SmartKin.`), except: `POST /users` (sign-up), `/auth/**`, `/user-register/**` (confirm and resend), `GET /users/{id}` and `OPTIONS`. `umdc.smartkin.verification.required=false` switches it off. Login itself does not change: it depends on Backbone, and the Mercury lookup of the claim is the one already there (a Mercury `404` means "not verified").
 
@@ -1177,6 +1179,8 @@ The order follows the foreign keys: dependents first, then `user`, then `person`
 
 ## Session token when mercury cannot answer
 
+> Superseded by sak-61: SmartKin no longer issues a session token, so there is no `vcCompleted` to set. mercury unable to answer now makes `VerificationStatus` refuse the request with a 503 (see "Authentication and authorization like zerobound").
+
 `AuthServiceImpl.token(request, sessionTokenBkd)` asks mercury `GET /api/v1/verification-code/latest-status` to set the `vcCompleted` claim. A `404` (no code yet) was already `false`; any other `FeignException` (mercury down or refusing, token exchange failure) or `IllegalStateException` (no M2M client configured) used to escape as a `500`, which made the BFF fail the login that follows sign-up. They now also give `vcCompleted=false` and a warning log (status/class and message, no secrets). It fails closed: `VerifiedSessionInterceptor` keeps everything but the verification endpoints at `403` until mercury confirms the code.
 
 ```mermaid
@@ -1189,3 +1193,61 @@ flowchart LR
     D --> F
     E --> F
 ```
+
+## Authentication and authorization like zerobound (sak-61)
+
+SmartKin authenticates exactly like zerobound-rest and mercury: **the session is the backbone-rest session token** that the BFF obtained at
+sign-in with its application client, sent as is in the `session-token` header. smartkin-backend never issues a session of its own; sign-in,
+renewal and sign-out belong to backbone through the BFF. What a user may do inside SmartKin (parent, child, ownership: `AccessPolicy`,
+`ChildAccess`) is unchanged.
+
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant F as smartkin-frontend (BFF)
+    participant B as backbone-rest
+    participant S as smartkin-backend
+    participant M as mercury
+    U->>F: alias/e-mail + password
+    F->>B: POST /api/v1/session/token (Bearer: BFF application client)
+    B-->>F: session token (aid = SmartKin) + refresh token
+    F-->>U: httpOnly cookies (session, refresh)
+    U->>F: page / API call
+    F->>S: /api/v1/... session-token: backbone session
+    Note over S: SessionJwtInterceptor -> SessionJwtServiceImpl.isValid
+    S->>S: signature (APP_TOKEN_SECRET), type, exp, jti, uid, aid, iss/aud
+    S->>S: jti on backbone's deny-list? (Redis, 503 if unreadable)
+    S->>M: verified? (VerifiedSessionInterceptor, by uid, cached once true)
+    S-->>F: answer (403 "Verify your e-mail" for an unverified account)
+    F->>B: 401 from S -> POST /api/v1/session/refresh, retry once
+```
+
+**What is checked.** `SessionJwtServiceImpl` (same code as zerobound-rest's) accepts a token only if:
+
+| Check | Source |
+| --- | --- |
+| HMAC signature | `umdc.security.jwt.secret` = `APP_TOKEN_SECRET`, **the same Base64 secret as backbone-rest** (Vault) |
+| `type` = `session-token`, `exp` present and in the future, `jti` present | backbone's session shape |
+| `uid` is a UUID | the backbone user id every service reads (`JwtUtil.getUidFromToken`) |
+| `aid` = SmartKin application | `umdc.smartkin.application-id` (mandatory, `SessionClaimPolicy`); without it a session of any UMDC application, all signed with the same secret, would be accepted |
+| `iss` / `aud` | `JWT_ISSUER` (default `backbone-rest`) / `JWT_AUDIENCE` (default `backbone-rest-client`); blank disables the check |
+| `jti` not revoked | backbone's Redis deny-list (`RedisRevocationChecker`); unreadable list = 503 |
+
+**What was removed.** `AuthServiceImpl`, the library's `POST /api/v1/auth/token` and `/api/v1/auth/session-token` (`SmartKinBackendApplication`
+leaves the library's `controller`, `introspection` and `client` packages out of the scan, as zerobound-rest does), the second header
+`session-token-bkd` and `BackboneClient.validate`. Confirming and resending the code (`POST /api/v1/user-register`, `.../{userId}/resend`)
+read `session-token`.
+
+**E-mail verification.** A new account is inactive until the e-mailed code is confirmed, so backbone refuses its sign-in (as in zerobound). An
+account that was created **active** and never verified (before inactive sign-up) can sign in; `VerifiedSessionInterceptor` keeps it out of the
+API except for the verification itself: it reads the `uid` of the session and asks `VerificationStatus`, which asks mercury
+(`GET /api/v1/verification-code/latest-status`). A `true` is remembered for the life of the process; a `404` is "not verified"; mercury
+failing or without an M2M client is a `503` (never "let in", never a wrong "verify again"). `GET /api/v1/user-register/status` answers
+`{"verified": true|false}` for the caller, so the BFF sends such an account to the verification screen at sign-in and on page load.
+
+**Configuration to check when deploying.** `APP_TOKEN_SECRET` must be backbone-rest's (otherwise every request is `401`);
+`umdc.smartkin.application-id` must be the SmartKin application the BFF signs in with (`BACKBONE_APPLICATION_ID`); `JWT_ISSUER`/`JWT_AUDIENCE`
+only if backbone stamps other values.
+
+Tests: `SessionJwtServiceImplTest` (ported from zerobound-rest), `VerificationStatusTest`, `VerifiedSessionInterceptorTest`,
+`UserRegisterServiceImplTest` and `UserRegisterPublicEndpointsTest` (status and single header).
