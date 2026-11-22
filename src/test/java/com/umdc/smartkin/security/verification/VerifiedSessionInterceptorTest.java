@@ -2,6 +2,7 @@ package com.umdc.smartkin.security.verification;
 
 import com.umdc.smartkin.security.revocation.SessionValidationUnavailableException;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -28,7 +29,7 @@ class VerifiedSessionInterceptorTest {
     private static final UUID PENDING = UUID.randomUUID();
 
     private final VerificationStatus status = mock(VerificationStatus.class);
-    private final VerifiedSessionInterceptor interceptor = new VerifiedSessionInterceptor(API, true, status);
+    private final VerifiedSessionInterceptor interceptor = new VerifiedSessionInterceptor(API, true, () -> status);
 
     {
         when(status.isVerified(VERIFIED)).thenReturn(true);
@@ -104,7 +105,7 @@ class VerifiedSessionInterceptorTest {
 
     @Test
     void theCheckCanBeSwitchedOff() {
-        var off = new VerifiedSessionInterceptor(API, false, status);
+        var off = new VerifiedSessionInterceptor(API, false, () -> status);
         var request = new MockHttpServletRequest("GET", API + "/children");
         request.setRequestURI(API + "/children");
 
@@ -119,8 +120,26 @@ class VerifiedSessionInterceptorTest {
                 return getInterceptors().size();
             }
         };
-        new VerificationWebConfig(API, true, status).addInterceptors(registry);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<VerificationStatus> provider = mock(ObjectProvider.class);
+        new VerificationWebConfig(API, true, provider).addInterceptors(registry);
 
         assertEquals(1, registry.count());
+        // resolving it while the context starts is what closed the cycle with mvcResourceUrlProvider
+        verify(provider, never()).getObject();
+    }
+
+    @Test
+    void theStatusIsLookedUpOnTheFirstRequestThatNeedsIt() {
+        @SuppressWarnings("unchecked")
+        ObjectProvider<VerificationStatus> provider = mock(ObjectProvider.class);
+        when(provider.getObject()).thenReturn(status);
+        var lazy = new VerifiedSessionInterceptor(API, true, provider::getObject);
+        var request = new MockHttpServletRequest("GET", API + "/children");
+        request.setRequestURI(API + "/children");
+        request.addHeader("session-token", token(VERIFIED));
+
+        assertTrue(lazy.preHandle(request, new MockHttpServletResponse(), new Object()));
+        verify(provider).getObject();
     }
 }
