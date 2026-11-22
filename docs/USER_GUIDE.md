@@ -42,7 +42,7 @@ After signing up you get an e-mail with a code (`1234-5678`) and the account sta
 
 Accounts that were already active and not verified (created by an earlier version) can still sign in and verify from the page they land on, with the session. In that case you can only verify, resend, read, change or delete **your own** account; a parent can read the account of their own children, nobody else's. You cannot change your own roles.
 
-For operators: `umdc.smartkin.verification.required=false` switches the verification gate off (accounts created before it existed). The profile image goes to `POST /api/v1/profile/image`.
+For operators: `umdc.smartkin.verification.required=false` switches the verification gate off (accounts created before it existed). If smartkin-backend stops at start with "The dependencies of some of the beans in the application context form a cycle" naming `verificationWebConfig`, `verificationStatus` and `MercuryClient`, the image predates the fix of sak-73: rebuild it from `development`. The profile image goes to `POST /api/v1/profile/image`.
 
 ## What changed for operators in this release
 

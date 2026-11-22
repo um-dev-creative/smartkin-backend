@@ -1245,7 +1245,23 @@ API except for the verification itself: it reads the `uid` of the session and as
 failing or without an M2M client is a `503` (never "let in", never a wrong "verify again"). `GET /api/v1/user-register/status` answers
 `{"verified": true|false}` for the caller, so the BFF sends such an account to the verification screen at sign-in and on page load.
 
-**Configuration to check when deploying.** `APP_TOKEN_SECRET` must be backbone-rest's (otherwise every request is `401`);
+**Wiring of the verification gate (no circular reference).** `VerificationWebConfig` is a `WebMvcConfigurer`, so Spring builds it while
+it builds the MVC infrastructure. It must not need `VerificationStatus` at that moment: `VerificationStatus` needs the Feign `MercuryClient`,
+and creating a Feign client asks for that same MVC infrastructure (`mvcResourceUrlProvider`). It therefore takes an
+`ObjectProvider<VerificationStatus>` and hands `VerifiedSessionInterceptor` a `Supplier` (`verificationStatus::getObject`) that is called on
+the first request that needs the check. Injecting `VerificationStatus` directly makes the application fail at start with
+`BeanCurrentlyInCreationException` ("The dependencies of some of the beans in the application context form a cycle");
+`VerificationWiringTest` starts Spring MVC with the real beans to keep it from coming back.
+
+```mermaid
+flowchart LR
+    MVC[mvcResourceUrlProvider<br/>EnableWebMvcConfiguration] --> WC[VerificationWebConfig]
+    WC -. "ObjectProvider<br/>(resolved on the first request)" .-> VS[VerificationStatus]
+    VS --> MC[MercuryClient<br/>Feign]
+    MC -- "needs at creation" --> MVC
+```
+
+**Configuration to check when deploying.** `APP_TOKEN_SECRET` must be the one backbone signs its tokens with (otherwise every request is `401`);
 `umdc.smartkin.application-id` must be the SmartKin application the BFF signs in with (`BACKBONE_APPLICATION_ID`); `JWT_ISSUER`/`JWT_AUDIENCE`
 only if backbone stamps other values.
 

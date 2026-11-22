@@ -11,6 +11,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 import static com.umdc.security.constant.ConstantApp.SESSION_TOKEN_KEY;
 
@@ -28,14 +29,15 @@ public class VerifiedSessionInterceptor implements HandlerInterceptor {
     private final String apiPath;
     private final boolean required;
     private final List<String> openPaths;
-    private final VerificationStatus verificationStatus;
+    private final Supplier<VerificationStatus> verificationStatus;
 
     /// Builds the interceptor.
     ///
     /// @param apiPath  the base path of the API (`umdc.api.endpoint`)
     /// @param required `false` switches the check off (accounts that predate the verification)
-    /// @param verificationStatus whether a user confirmed the e-mail code
-    public VerifiedSessionInterceptor(String apiPath, boolean required, VerificationStatus verificationStatus) {
+    /// @param verificationStatus whether a user confirmed the e-mail code; resolved on the first request that needs it, not when the
+    ///                           interceptor is built (see `VerificationWebConfig`)
+    public VerifiedSessionInterceptor(String apiPath, boolean required, Supplier<VerificationStatus> verificationStatus) {
         this.apiPath = apiPath;
         this.required = required;
         this.verificationStatus = verificationStatus;
@@ -48,7 +50,7 @@ public class VerifiedSessionInterceptor implements HandlerInterceptor {
             return true;
         }
         var userId = JwtUtil.getUidFromToken(request.getHeader(SESSION_TOKEN_KEY));
-        if (Objects.nonNull(userId) && verificationStatus.isVerified(userId)) {
+        if (Objects.nonNull(userId) && verificationStatus.get().isVerified(userId)) {
             return true;
         }
         response.setStatus(HttpStatus.FORBIDDEN.value());
